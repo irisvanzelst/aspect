@@ -1389,7 +1389,7 @@ namespace aspect
                 rebuild_stokes_matrix = rebuild_stokes_preconditioner = true;
 
               assemble_stokes_system();
-              if (iteration == 0)
+              //if (iteration == 0)
                 build_stokes_preconditioner();
 
               const double stokes_residual = solve_stokes();
