@@ -57,6 +57,13 @@ namespace aspect
         virtual ~Interface();
 
         /**
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters is run and after
+         * the SimulatorAccess (if applicable) is initialized.
+         */
+        virtual void initialize ();
+
+        /**
          * Return the temperature that is to hold at a particular location on
          * the boundary of the domain.
          *
@@ -96,11 +103,11 @@ namespace aspect
         double maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids =
                                       std::set<types::boundary_id>()) const = 0;
 
-         /**
-         * A function that is called at the beginning of each time step.
-         * The default implementation of the function does nothing, but
-         * derived classes that need more elaborate setups for a given time
-         * step may overload the function.
+        /**
+         * A function that is called at the beginning of each time step. The
+         * default implementation of the function does nothing, but derived
+         * classes that need more elaborate setups for a given time step may
+         * overload the function.
          *
          * The point of this function is to allow complex boundary temperature
          * models to do an initialization step once at the beginning of each
@@ -110,7 +117,7 @@ namespace aspect
         virtual
         void
         update ();
- 
+
         /**
          * Declare the parameters this class takes through input files. The
          * default implementation of this function does not describe any
@@ -159,6 +166,9 @@ namespace aspect
      * A function that given the name of a model returns a pointer to an
      * object that describes it. Ownership of the pointer is transferred to
      * the caller.
+     *
+     * The model object returned is not yet initialized and has not read its
+     * runtime parameters yet.
      *
      * @ingroup BoundaryTemperatures
      */

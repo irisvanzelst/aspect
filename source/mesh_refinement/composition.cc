@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,23 +30,6 @@ namespace aspect
   {
     template <int dim>
     void
-    Composition<dim>::initialize (const Simulator<dim> &simulator)
-    {
-      // call the corresponding function in the base class, then use
-      // what has by then been initialized
-      SimulatorAccess<dim>::initialize (simulator);
-
-      AssertThrow (composition_scaling_factors.size() == this->n_compositional_fields()
-                   ||
-                   composition_scaling_factors.size() == 0,
-                   ExcMessage ("The number of scaling factors given here must either be "
-                               "zero or equal to the number of chosen refinement criteria."));
-      if (composition_scaling_factors.size() == 0)
-        composition_scaling_factors.resize (this->n_compositional_fields(), 1.0);
-    }
-
-    template <int dim>
-    void
     Composition<dim>::execute(Vector<float> &indicators) const
     {
       AssertThrow (this->n_compositional_fields() >= 1,
@@ -58,9 +41,10 @@ namespace aspect
         {
           Vector<float> this_indicator (indicators.size());
 
+          QGauss<dim-1> quadrature (this->get_fe().base_element(this->introspection().base_elements.compositional_fields).degree+1);
+
           KellyErrorEstimator<dim>::estimate (this->get_dof_handler(),
-//TODO: Replace the 2 by something reasonable, adjusted to the polynomial degree
-                                              QGauss<dim-1>(2),
+                                              quadrature,
                                               typename FunctionMap<dim>::type(),
                                               this->get_solution(),
                                               this_indicator,
@@ -114,6 +98,15 @@ namespace aspect
           composition_scaling_factors
             = Utilities::string_to_double(
                 Utilities::split_string_list(prm.get("Compositional field scaling factors")));
+
+          AssertThrow (composition_scaling_factors.size() == this->n_compositional_fields()
+                       ||
+                       composition_scaling_factors.size() == 0,
+                       ExcMessage ("The number of scaling factors given here must either be "
+                                   "zero or equal to the number of chosen refinement criteria."));
+
+          if (composition_scaling_factors.size() == 0)
+            composition_scaling_factors.resize (this->n_compositional_fields(), 1.0);
         }
         prm.leave_subsection();
       }

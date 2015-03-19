@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -17,7 +17,7 @@
   along with ASPECT; see the file doc/COPYING.  If not see
   <http://www.gnu.org/licenses/>.
 */
-/*  $Id: viscous_dissipation_statistics.cc 1591 2013-09-09 14:46 glerum $  */
+/*  $Id$  */
 
 
 #include <aspect/postprocess/viscous_dissipation_statistics.h>
@@ -97,7 +97,7 @@ namespace aspect
             // calculate the local viscous dissipation integral
             for (unsigned int q = 0; q < n_q_points; ++q)
               {
-                const double div_v = trace(in.strain_rate[q]);	
+                const double div_v = trace(in.strain_rate[q]);
                 local_dissipation_integral += ( - in.pressure[q] * div_v
                                                 + 2.0 * out.viscosities[q] * in.strain_rate[q] * in.strain_rate[q]
                                                 - (2.0 * out.viscosities[q] / 3.0) * div_v * div_v)
@@ -131,7 +131,7 @@ namespace aspect
       std::ostringstream output;
       output.precision(3);
       if (this->convert_output_to_years() == true)
-        output << viscous_dissipation * year_in_seconds
+        output << viscous_dissipation *year_in_seconds
                << " J/yr";
       else
         output << viscous_dissipation

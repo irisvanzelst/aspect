@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,7 +35,14 @@ namespace aspect
   void
   SimulatorAccess<dim>::initialize (const Simulator<dim> &simulator_object)
   {
-    simulator = SmartPointer<const Simulator<dim> > (&simulator_object, typeid(*this).name());
+    simulator = &simulator_object;
+  }
+
+  template <int dim>
+  const Simulator<dim> &
+  SimulatorAccess<dim>::get_simulator() const
+  {
+    return *simulator;
   }
 
 
@@ -150,6 +157,12 @@ namespace aspect
     return simulator->parameters.include_latent_heat;
   }
 
+  template <int dim>
+  int
+  SimulatorAccess<dim>::get_stokes_velocity_degree () const
+  {
+    return simulator->parameters.stokes_velocity_degree;
+  }
 
   template <int dim>
   double
@@ -296,6 +309,22 @@ namespace aspect
 
 
   template <int dim>
+  const std::set<types::boundary_id> &
+  SimulatorAccess<dim>::get_fixed_composition_boundary_indicators () const
+  {
+    return simulator->parameters.fixed_composition_boundary_indicators;
+  }
+
+
+  template <int dim>
+  const std::map<types::boundary_id,std_cxx1x::shared_ptr<VelocityBoundaryConditions::Interface<dim> > >
+  SimulatorAccess<dim>::get_prescribed_velocity_boundary_conditions () const
+  {
+    return simulator->velocity_boundary_conditions;
+  }
+
+
+  template <int dim>
   const GeometryModel::Interface<dim> &
   SimulatorAccess<dim>::get_geometry_model () const
   {
@@ -311,7 +340,7 @@ namespace aspect
 
 
   template <int dim>
-  const AdiabaticConditions<dim> &
+  const AdiabaticConditions::Interface<dim> &
   SimulatorAccess<dim>::get_adiabatic_conditions () const
   {
     return *simulator->adiabatic_conditions.get();
@@ -332,7 +361,7 @@ namespace aspect
   {
     return *simulator->compositional_initial_conditions.get();
   }
-  
+
   template <int dim>
   const HeatingModel::Interface<dim> &
   SimulatorAccess<dim>::get_heating_model () const

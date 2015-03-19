@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -90,7 +90,7 @@ namespace aspect
 
 
             max_temp = min_temp + (numtemp-1) * delta_temp;
-            max_press = min_press + (numtemp-1) * delta_press;
+            max_press = min_press + (numpress-1) * delta_press;
 
             density_values.reinit(numtemp,numpress);
             thermal_expansivity_values.reinit(numtemp,numpress);
@@ -433,7 +433,8 @@ namespace aspect
     Steinberger<dim>::
     update()
     {
-      this->get_depth_average_temperature(avg_temp);
+      if (use_lateral_average_temperature)
+        this->get_depth_average_temperature(avg_temp);
     }
 
 
@@ -448,16 +449,25 @@ namespace aspect
                const Point<dim> &position) const
     {
       const double depth = this->get_geometry_model().depth(position);
+      const double adiabatic_temperature = this->get_adiabatic_conditions().temperature(position);
 
-      const unsigned int idx = static_cast<unsigned int>(avg_temp.size() * depth / this->get_geometry_model().maximal_depth());
-      const double delta_temp = temperature-avg_temp[idx];
-      const double adia_temp = this->get_adiabatic_conditions().temperature(position);
-      const double vis_lateral_exp = -1.0*lateral_viscosity_lookup->lateral_viscosity(depth)*delta_temp/(temperature*adia_temp);
-      const double vis_lateral = std::max(std::min(std::exp(vis_lateral_exp),1e2),1e-2);
+      double delta_temperature;
+      if (use_lateral_average_temperature)
+        {
+          const unsigned int idx = static_cast<unsigned int>((avg_temp.size()-1) * depth / this->get_geometry_model().maximal_depth());
+          delta_temperature = temperature-avg_temp[idx];
+        }
+      else
+        delta_temperature = temperature-adiabatic_temperature;
+
+      // For an explanation on this formula see the Steinberger & Calderwood 2006 paper
+      const double vis_lateral_exp = -1.0*lateral_viscosity_lookup->lateral_viscosity(depth)*delta_temperature/(temperature*adiabatic_temperature);
+      // Limit the lateral viscosity variation to a reasonable interval
+      const double vis_lateral = std::max(std::min(std::exp(vis_lateral_exp),max_lateral_eta_variation),1/max_lateral_eta_variation);
 
       const double vis_radial = radial_viscosity_lookup->radial_viscosity(depth);
 
-      return std::max(std::min(vis_lateral * vis_radial,1e23),1e19);
+      return std::max(std::min(vis_lateral * vis_radial,max_eta),min_eta);
     }
 
 
@@ -469,14 +479,14 @@ namespace aspect
                                const double pressure,
                                const Point<dim> &position) const
     {
-      if (!(&this->get_adiabatic_conditions())
+      if (!(this->get_adiabatic_conditions().is_initialized())
           || this->include_adiabatic_heating()
           || compressible)
         return temperature;
 
       return temperature
-          + this->get_adiabatic_conditions().temperature(position)
-          - this->get_adiabatic_surface_temperature();
+             + this->get_adiabatic_conditions().temperature(position)
+             - this->get_adiabatic_surface_temperature();
     }
 
 
@@ -488,7 +498,7 @@ namespace aspect
                             const double pressure,
                             const Point<dim> &position) const
     {
-      if (!(&this->get_adiabatic_conditions())
+      if (!(this->get_adiabatic_conditions().is_initialized())
           || compressible)
         return pressure;
 
@@ -608,9 +618,9 @@ namespace aspect
     double
     Steinberger<dim>::
     get_compressible_density (const double temperature,
-             const double pressure,
-             const std::vector<double> &compositional_fields,
-             const Point<dim> &position) const
+                              const double pressure,
+                              const std::vector<double> &compositional_fields,
+                              const Point<dim> &position) const
     {
       double rho = 0.0;
       if (n_material_data == 1)
@@ -635,8 +645,8 @@ namespace aspect
              const Point<dim> &position) const
     {
       if (compressible
-          || !(&this->get_adiabatic_conditions()))
-          return get_compressible_density(temperature,pressure,compositional_fields,position);
+          || !(this->get_adiabatic_conditions().is_initialized()))
+        return get_compressible_density(temperature,pressure,compositional_fields,position);
       else
         return get_corrected_density(temperature,pressure,compositional_fields,position);
     }
@@ -851,20 +861,29 @@ namespace aspect
       for (unsigned int i=0; i < in.temperature.size(); ++i)
         {
           const double temperature = get_corrected_temperature(in.temperature[i],
-                                                  in.pressure[i],
-                                                  in.position[i]);
+                                                               in.pressure[i],
+                                                               in.position[i]);
           const double pressure    = get_corrected_pressure(in.temperature[i],
-                                               in.pressure[i],
-                                               in.position[i]);
+                                                            in.pressure[i],
+                                                            in.position[i]);
 
           /* We are only asked to give viscosities if strain_rate.size() > 0
            * and we can only calculate it if adiabatic_conditions are available.
            * Note that the used viscosity formulation needs the not
-           * corrected temperatures.
+           * corrected temperatures in case we compare it to the lateral
+           * temperature average.
            */
-          if (&this->get_adiabatic_conditions() && in.strain_rate.size())
-            out.viscosities[i]                    = viscosity                     (in.temperature[i], in.pressure[i], in.composition[i], in.strain_rate[i], in.position[i]);
-
+          if (this->get_adiabatic_conditions().is_initialized() && in.strain_rate.size())
+            {
+              if (use_lateral_average_temperature)
+                {
+                  out.viscosities[i]            = viscosity                     (in.temperature[i], in.pressure[i], in.composition[i], in.strain_rate[i], in.position[i]);
+                }
+              else
+                {
+                  out.viscosities[i]            = viscosity                     (temperature, pressure, in.composition[i], in.strain_rate[i], in.position[i]);
+                }
+            }
           out.densities[i]                      = density                       (temperature, pressure, in.composition[i], in.position[i]);
           out.thermal_expansion_coefficients[i] = thermal_expansion_coefficient (temperature, pressure, in.composition[i], in.position[i]);
           out.specific_heat[i]                  = specific_heat                 (temperature, pressure, in.composition[i], in.position[i]);
@@ -905,6 +924,13 @@ namespace aspect
           prm.declare_entry ("Lateral viscosity file name", "temp-viscosity-prefactor.txt",
                              Patterns::Anything (),
                              "The file name of the lateral viscosity data. ");
+          prm.declare_entry ("Use lateral average temperature for viscosity", "true",
+                             Patterns::Bool (),
+                             "Whether to use to use the laterally averaged temperature "
+                             "instead of the adiabatic temperature for the viscosity "
+                             "calculation. This ensures that the laterally averaged "
+                             "viscosities remain more or less constant over the model "
+                             "runtime. This behaviour might or might not be desired.");
           prm.declare_entry ("Bilinear interpolation", "true",
                              Patterns::Bool (),
                              "Whether to use bilinear interpolation to compute "
@@ -921,6 +947,19 @@ namespace aspect
           prm.declare_entry ("Reference viscosity", "1e23",
                              Patterns::Double(0),
                              "The reference viscosity that is used for pressure scaling. ");
+          prm.declare_entry ("Minimum viscosity", "1e19",
+                             Patterns::Double(0),
+                             "The minimum viscosity that is allowed in the viscosity "
+                             "calculation. Smaller values will be cut off.");
+          prm.declare_entry ("Maximum viscosity", "1e23",
+                             Patterns::Double(0),
+                             "The maximum viscosity that is allowed in the viscosity "
+                             "calculation. Larger values will be cut off.");
+          prm.declare_entry ("Maximum lateral viscosity variation", "1e2",
+                             Patterns::Double(0),
+                             "The relative cutoff value for lateral viscosity variations "
+                             "caused by temperature deviations. The viscosity may vary "
+                             "laterally by this factor squared.");
           prm.leave_subsection();
         }
         prm.leave_subsection();
@@ -943,18 +982,21 @@ namespace aspect
             std::string::size_type position;
             while (position = datadirectory.find (subst_text),  position!=std::string::npos)
               datadirectory.replace (datadirectory.begin()+position,
-                                      datadirectory.begin()+position+subst_text.size(),
-                                      ASPECT_SOURCE_DIR);
+                                     datadirectory.begin()+position+subst_text.size(),
+                                     ASPECT_SOURCE_DIR);
           }
           material_file_names  = Utilities::split_string_list
                                  (prm.get ("Material file names"));
           radial_viscosity_file_name   = prm.get ("Radial viscosity file name");
-          lateral_viscosity_file_name   = prm.get ("Lateral viscosity file name");
+          lateral_viscosity_file_name  = prm.get ("Lateral viscosity file name");
+          use_lateral_average_temperature = prm.get_bool ("Use lateral average temperature for viscosity");
           interpolation        = prm.get_bool ("Bilinear interpolation");
           latent_heat          = prm.get_bool ("Latent heat");
-          compressible          = prm.get_bool ("Compressible");
-          reference_eta          = prm.get_double ("Reference viscosity");
-
+          compressible         = prm.get_bool ("Compressible");
+          reference_eta        = prm.get_double ("Reference viscosity");
+          min_eta              = prm.get_double ("Minimum viscosity");
+          max_eta              = prm.get_double ("Maximum viscosity");
+          max_lateral_eta_variation    = prm.get_double ("Maximum lateral viscosity variation");
 
           prm.leave_subsection();
         }

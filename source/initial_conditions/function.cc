@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -63,17 +63,17 @@ namespace aspect
       {
         prm.enter_subsection("Function");
         try
-        {
-          function.parse_parameters (prm);
-        }
+          {
+            function.parse_parameters (prm);
+          }
         catch (...)
-        {
+          {
             std::cerr << "ERROR: FunctionParser failed to parse\n"
-                << "\t'Initial conditions.Function'\n"
-                << "with expression\n"
-                << "\t'" << prm.get("Function expression") << "'";
+                      << "\t'Initial conditions.Function'\n"
+                      << "with expression\n"
+                      << "\t'" << prm.get("Function expression") << "'";
             throw;
-        }
+          }
         prm.leave_subsection();
       }
       prm.leave_subsection();
@@ -89,6 +89,9 @@ namespace aspect
   {
     ASPECT_REGISTER_INITIAL_CONDITIONS(Function,
                                        "function",
-                                       "Temperature is given in terms of an explicit formula")
+                                       "Specify the initial temperature in terms of an "
+                                       "explicit formula. The format of these "
+                                       "functions follows the syntax understood by the "
+                                       "muparser library, see Section~\\ref{sec:muparser-format}.")
   }
 }

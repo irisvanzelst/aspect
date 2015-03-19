@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -49,13 +49,13 @@ namespace aspect
         const Postprocess::PressureStatistics<dim> * pressure_postprocess=
             this->template find_postprocessor<const Postprocess::PressureStatistics<dim> >();
         if(pressure_postprocess==NULL)
-          cout<<"PressureStatistics is not found!"<<endl;
+	  std::cout << "PressureStatistics is not found!" << std::endl;
         else
-          cout<<"PressureStatistics is found!"<<endl;
+	  std::cout << "PressureStatistics is found!" << std::endl;
         if(heat_flux_postprocess==NULL)
-          cout<<"HeatFluxStatistics is not found!"<<endl;
+	  std::cout << "HeatFluxStatistics is not found!" << std::endl;
         else
-          cout<<"HeatFluxStatistics is found!"<<endl;         
+	  std::cout << "HeatFluxStatistics is found!" << std::endl;         
     }
   }
 }

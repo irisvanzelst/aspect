@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -39,10 +39,8 @@ namespace aspect
 
     template <int dim>
     void
-    Interface<dim>::initialize (const GeometryModel::Interface<dim> &geometry_model_)
-    {
-      geometry_model = &geometry_model_;
-    }
+    Interface<dim>::initialize ()
+    {}
 
 
 
@@ -96,14 +94,10 @@ namespace aspect
 
     template <int dim>
     Interface<dim> *
-    create_velocity_boundary_conditions (const std::string &name,
-                                         ParameterHandler &prm,
-                                         const GeometryModel::Interface<dim> &geometry_model)
+    create_velocity_boundary_conditions (const std::string &name)
     {
       Interface<dim> *plugin = std_cxx1x::get<dim>(registered_plugins).create_plugin (name,
-                                                                                      "Velocity boundary conditions",
-                                                                                      prm);
-      plugin->initialize (geometry_model);
+                                                                                      "Velocity boundary conditions");
       return plugin;
     }
 
@@ -164,9 +158,7 @@ namespace aspect
   \
   template \
   Interface<dim> * \
-  create_velocity_boundary_conditions<dim> (const std::string &, \
-                                            ParameterHandler &prm, \
-                                            const GeometryModel::Interface<dim> &geometry_model);
+  create_velocity_boundary_conditions<dim> (const std::string &);
 
     ASPECT_INSTANTIATE(INSTANTIATE)
   }

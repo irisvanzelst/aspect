@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011, 2012 by the authors of the ASPECT code.
+  Copyright (C) 2011, 2012, 2014 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,10 +22,7 @@
 #ifndef __aspect__global_h
 #define __aspect__global_h
 
-// uncomment this to use PETSc for linear algebra
-//#define USE_PETSC
-
-#ifdef USE_PETSC
+#ifdef ASPECT_USE_PETSC
 #include <deal.II/lac/petsc_block_vector.h>
 #include <deal.II/lac/petsc_block_sparse_matrix.h>
 #include <deal.II/lac/petsc_precondition.h>
@@ -40,6 +37,8 @@
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 
+#include <deal.II/base/mpi.h>
+#include <deal.II/base/multithread_info.h>
 
 
 namespace aspect
@@ -72,112 +71,164 @@ namespace aspect
   typedef boost::archive::binary_oarchive oarchive;
 
   /**
+   * A class we throw in exceptions in parallel jobs and that we can silently
+   * treat in main(). We do this, for example, in read_parameters() where each
+   * processor would otherwise throw the same exception and every processor
+   * would produce a tangle of output that is impenetrable in large parallel
+   * jobs. The same situation happens if a linear solver fails. Rather, we
+   * make processor 0 throw the real exception and every other processor
+   * converts the exception it wants to throw to an object of the current type
+   * -- which is caught in main() but doesn't produce any output (because
+   * processor 0 will already produce the output).
+   */
+  class QuietException {};
+
+
+  /**
    * A namespace that contains typedefs for classes used in the linear algebra
    * description.
    */
   namespace LinearAlgebra
   {
-    using namespace dealii;
-
-#ifdef USE_PETSC
+#ifdef ASPECT_USE_PETSC
     /**
      * Typedef for the vector type used.
      */
-    typedef PETScWrappers::MPI::Vector Vector;
+    typedef dealii::PETScWrappers::MPI::Vector Vector;
 
     /**
      * Typedef for the type used to describe vectors that consist of multiple
      * blocks.
      */
-    typedef PETScWrappers::MPI::BlockVector BlockVector;
+    typedef dealii::PETScWrappers::MPI::BlockVector BlockVector;
 
     /**
      * Typedef for the sparse matrix type used.
      */
-    typedef PETScWrappers::MPI::SparseMatrix SparseMatrix;
+    typedef dealii::PETScWrappers::MPI::SparseMatrix SparseMatrix;
 
     /**
      * Typedef for the type used to describe sparse matrices that consist of
      * multiple blocks.
      */
-    typedef PETScWrappers::MPI::BlockSparseMatrix BlockSparseMatrix;
+    typedef dealii::PETScWrappers::MPI::BlockSparseMatrix BlockSparseMatrix;
 
     /**
      * Typedef for the AMG preconditioner type used for the top left block of
      * the Stokes matrix.
      */
-    typedef PETScWrappers::PreconditionBoomerAMG PreconditionAMG;
+    typedef dealii::PETScWrappers::PreconditionBoomerAMG PreconditionAMG;
 
     /**
      * Typedef for the Incomplete Cholesky preconditioner used for other
      * blocks of the system matrix.
      */
-    typedef PETScWrappers::PreconditionICC PreconditionIC;
+    typedef dealii::PETScWrappers::PreconditionICC PreconditionIC;
 
     /**
      * Typedef for the Incomplete LU decomposition preconditioner used for
      * other blocks of the system matrix. Note that PETSc does not support a
      * communicating ILU, so we use Jacobi here.
      */
-    typedef PETScWrappers::PreconditionBlockJacobi PreconditionILU;
+    typedef dealii::PETScWrappers::PreconditionBlockJacobi PreconditionILU;
 
     /**
-     * Typedef for the Jacobi preconditioner used for free surface
-     * velocity projection.
+     * Typedef for the Jacobi preconditioner used for free surface velocity
+     * projection.
      */
-    typedef PETScWrappers::PreconditionJacobi PreconditionJacobi;
+    typedef dealii::PETScWrappers::PreconditionJacobi PreconditionJacobi;
 
-    typedef LinearAlgebraPETSc::MPI::CompressedBlockSparsityPattern CompressedBlockSparsityPattern;
+    /**
+     * Typedef for the block compressed sparsity pattern type.
+     */
+    typedef dealii::BlockCompressedSimpleSparsityPattern BlockCompressedSparsityPattern;
 
 #else
     /**
      * Typedef for the vector type used.
      */
-    typedef TrilinosWrappers::MPI::Vector Vector;
+    typedef dealii::TrilinosWrappers::MPI::Vector Vector;
 
     /**
      * Typedef for the type used to describe vectors that consist of multiple
      * blocks.
      */
-    typedef TrilinosWrappers::MPI::BlockVector BlockVector;
+    typedef dealii::TrilinosWrappers::MPI::BlockVector BlockVector;
 
     /**
      * Typedef for the sparse matrix type used.
      */
-    typedef TrilinosWrappers::SparseMatrix SparseMatrix;
+    typedef dealii::TrilinosWrappers::SparseMatrix SparseMatrix;
 
     /**
      * Typedef for the type used to describe sparse matrices that consist of
      * multiple blocks.
      */
-    typedef TrilinosWrappers::BlockSparseMatrix BlockSparseMatrix;
+    typedef dealii::TrilinosWrappers::BlockSparseMatrix BlockSparseMatrix;
 
     /**
      * Typedef for the AMG preconditioner type used for the top left block of
      * the Stokes matrix.
      */
-    typedef TrilinosWrappers::PreconditionAMG PreconditionAMG;
+    typedef dealii::TrilinosWrappers::PreconditionAMG PreconditionAMG;
 
     /**
      * Typedef for the Incomplete Cholesky preconditioner used for other
      * blocks of the system matrix.
      */
-    typedef TrilinosWrappers::PreconditionIC PreconditionIC;
+    typedef dealii::TrilinosWrappers::PreconditionIC PreconditionIC;
 
     /**
      * Typedef for the Incomplete LU decomposition preconditioner used for
      * other blocks of the system matrix.
      */
-    typedef TrilinosWrappers::PreconditionILU PreconditionILU;
+    typedef dealii::TrilinosWrappers::PreconditionILU PreconditionILU;
 
     /**
-     * Typedef for the Jacobi preconditioner used for free surface
-     * velocity projection.
+     * Typedef for the Jacobi preconditioner used for free surface velocity
+     * projection.
      */
-    typedef TrilinosWrappers::PreconditionJacobi PreconditionJacobi;
-    
+    typedef dealii::TrilinosWrappers::PreconditionJacobi PreconditionJacobi;
+
+    /**
+     * Typedef for the block compressed sparsity pattern type.
+     */
+    typedef dealii::TrilinosWrappers::BlockSparsityPattern BlockCompressedSparsityPattern;
+
 #endif
   }
+}
+
+
+template < class Stream>
+void print_aspect_header(Stream &stream)
+{
+  const int n_tasks = dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
+
+  stream << "-----------------------------------------------------------------------------\n"
+         << "-- This is ASPECT, the Advanced Solver for Problems in Earth's ConvecTion.\n"
+         << "--     . version 1.3.pre\n" //VERSION-INFO. Do not edit by hand.
+#ifdef DEBUG
+         << "--     . running in DEBUG mode\n"
+#else
+         << "--     . running in OPTIMIZED mode\n"
+#endif
+         << "--     . running with " << n_tasks << " MPI process" << (n_tasks == 1 ? "\n" : "es\n");
+  const int n_threads =
+#if DEAL_II_VERSION_GTE(8,3,0)
+      dealii::MultithreadInfo::n_threads();
+#else
+      dealii::multithread_info.n_threads();
+#endif
+  if (n_threads>1)
+    stream << "--     . using " << n_threads << " threads " << (n_tasks == 1 ? "\n" : "each\n");
+#ifdef ASPECT_USE_PETSC
+  stream << "--     . using PETSc\n";
+#else
+  stream << "--     . using Trilinos\n";
+#endif
+  stream << "-----------------------------------------------------------------------------\n"
+         << std::endl;
 }
 
 

@@ -73,6 +73,13 @@ namespace aspect
         ~Interface ();
 
         /**
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters is run and after
+         * the SimulatorAccess (if applicable) is initialized.
+         */
+        virtual void initialize ();
+
+        /**
          * Execute evaluation of the termination criterion.
          *
          * @return Whether to terminate the simulation (true) or continue
@@ -149,16 +156,6 @@ namespace aspect
     class Manager : public ::aspect::SimulatorAccess<dim>
     {
       public:
-        /**
-         * Initialize the plugins handled by this object for a given
-         * simulator.
-         *
-         * @param simulator A reference to the main simulator object to which
-         * the postprocessor implemented in the derived class should be
-         * applied.
-         */
-        void initialize (const Simulator<dim> &simulator);
-
         /**
          * Execute all of the termination criteria objects that have been
          * requested in the input file.

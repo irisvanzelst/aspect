@@ -24,6 +24,7 @@
 
 #include <aspect/global.h>
 #include <aspect/plugins.h>
+#include <aspect/simulator_access.h>
 
 #include <deal.II/base/std_cxx1x/shared_ptr.h>
 #include <deal.II/base/table_handler.h>
@@ -37,6 +38,7 @@ namespace aspect
   using namespace dealii;
 
   template <int dim> class Simulator;
+  template <int dim> class SimulatorAccess;
 
 
   /**
@@ -72,6 +74,11 @@ namespace aspect
          */
         virtual
         ~Interface ();
+
+        /**
+         * Initialize function.
+         */
+        virtual void initialize ();
 
         /**
          * Execute this postprocessor. Derived classes will implement this
@@ -176,19 +183,9 @@ namespace aspect
      * @ingroup Postprocessing
      */
     template <int dim>
-    class Manager
+    class Manager : public ::aspect::SimulatorAccess<dim>
     {
       public:
-        /**
-         * Initialize the postprocessors handled by this object for a given
-         * simulator.
-         *
-         * @param simulator A reference to the main simulator object to which
-         * the postprocessor implemented in the derived class should be
-         * applied.
-         */
-        void initialize (const Simulator<dim> &simulator);
-
         /**
          * Execute all of the postprocessor objects that have been requested
          * in the input file. These objects also fill the contents of the
@@ -201,16 +198,16 @@ namespace aspect
         execute (TableHandler &statistics);
 
         /**
-        * Go through the list of all postprocessors that have been selected in
-        * the input file (and are consequently currently active) and see if
-        * one of them has the desired type specified by the template
-        * argument. If so, return a pointer to it. If no postprocessor is
-        * active that matches the given type, return a NULL pointer.        
-        */
+         * Go through the list of all postprocessors that have been selected
+         * in the input file (and are consequently currently active) and see
+         * if one of them has the desired type specified by the template
+         * argument. If so, return a pointer to it. If no postprocessor is
+         * active that matches the given type, return a NULL pointer.
+         */
         template <typename PostprocessorType>
         PostprocessorType *
-        find_postprocessor () const;      
-        
+        find_postprocessor () const;
+
         /**
          * Declare the parameters of all known postprocessors, as well as of
          * ones this class has itself.
@@ -325,28 +322,27 @@ namespace aspect
     }
 
     /**
-    * Go through the list of all postprocessors that have been selected in
-    * the input file (and are consequently currently active) and see if
-    * one of them has the desired type specified by the template
-    * argument. If so, return a pointer to it. If no postprocessor is
-    * active that matches the given type, return a NULL pointer.        
-    */
-        
+     * Go through the list of all postprocessors that have been selected in
+     * the input file (and are consequently currently active) and see if one
+     * of them has the desired type specified by the template argument. If so,
+     * return a pointer to it. If no postprocessor is active that matches the
+     * given type, return a NULL pointer.
+     */
     template <int dim>
     template <typename PostprocessorType>
     inline
     PostprocessorType *
     Manager<dim>::find_postprocessor () const
     {
-        for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::const_iterator
-             p = postprocessors.begin();
-             p != postprocessors.end(); ++p)
-        if (PostprocessorType * x = dynamic_cast<PostprocessorType *> ( (*p).get()) )
-            return x;
-        return NULL;
-    }       
-        
-    
+      for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::const_iterator
+           p = postprocessors.begin();
+           p != postprocessors.end(); ++p)
+        if (PostprocessorType *x = dynamic_cast<PostprocessorType *> ( (*p).get()) )
+          return x;
+      return NULL;
+    }
+
+
     /**
      * Given a class name, a name, and a description for the parameter file
      * for a postprocessor, register it with the aspect::Postprocess::Manager

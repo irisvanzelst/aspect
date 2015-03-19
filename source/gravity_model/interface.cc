@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -34,6 +34,11 @@ namespace aspect
   {
     template <int dim>
     Interface<dim>::~Interface ()
+    {}
+
+    template <int dim>
+    void
+    Interface<dim>::initialize ()
     {}
 
     template <int dim>
@@ -94,8 +99,7 @@ namespace aspect
       prm.leave_subsection ();
 
       return std_cxx1x::get<dim>(registered_plugins).create_plugin (model_name,
-                                                                    "Gravity model::Model name",
-                                                                    prm);
+                                                                    "Gravity model::Model name");
     }
 
 

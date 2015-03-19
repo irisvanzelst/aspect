@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -81,16 +81,19 @@ namespace aspect
               {
                 const unsigned int system_local_dof
                   = this->get_fe().component_to_system_index(this->introspection().component_indices.temperature,
-                                                                                       /*dof index within component=*/i);
+                                                             /*dof index within component=*/i);
 
                 vec_distributed(local_dof_indices[system_local_dof])
                   = in.temperature[i] - this->get_adiabatic_conditions().temperature(in.position[i]);
               }
           }
 
+      vec_distributed.compress(VectorOperation::insert);
+
       // now create a vector with the requisite ghost elements
       // and use it for estimating the gradients
-      LinearAlgebra::BlockVector vec (this->introspection().index_sets.system_relevant_partitioning,
+      LinearAlgebra::BlockVector vec (this->introspection().index_sets.system_partitioning,
+                                      this->introspection().index_sets.system_relevant_partitioning,
                                       this->get_mpi_communicator());
       vec = vec_distributed;
 

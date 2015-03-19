@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -236,9 +236,6 @@ namespace aspect
                                  +
                                  ">"));
       }
-
-    // re-initialize the postprocessors with the current object
-    postprocess_manager.initialize (*this);
   }
 
 }

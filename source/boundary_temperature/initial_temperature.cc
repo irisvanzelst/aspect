@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -106,8 +106,8 @@ namespace aspect
   {
     ASPECT_REGISTER_BOUNDARY_TEMPERATURE_MODEL(InitialTemperature,
                                                "initial temperature",
-                                               "A model in which the temperature at the boundary"
-                                               "is chosen to be the same as given in the initial"
+                                               "A model in which the temperature at the boundary "
+                                               "is chosen to be the same as given in the initial "
                                                "conditions."
                                                "\n\n"
                                                "Because this class simply takes what the initial "

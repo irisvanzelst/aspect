@@ -1,149 +1,95 @@
 /**
- * @page changes_after_1_0 Changes after Version 1.0
+ * @page changes_current Changes after the latest release (v1.2)
  *
  * <p> This is the list of changes made after the release of Aspect version
- * 1.0. All entries are signed with the names of the author. </p>
+ * 1.2. All entries are signed with the names of the author. </p>
+ *
  *
  * <ol>
- * <li> Fixed: The GPlates plugin now correctly handles meshes created by 
- * GPlates 1.4 and later. Previous Aspect versions may only read in files
- * created by GPlates 1.3.
+ * <li> Changed: We use the current linearization point instead of the old 
+ * solution in the assembly of the composition advection system now, and 
+ * update the current linearization point with the solution after we have 
+ * solved all of the fields. This allows for model parameters used in the 
+ * composition advection (like the reaction term) to depend on solution 
+ * variables and to be updated during nonlinear iterations.   
  * <br>
- * (Rene Gassmoeller, 2014/05/23)
+ * (Juliane Dannberg, 2015/02/20)
  *
- * <li> Add a find_postprocessor() function in Simulator_access class to pass a pointer 
- * of a certain postprocessor, if it is not found, return a NULL pointer.
+ * <li> Changed: The default values for the latent heat release of melting in
+ * the 'latent heat melt' material model had the wrong sign. This likely
+ * resulted from a change in the latent heat terms in the assembly long ago.
+ * All tests were correctly set up, but the default values were forgotten.
+ * This is fixed now.
  * <br>
- * (Siqi Zhang, 2014/05/23)
+ * (Rene Gassmoeller, 2015/02/18)
  *
  *
- * <li> Mesh refinement plugins can now interact with initial global mesh
- * refinement and unflag certain cells if desired.
+ * <li> Changed: The unused parameter 'Activation enthalpies' was removed from
+ * the 'latent heat' material model. The active parameter for the same purpose
+ * is 'Thermal viscosity exponent'. If there are parameter files specifying
+ * the removed parameter it is safe to just remove the line.
  * <br>
- * (Timo Heister, 2014/05/22)
+ * (Rene Gassmoeller, 2015/02/16)
  *
- * <li> Changed: The functionality that outputs some basic statistics values
- * like the Rayleigh number in case of a simple material model was moved 
- * from the velocity statistics postprocessor to a new postprocessor 
- * called basic statistics.
+ * <li> Fixed: The compressibility in the 'latent heat' and 'latent heat melt'
+ * material models was used incorrectly to calculate the density. This did only
+ * affect compressible models with these material models and is fixed now.
  * <br>
- * (Rene Gassmoeller, 2014/05/21)
+ * (Rene Gassmoeller, 2015/02/12)
  *
- * <li> Fixed: We accidentally evaluated the viscosity of the material model
- * from the place where we compute the adiabatic conditions, but this
- * required information that we didn't have. This is also unnecessary
- * since we don't need the viscosity in this place. This is now fixed.
+ * <li> Changed: We use a new method to calculate the initial residuals 
+ * used for the iterated IMPES solver. Instead of using the first solution,
+ * we use the norm of the right-hand side, so that the residual is small
+ * for cases where the initial guess of a time step is already very good, 
+ * and the number of iterations is decreased for these cases (e.g. when
+ * using a smaller time step size).
+ * Moreover, the screen output of the residuals is now in the same order as 
+ * the output before (about which system is solved and how many iterations were 
+ * needed).  
  * <br>
- * (Wolfgang Bangerth, 2014/05/21) 
+ * (Juliane Dannberg, 2015/02/09)
  *
- * <li> Fixed: Temperature and compositional boundary conditions were previously
- * evaluated only once at the beginning of the simulation, but this did not
- * allow for time dependent boundary conditions for these variables. This is now
- * fixed.
+ * <li> New: A new plugin called 'ascii data' is available for boundary and
+ * initial conditions that reads in text data from files provided by the user.
+ * The plugin works for box and shell geometries and allows for time-dependent
+ * or constant boundary conditions. The data files must provide data for the
+ * whole model domain and the plugin interpolates the data from a structured
+ * grid to Aspect's mesh linearly.
  * <br>
- * (Wolfgang Bangerth, 2014/05/21)
+ * (Eva Bredow, Rene Gassmoeller, 2015/02/03)
  *
- * <li> Fixed: We forgot to set the initial time before we evaluate the
- * temperature boundary conditions, so temperature boundary conditions
- * could not use <code>get_time()</code> -- they just got NaN. This is now
- * fixed.
- * <br>
- * (Wolfgang Bangerth, 2014/05/21) 
  *
- * <li> New: There is now functionality for running models with a free surface
- * with an Arbitrary Lagrangian-Eulerian framework. The user specifies which
- * boundary indicators are to be free surface boundaries, as well as a stabilization
- * parameter that keeps the free surface from exhibiting a sloshing instability.
- * There is an associated postprocessor that calculates mininum/maximum
- * topography, as well as a new section and cookbook in the manual.  Finally,
- * there are two tests for the free surface formulation.
+ * <li> New: There is now a mass flux statistics postprocessor that
+ * calculates the mass flux through every boundary interface. This 
+ * is helpful for regional models with prescribed boundary velocities. 
+ * In general one would want to set up models with as much in- as out-
+ * flux, but in some cases it is hard to know, if the boundary
+ * plugins actually ensure this. With this plugins the net flux can
+ * be monitored.
  * <br>
- * (Ian Rose, 2014/05/21) 
+ * (Rene Gassmoeller, 2015/02/02)
  *
- * <li>New: There is now a new postprocessor "velocity boundary statistics"
- * that computes statistics about the minimal and maximal velocities on each
- * part of the boundary.
+ * <li> Fixed: There was a small bug in ASPECT 1.2 that only occured in
+ * the adiabatic initial temperature plugin, when no temperature
+ * was prescribed at any boundary, the model was compressible and a
+ * bottom thermal boundary layer was included. This is fixed now.
  * <br>
- * (Anne Glerum, 2014/05/21)
+ * (Rene Gassmoeller, 2015/02/02)
  *
- * <li>New: Compositional fields have names now. If no names are specified in 
- * the input file, the previously used names C_1, C_2, ... are used as a default. 
+ * <li> Fixed: The residual of the iterated IMPES solver used to be 
+ * nan when the initial residual of one of the solution variable was
+ * zero. This is fixed now, so that this variable is not considered
+ * for the overall residual anymore.
  * <br>
- * (Juliane Dannberg, 2014/05/21)
+ * (Juliane Dannberg, 2015/01/30)
  *
- * <li> New: There is now a simple compressible material model with constant
- * compressibility resulting in an exponential dependeny of density on pressure
- * and a linear dependence on temperature deviation from the adiabatic profile. 
- * All other material properties are constant.
+ * <li> Fixed: The Steinberger material model had a bug in case a
+ * material table was used that had not the same number of points in
+ * temperature and pressure direction. The table was truncated in pressure
+ * dimension to the number of lines of the temperature dimension. This is
+ * fixed now.
  * <br>
- * (Rene Gassmoeller, 2014/05/20)
- *
- * <li>New: There is now a new initial temperature condition plugin that can read in
- * solidus temperatures from a file and add perturbations to it. There is also
- * a corresponding data file for initial conditions for Mars from Permentier
- * et al. in <code>data/initial-temperature/solidus.Mars</code>.
- * <br>
- * (Siqi Zhang, 2014/05/20)
- *
- * <li>New: There is now a new postprocessor "spherical velocity statistics"
- * that computes statistics about the radial and tangential velocity field.
- * <br>
- * (Anne Glerum, 2014/05/20)
- *
- * <li>New: There is now a mesh refinement criterium that checks the mesh
- * always has a minimum refinement level determined by a function given in the
- * input file.
- * <br>
- * (Juliane Dannberg, 2014/05/20)
- *
- * <li> New: Input files can now contain lines ending in backslashes
- * to concatenate subsequent lines.
- * <br>
- * (Menno Fraters, 2014/05/19)
- *
- * <li> New: There is a new material model called multicomponent for 
- * having an arbitrary number of compositional fields with different
- * material properties, where each compositional field represents a rock
- * type. Within each rock type the material properties are assumed to
- * be constant.  When more than one rock type is present, the material
- * model averages their properties with a weighted arithmetic average. 
- * An exception is viscosity, where the user may specify a harmonic,
- * geometric, or arithmetic averaging, or selecting the viscosity of
- * the maximum composition.
- * <br>
- * (Ian Rose, 2014/05/19)
- *
- * <li>New: The dynamic topography postprocessors now take into account
- * (i) the dynamic pressure, (ii) effects due to compressibility, (iii)
- * they now have the option to subtract the mean topography to ensure that
- * the topography is, on average, zero.
- * <br>
- * (Jacqueline Austermann, 2014/05/19)
- *
- * <li>Fixed: The GPlates cookbook in Aspect-1.0 contained a bug that 
- * prevented it from using the GPlates plugin. This is fixed now.
- * <br>
- * (Rene Gassmoeller, 2014/05/18)
- *
- * <li>New: There is a new plugin architecture for heating models that
- * allows for plugins defining the radiogenic heating rate in dependency
- * of temperature, pressure, composition, position and time. This introduces
- * an incompatibility of input files to older versions, but the old functionality
- * is preserved and extended.
- * <br>
- * (Rene Gassmoeller, 2014/05/16)
- *
- * <li>New: There is now a material model with reactions between compositional 
- * fields and a cookbook describing the usage of this material model. 
- * <br>
- * (Juliane Dannberg, Rene Gassmoeller, 2014/05/16)
- *
- * <li>Fixed: Times associated with visualization output are now correctly
- * modified when "Use years in output instead of seconds" is true.
- * <br>
- * (Eric Heien, 2014/05/09)
+ * (Rene Gassmoeller, 2015/01/29)
  *
  * </ol>
- *
- *
  */

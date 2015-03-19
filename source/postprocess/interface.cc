@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,6 +35,10 @@ namespace aspect
     Interface<dim>::~Interface ()
     {}
 
+    template <int dim>
+    void
+    Interface<dim>::initialize ()
+    {}
 
     template <int dim>
     void
@@ -64,16 +68,6 @@ namespace aspect
 
 
 // ------------------------------ Manager -----------------------------
-
-    template <int dim>
-    void
-    Manager<dim>::initialize (const Simulator<dim> &simulator)
-    {
-      for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::iterator
-           p = postprocessors.begin();
-           p != postprocessors.end(); ++p)
-        dynamic_cast<SimulatorAccess<dim>&>(**p).initialize (simulator);
-    }
 
 
 
@@ -171,9 +165,9 @@ namespace aspect
         // construct a string for Patterns::MultipleSelection that
         // contains the names of all registered postprocessors
         const std::string pattern_of_names
-          = std_cxx1x::get<dim>(registered_plugins).get_pattern_of_names (true);
+          = std_cxx1x::get<dim>(registered_plugins).get_pattern_of_names ();
         prm.declare_entry("List of postprocessors",
-                          "all",
+                          "",
                           Patterns::MultipleSelection(pattern_of_names),
                           "A comma separated list of postprocessor objects that should be run "
                           "at the end of each time step. Some of these postprocessors will "
@@ -226,11 +220,17 @@ namespace aspect
       // then go through the list, create objects and let them parse
       // their own parameters
       for (unsigned int name=0; name<postprocessor_names.size(); ++name)
-        postprocessors.push_back (std_cxx1x::shared_ptr<Interface<dim> >
-                                  (std_cxx1x::get<dim>(registered_plugins)
-                                   .create_plugin (postprocessor_names[name],
-                                                   "Postprocessor plugins",
-                                                   prm)));
+        {
+          postprocessors.push_back (std_cxx1x::shared_ptr<Interface<dim> >
+                                    (std_cxx1x::get<dim>(registered_plugins)
+                                     .create_plugin (postprocessor_names[name],
+                                                     "Postprocessor plugins")));
+          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*postprocessors.back()))
+            sim->initialize (this->get_simulator());
+
+          postprocessors.back()->parse_parameters (prm);
+          postprocessors.back()->initialize ();
+        }
     }
 
 

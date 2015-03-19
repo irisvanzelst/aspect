@@ -40,7 +40,7 @@
 #include <aspect/mesh_refinement/interface.h>
 #include <aspect/postprocess/interface.h>
 #include <aspect/heating_model/interface.h>
-#include <aspect/adiabatic_conditions.h>
+#include <aspect/adiabatic_conditions/interface.h>
 
 
 
@@ -108,6 +108,16 @@ namespace aspect
        */
       const Introspection<dim> &
       introspection () const;
+
+      /**
+       * Returns a reference to the Simulator itself. Note that you can not
+       * access any members or functions of the Simulator. This function
+       * exists so that any class with SimulatorAccess can create other
+       * objects with SimulatorAccess (because initializing them requires a
+       * reference to the Simulator).
+       */
+      const Simulator<dim> &
+      get_simulator() const;
 
       /**
        * Return the MPI communicator for this simulation.
@@ -179,6 +189,13 @@ namespace aspect
        */
       bool
       include_latent_heat () const;
+
+      /**
+       * Return the stokes velocity degree.
+       */
+      int
+      get_stokes_velocity_degree () const;
+
 
       /**
        * Return the adiabatic surface temperature.
@@ -378,7 +395,7 @@ namespace aspect
        * Return a pointer to the object that describes the adiabatic
        * conditions.
        */
-      const AdiabaticConditions<dim> &
+      const AdiabaticConditions::Interface<dim> &
       get_adiabatic_conditions () const;
 
       /**
@@ -409,7 +426,20 @@ namespace aspect
        */
       const std::set<types::boundary_id> &
       get_fixed_temperature_boundary_indicators () const;
-      
+
+      /**
+       * Return a set of boundary indicators that describes which of the
+       * boundaries have a fixed composition.
+       */
+      const std::set<types::boundary_id> &
+      get_fixed_composition_boundary_indicators () const;
+
+      /**
+       * Return the map of prescribed_velocity_boundary_conditions
+       */
+      const std::map<types::boundary_id,std_cxx1x::shared_ptr<VelocityBoundaryConditions::Interface<dim> > >
+      get_prescribed_velocity_boundary_conditions () const;
+
       /**
        * Return a pointer to the heating model.
        */
@@ -429,13 +459,14 @@ namespace aspect
 
 
       /**
-       * Find a pointer to a certain postprocessor, if not return a NULL pointer.
+       * Find a pointer to a certain postprocessor, if not return a NULL
+       * pointer.
        */
       template <typename PostprocessorType>
       PostprocessorType *
       find_postprocessor () const;
-                                      
-       /** @} */
+
+      /** @} */
 
     private:
       /**

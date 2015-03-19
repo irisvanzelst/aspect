@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -1021,20 +1021,30 @@ namespace aspect
     Amg_preconditioner.reset (new LinearAlgebra::PreconditionAMG());
 
     LinearAlgebra::PreconditionAMG::AdditionalData Amg_data;
-#ifdef USE_PETSC
+#ifdef ASPECT_USE_PETSC
     Amg_data.symmetric_operator = false;
 #else
     Amg_data.constant_modes = constant_modes;
     Amg_data.elliptic = true;
     Amg_data.higher_order_elements = true;
+
+    // set the AMG parameters in a way that minimizes the run
+    // time. compared to some of the deal.II tutorial programs, we
+    // found that it pays off to set the aggregration threshold to
+    // zero, especially for ill-conditioned problems with large
+    // variations in the viscosity
+    //
+    // for extensive benchmarking of various settings of these
+    // parameters and others, see
+    // https://github.com/geodynamics/aspect/pull/234
     Amg_data.smoother_sweeps = 2;
-    Amg_data.aggregation_threshold = 0.02;
+    Amg_data.aggregation_threshold = 0.001;
 #endif
 
     /*  The stabilization term for the free surface (Kaus et. al., 2010)
      *  makes changes to the system matrix which are of the same form as
      *  boundary stresses.  If these stresses are not also added to the
-     *  system_preconditioner_matrix, then  if fails to be very good as a 
+     *  system_preconditioner_matrix, then  if fails to be very good as a
      *  preconditioner.  Instead, we just pass the system_matrix to the
      *  AMG precondition initialization so that it builds the preconditioner
      *  directly from that. However, we still need the mass matrix for the
@@ -1045,10 +1055,10 @@ namespace aspect
     Mp_preconditioner->initialize (system_preconditioner_matrix.block(1,1));
     if (parameters.free_surface_enabled)
       Amg_preconditioner->initialize (system_matrix.block(0,0),
-                                    Amg_data);
+                                      Amg_data);
     else
       Amg_preconditioner->initialize (system_preconditioner_matrix.block(0,0),
-          Amg_data);
+                                      Amg_data);
 
     rebuild_stokes_preconditioner = false;
 
@@ -1152,7 +1162,7 @@ namespace aspect
       }
 
     //Add stabilization terms if necessary.
-    if(parameters.free_surface_enabled)
+    if (parameters.free_surface_enabled)
       free_surface->apply_stabilization(cell, data.local_matrix);
 
     cell->get_dof_indices (data.local_dof_indices);
@@ -1342,9 +1352,16 @@ namespace aspect
           0)
          +
          // add the term from adiabatic compression heating
-         //   - drho/dT T (u . g)
+         //   + alpha T (u . nabla p)
          // where we use the definition of
          //   alpha = - 1/rho drho/dT
+         // Note: this term is often simplified using the relationship
+         //   rho g = -nabla p
+         // to yield
+         //   - alpha rho T (u . g)
+         // However, we do not use this simplification here, see the
+         // comment in the manual in the section on the governing
+         // equations
          (parameters.include_adiabatic_heating
           ?
           (current_u * current_grad_p) * alpha * current_T
@@ -1463,7 +1480,7 @@ namespace aspect
         scratch.old_old_velocity_values);
     scratch.finite_element_values[introspection.extractors.velocities].get_function_values(current_linearization_point,
         scratch.current_velocity_values);
-    
+
     //get the mesh velocity, as we need to subtract it off of the advection systems
     if (parameters.free_surface_enabled)
       scratch.finite_element_values[introspection.extractors.velocities].get_function_values(free_surface->mesh_velocity,
@@ -1483,14 +1500,14 @@ namespace aspect
     scratch.finite_element_values[solution_field].get_function_laplacians (old_old_solution,
                                                                            scratch.old_old_field_laplacians);
 
+    compute_material_model_input_values (current_linearization_point,
+                                         scratch.finite_element_values,
+                                         true,
+                                         scratch.material_model_inputs);
+    material_model->evaluate(scratch.material_model_inputs,scratch.material_model_outputs);
+
     if (advection_field.is_temperature())
       {
-        compute_material_model_input_values (current_linearization_point,
-                                             scratch.finite_element_values,
-                                             true,
-                                             scratch.material_model_inputs);
-        material_model->evaluate(scratch.material_model_inputs,scratch.material_model_outputs);
-
         for (unsigned int q=0; q<n_q_points; ++q)
           {
             scratch.explicit_material_model_inputs.temperature[q] = (scratch.old_temperature_values[q] + scratch.old_old_temperature_values[q]) / 2;
@@ -1501,14 +1518,6 @@ namespace aspect
             scratch.explicit_material_model_inputs.strain_rate[q] = (scratch.old_strain_rates[q] + scratch.old_old_strain_rates[q]) / 2;
           }
         material_model->evaluate(scratch.explicit_material_model_inputs,scratch.explicit_material_model_outputs);
-      }
-    else
-      {
-        compute_material_model_input_values (old_solution,
-                                             scratch.finite_element_values,
-                                             true,
-                                             scratch.material_model_inputs);
-        material_model->evaluate(scratch.material_model_inputs,scratch.material_model_outputs);
       }
 
     // TODO: Compute artificial viscosity once per timestep instead of each time

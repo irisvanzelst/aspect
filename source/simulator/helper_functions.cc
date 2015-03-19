@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -615,9 +615,7 @@ namespace aspect
       if (parameters.pressure_normalization == "surface")
         pressure_adjustment = -temp[0]/temp[1] + parameters.surface_pressure;
       else if (parameters.pressure_normalization == "volume")
-//TODO: This can't be right. it should be -temp[0]/temp[1] to divide
-        // by the volume. this was definitely wrong in ASPIRE
-        pressure_adjustment = -temp[0];
+        pressure_adjustment = -temp[0]/temp[1];
       else
         AssertThrow(false, ExcNotImplemented());
     }
@@ -647,12 +645,12 @@ namespace aspect
                   for (unsigned int j=0; j<finite_element.base_element(introspection.base_elements.pressure).dofs_per_cell; ++j)
                     {
                       unsigned int support_point_index
-                      = finite_element.component_to_system_index(introspection.component_indices.pressure,
-                          /*dof index within component=*/ j);
+                        = finite_element.component_to_system_index(introspection.component_indices.pressure,
+                                                                   /*dof index within component=*/ j);
 
                       Assert (introspection.block_indices.velocities == introspection.block_indices.pressure
-                          || local_dof_indices[support_point_index] >= vector.block(0).size(),
-                          ExcInternalError());
+                              || local_dof_indices[support_point_index] >= vector.block(0).size(),
+                              ExcInternalError());
 
                       // then adjust its value. Note that because we end up touching
                       // entries more than once, we are not simply incrementing
@@ -696,7 +694,7 @@ namespace aspect
                       ExcInternalError());
 
               Assert (introspection.block_indices.velocities == introspection.block_indices.pressure
-                  || local_dof_indices[first_pressure_dof] >= vector.block(0).size(),
+                      || local_dof_indices[first_pressure_dof] >= vector.block(0).size(),
                       ExcInternalError());
 
               // then adjust its value
@@ -719,13 +717,44 @@ namespace aspect
     if (parameters.pressure_normalization == "no")
       return;
 
-    // TODO: pressure normalization currently does not work if velocity and
-    // pressure are in the same block.
-    Assert(introspection.block_indices.velocities != introspection.block_indices.pressure,
-        ExcNotImplemented());
-
     if (parameters.use_locally_conservative_discretization == false)
-      vector.block (introspection.block_indices.pressure).add (-1.0 * pressure_adjustment);
+      {
+        if (introspection.block_indices.velocities != introspection.block_indices.pressure)
+          vector.block(introspection.block_indices.pressure).add(-1.0 * pressure_adjustment);
+        else
+          {
+            // velocity and pressure are in the same block, so we have to modify the values manually
+
+            const unsigned int block_idx = introspection.block_indices.pressure;
+            LinearAlgebra::BlockVector distributed_vector (introspection.index_sets.stokes_partitioning,
+                                                           mpi_communicator);
+            distributed_vector.block(block_idx) = vector.block(block_idx);
+
+            std::vector<types::global_dof_index> local_dof_indices (finite_element.dofs_per_cell);
+            typename DoFHandler<dim>::active_cell_iterator
+            cell = dof_handler.begin_active(),
+            endc = dof_handler.end();
+            for (; cell != endc; ++cell)
+              if (cell->is_locally_owned())
+                {
+                  cell->get_dof_indices (local_dof_indices);
+                  for (unsigned int j=0; j<finite_element.base_element(introspection.base_elements.pressure).dofs_per_cell; ++j)
+                    {
+                      const unsigned int local_dof_index
+                        = finite_element.component_to_system_index(introspection.component_indices.pressure,
+                                                                   /*dof index within component=*/ j);
+
+                      // then adjust its value. Note that because we end up touching
+                      // entries more than once, we are not simply incrementing
+                      // distributed_vector but copy from the unchanged vector.
+                      distributed_vector(local_dof_indices[local_dof_index])
+                        = vector(local_dof_indices[local_dof_index]) - pressure_adjustment;
+                    }
+                }
+            distributed_vector.compress(VectorOperation::insert);
+            vector.block(block_idx) = distributed_vector.block(block_idx);
+          }
+      }
     else
       {
         // this case is a bit more complicated: if the condition above is false
@@ -780,17 +809,115 @@ namespace aspect
     if (parameters.use_locally_conservative_discretization)
       AssertThrow(false, ExcNotImplemented());
 
-    if (do_pressure_rhs_compatibility_modification)
+    // TODO: currently does not work if velocity and
+    // pressure are in the same block.
+    Assert(introspection.block_indices.velocities != introspection.block_indices.pressure,
+           ExcNotImplemented());
+
+    // In the following we integrate the normal velocity over every surface
+    // of the model. This integral is part of the correction term that needs
+    // to be added to the pressure right hand side. To calculate the normal
+    // velocity we need the positions and normals of every quadrature point on
+    // the surface.
+
+    const QGauss<dim-1> quadrature_formula (parameters.stokes_velocity_degree+1);
+    FEFaceValues<dim> fe_face_values (mapping,
+                                      finite_element,
+                                      quadrature_formula,
+                                      update_normal_vectors |
+                                      update_q_points |
+                                      update_JxW_values);
+
+    double local_normal_velocity_integral = 0;
+
+    typename DoFHandler<dim>::active_cell_iterator
+    cell = dof_handler.begin_active(),
+    endc = dof_handler.end();
+
+    // for every surface face that is part of a geometry boundary with
+    // prescribed velocity and that is owned by this processor,
+    // integrate the normal velocity magnitude.
+    for (; cell!=endc; ++cell)
+      if (cell->is_locally_owned())
+        for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+          if (cell->face(f)->at_boundary() &&
+              (parameters.prescribed_velocity_boundary_indicators.find(cell->face(f)->boundary_indicator())!=
+               parameters.prescribed_velocity_boundary_indicators.end()))
+            {
+              fe_face_values.reinit (cell, f);
+
+              // for each of the quadrature points, evaluate the
+              // normal velocity by calling the boundary conditions and add
+              // it to the integral
+              for (unsigned int q=0; q<quadrature_formula.size(); ++q)
+                {
+                  const Tensor<1,dim> velocity =
+                    velocity_boundary_conditions.find(cell->face(f)->boundary_indicator())->second->boundary_velocity(fe_face_values.quadrature_point(q));
+
+                  const double normal_velocity = velocity * fe_face_values.normal_vector(q);
+                  local_normal_velocity_integral += normal_velocity * fe_face_values.JxW(q);
+                }
+            }
+
+    const double global_normal_velocity_integral =
+      Utilities::MPI::sum (local_normal_velocity_integral,mpi_communicator);
+
+    const double mean       = vector.block(introspection.block_indices.pressure).mean_value();
+    const double correction = (global_normal_velocity_integral - mean * vector.block(introspection.block_indices.pressure).size()) / global_volume;
+
+    vector.block(introspection.block_indices.pressure).add(correction, pressure_shape_function_integrals.block(introspection.block_indices.pressure));
+  }
+
+
+  template <int dim>
+  double
+  Simulator<dim>::compute_initial_stokes_residual()
+  {
+    LinearAlgebra::BlockVector remap (introspection.index_sets.stokes_partitioning, mpi_communicator);
+    LinearAlgebra::BlockVector residual (introspection.index_sets.stokes_partitioning, mpi_communicator);
+    const unsigned int block_p = introspection.block_indices.pressure;
+
+    // if velocity and pressure are in the same block, we have to copy the
+    // pressure to the solution and RHS vector with a zero velocity
+    if (introspection.block_indices.pressure == introspection.block_indices.velocities)
       {
-        // TODO: currently does not work if velocity and
-        // pressure are in the same block.
-        Assert(introspection.block_indices.velocities != introspection.block_indices.pressure,
-            ExcNotImplemented());
+        for (unsigned int i=0; i < introspection.index_sets.locally_owned_pressure_dofs.n_elements(); ++i)
+          {
+            types::global_dof_index idx =
+              introspection.index_sets.locally_owned_pressure_dofs.nth_index_in_set(i);
+            remap(idx)        = current_linearization_point(idx);
+          }
+        remap.block(0).compress(VectorOperation::insert);
+      }
+    else
+      remap.block (block_p) = current_linearization_point.block (block_p);
 
-        const double mean       = vector.block(introspection.block_indices.pressure).mean_value();
-        const double correction = -mean*vector.block(introspection.block_indices.pressure).size()/global_volume;
+    // we have to do the same conversions and rescaling we do before solving
+    // the Stokes system:
+    // denormalizing the pressure and applying the pressure scaling
+    denormalize_pressure (remap);
+    current_constraints.set_zero (remap);
+    remap.block (block_p) /= pressure_scaling;
+    if (do_pressure_rhs_compatibility_modification)
+      make_pressure_rhs_compatible(system_rhs);
 
-        vector.block(introspection.block_indices.pressure).add(correction, pressure_shape_function_integrals.block(introspection.block_indices.pressure));
+    // we calculate the velocity residual with a zero velocity,
+    // computing only the part of the RHS not balanced by the static pressure
+    double residual_u, residual_p = 0;
+    if (introspection.block_indices.pressure == introspection.block_indices.velocities)
+      {
+        // we can use the whole block here because we set the velocity to zero above
+        return system_matrix.block(0,0).residual (residual.block(0),
+                                                  remap.block(0),
+                                                  system_rhs.block(0));
+      }
+    else
+      {
+        residual_u = system_matrix.block(0,1).residual (residual.block(0),
+                                                        remap.block(1),
+                                                        system_rhs.block(0));
+        residual_p = system_rhs.block(block_p).l2_norm();
+        return sqrt(residual_u*residual_u+residual_p*residual_p);
       }
   }
 
@@ -889,12 +1016,12 @@ namespace aspect
         FunctorDepthAverageField(const FEValuesExtractors::Scalar &field)
           : field_(field) {}
 
-        bool need_material_properties()
+        bool need_material_properties() const
         {
           return false;
         }
 
-        void setup(unsigned int q_points)
+        void setup(const unsigned int q_points)
         {
         }
 
@@ -932,12 +1059,12 @@ namespace aspect
     class FunctorDepthAverageViscosity
     {
       public:
-        bool need_material_properties()
+        bool need_material_properties() const
         {
           return true;
         }
 
-        void setup(unsigned int q_points)
+        void setup(const unsigned int q_points)
         {}
 
         void operator()(const typename MaterialModel::Interface<dim>::MaterialModelInputs &in,
@@ -967,12 +1094,12 @@ namespace aspect
         FunctorDepthAverageVelocityMagnitude(const FEValuesExtractors::Vector &field)
           : field_(field) {}
 
-        bool need_material_properties()
+        bool need_material_properties() const
         {
           return false;
         }
 
-        void setup(unsigned int q_points)
+        void setup(const unsigned int q_points)
         {
           velocity_values.resize(q_points);
         }
@@ -1010,12 +1137,12 @@ namespace aspect
         FunctorDepthAverageSinkingVelocity(const FEValuesExtractors::Vector &field, GravityModel::Interface<dim> *gravity)
           : field_(field), gravity_(gravity) {}
 
-        bool need_material_properties()
+        bool need_material_properties() const
         {
           return false;
         }
 
-        void setup(unsigned int q_points)
+        void setup(const unsigned int q_points)
         {
           velocity_values.resize(q_points);
         }
@@ -1059,12 +1186,12 @@ namespace aspect
           : material_model(mm), vs_(vs)
         {}
 
-        bool need_material_properties()
+        bool need_material_properties() const
         {
           return true;
         }
 
-        void setup(unsigned int q_points)
+        void setup(const unsigned int q_points)
         {}
 
         void operator()(const typename MaterialModel::Interface<dim>::MaterialModelInputs &in,
@@ -1140,6 +1267,7 @@ namespace aspect
   template void Simulator<dim>::compute_depth_average_Vp(std::vector<double> &values) const; \
   template void Simulator<dim>::output_program_stats(); \
   template void Simulator<dim>::output_statistics(); \
+  template double Simulator<dim>::compute_initial_stokes_residual(); \
   template bool Simulator<dim>::stokes_matrix_depends_on_solution() const; \
   template void Simulator<dim>::interpolate_onto_velocity_system(const TensorFunction<1,dim> &func, LinearAlgebra::Vector &vec);
 

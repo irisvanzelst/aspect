@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -81,9 +81,9 @@ namespace aspect
     template <int dim>
     void
     register_heating_model (const std::string &name,
-                                                 const std::string &description,
-                                                 void (*declare_parameters_function) (ParameterHandler &),
-                                                 Interface<dim> *(*factory_function) ())
+                            const std::string &description,
+                            void (*declare_parameters_function) (ParameterHandler &),
+                            Interface<dim> *(*factory_function) ())
     {
       std_cxx1x::get<dim>(registered_plugins).register_plugin (name,
                                                                description,
@@ -104,9 +104,7 @@ namespace aspect
       prm.leave_subsection ();
 
       Interface<dim> *plugin = std_cxx1x::get<dim>(registered_plugins).create_plugin (model_name,
-                                                                                      "Heating model::Model name",
-                                                                                      prm);
-      plugin->initialize();
+                                                                                      "Heating model::Model name");
       return plugin;
     }
 
@@ -174,9 +172,9 @@ namespace aspect
   template \
   void \
   register_heating_model<dim> (const std::string &, \
-                                                    const std::string &, \
-                                                    void ( *) (ParameterHandler &), \
-                                                    Interface<dim> *( *) ()); \
+                               const std::string &, \
+                               void ( *) (ParameterHandler &), \
+                               Interface<dim> *( *) ()); \
   \
   template  \
   void \
@@ -188,7 +186,7 @@ namespace aspect
   \
   template \
   Interface<dim> * \
-  create_heating_model<dim> (ParameterHandler &prm); \
+  create_heating_model<dim> (ParameterHandler &prm);
 
     ASPECT_INSTANTIATE(INSTANTIATE)
   }

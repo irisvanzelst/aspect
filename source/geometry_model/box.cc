@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -39,15 +39,11 @@ namespace aspect
       std::vector<unsigned int> rep_vec(repetitions, repetitions+dim);
       GridGenerator::subdivided_hyper_rectangle (coarse_grid,
                                                  rep_vec,
-                                                 Point<dim>(),
-                                                 extents,
+                                                 box_origin,
+                                                 box_origin+extents,
                                                  true);
 
       //Tell p4est about the periodicity of the mesh.
-#if (DEAL_II_MAJOR*100 + DEAL_II_MINOR) >= 801
-
-      // If this does not compile you are probably using 8.1pre, so please update
-      // to a recent svn version or to the 8.1 release.
       std::vector<GridTools::PeriodicFacePair<typename parallel::distributed::Triangulation<dim>::cell_iterator> >
       periodicity_vector;
       for (int i=0; i<dim; ++i)
@@ -58,11 +54,6 @@ namespace aspect
 
       if (periodicity_vector.size() > 0)
         coarse_grid.add_periodicity (periodicity_vector);
-#else
-      for ( unsigned int i=0; i<dim; ++i)
-        AssertThrow(!periodic[i],
-                    ExcMessage("Please update deal.II to the latest version to get support for periodic domains."));
-#endif
     }
 
 
@@ -77,6 +68,50 @@ namespace aspect
         s.insert (i);
       return s;
     }
+
+
+
+    template <int dim>
+    std::map<std::string,types::boundary_id>
+    Box<dim>::
+    get_symbolic_boundary_names_map () const
+    {
+      switch (dim)
+        {
+          case 2:
+          {
+            static const std::pair<std::string,types::boundary_id> mapping[]
+              = { std::pair<std::string,types::boundary_id>("left",   0),
+                  std::pair<std::string,types::boundary_id>("right",  1),
+                  std::pair<std::string,types::boundary_id>("bottom", 2),
+                  std::pair<std::string,types::boundary_id>("top",    3)
+                };
+
+            return std::map<std::string,types::boundary_id> (&mapping[0],
+                                                             &mapping[sizeof(mapping)/sizeof(mapping[0])]);
+          }
+
+          case 3:
+          {
+            static const std::pair<std::string,types::boundary_id> mapping[]
+              = { std::pair<std::string,types::boundary_id>("left",   0),
+                  std::pair<std::string,types::boundary_id>("right",  1),
+                  std::pair<std::string,types::boundary_id>("front",  2),
+                  std::pair<std::string,types::boundary_id>("back",   3),
+                  std::pair<std::string,types::boundary_id>("bottom", 4),
+                  std::pair<std::string,types::boundary_id>("top",    5)
+                };
+
+            return std::map<std::string,types::boundary_id> (&mapping[0],
+                                                             &mapping[sizeof(mapping)/sizeof(mapping[0])]);
+          }
+        }
+
+      Assert (false, ExcNotImplemented());
+      return std::map<std::string,types::boundary_id>();
+    }
+
+
 
     template <int dim>
     std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >
@@ -97,6 +132,12 @@ namespace aspect
       return extents;
     }
 
+    template <int dim>
+    Point<dim>
+    Box<dim>::get_origin () const
+    {
+      return box_origin;
+    }
 
     template <int dim>
     double
@@ -111,7 +152,7 @@ namespace aspect
     double
     Box<dim>::depth(const Point<dim> &position) const
     {
-      const double d = maximal_depth()-position(dim-1);
+      const double d = maximal_depth()-(position(dim-1)-box_origin[dim-1]);
 
       // if we violate the bounds, check that we do so only very slightly and
       // then just return maximal or minimal depth
@@ -140,8 +181,9 @@ namespace aspect
               ExcMessage ("Given depth must be less than or equal to the maximal depth of this geometry."));
 
       // choose a point on the center axis of the domain
-      Point<dim> p = extents/2;
-      p[dim-1] = maximal_depth() - depth;
+      Point<dim> p = extents/2+box_origin;
+      p[dim-1] = extents[dim-1]+box_origin[dim-1]-depth;
+
       return p;
     }
 
@@ -153,6 +195,12 @@ namespace aspect
       return extents[dim-1];
     }
 
+    template <int dim>
+    bool
+    Box<dim>::has_curved_elements() const
+    {
+      return false;
+    }
 
     template <int dim>
     void
@@ -172,7 +220,18 @@ namespace aspect
           prm.declare_entry ("Z extent", "1",
                              Patterns::Double (0),
                              "Extent of the box in z-direction. This value is ignored "
-                             "if the simulation is in 2d Units: m.");
+                             "if the simulation is in 2d. Units: m.");
+
+          prm.declare_entry ("Box origin X coordinate", "0",
+                             Patterns::Double (),
+                             "X coordinate of box origin. Units: m.");
+          prm.declare_entry ("Box origin Y coordinate", "0",
+                             Patterns::Double (),
+                             "Y coordinate of box origin. Units: m.");
+          prm.declare_entry ("Box origin Z coordinate", "0",
+                             Patterns::Double (),
+                             "Z coordinate of box origin. This value is ignored "
+                             "if the simulation is in 2d. Units: m.");
 
           prm.declare_entry ("X repetitions", "1",
                              Patterns::Integer (1),
@@ -210,12 +269,14 @@ namespace aspect
       {
         prm.enter_subsection("Box");
         {
+          box_origin[0] = prm.get_double ("Box origin X coordinate");
           extents[0] = prm.get_double ("X extent");
           periodic[0] = prm.get_bool ("X periodic");
           repetitions[0] = prm.get_integer ("X repetitions");
 
           if (dim >= 2)
             {
+              box_origin[1] = prm.get_double ("Box origin Y coordinate");
               extents[1] = prm.get_double ("Y extent");
               periodic[1] = prm.get_bool ("Y periodic");
               repetitions[1] = prm.get_integer ("Y repetitions");
@@ -223,6 +284,7 @@ namespace aspect
 
           if (dim >= 3)
             {
+              box_origin[2] = prm.get_double ("Box origin Z coordinate");
               extents[2] = prm.get_double ("Z extent");
               periodic[2] = prm.get_bool ("Z periodic");
               repetitions[2] = prm.get_integer ("Z repetitions");
@@ -248,7 +310,8 @@ namespace aspect
                                    "2*dim sides as follows: in 2d, boundary indicators 0 through 3 "
                                    "denote the left, right, bottom and top boundaries; in 3d, boundary "
                                    "indicators 0 through 5 indicate left, right, front, back, bottom "
-                                   "and top boundaries. See also the documentation of the deal.II class "
-                                   "``GeometryInfo''.")
+                                   "and top boundaries (see also the documentation of the deal.II class "
+                                   "``GeometryInfo''). You can also use symbolic names ``left'', ``right'', "
+                                   "etc., to refer to these boundaries in input files.")
   }
 }

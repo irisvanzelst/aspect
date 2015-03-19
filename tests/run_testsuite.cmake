@@ -273,20 +273,7 @@ GET_CMAKE_PROPERTY(_variables VARIABLES)
 
 # Append compiler information to CTEST_BUILD_NAME:
 IF(NOT EXISTS ${CTEST_BINARY_DIRECTORY}/detailed.log)
-  # Apparently, ${CTEST_BINARY_DIRECTORY} is not a configured build
-  # directory. In this case we need a trick: set up a dummy project and
-  # query it for the compiler information.
-  FILE(WRITE ${CTEST_BINARY_DIRECTORY}/query_for_compiler/CMakeLists.txt "
-FILE(WRITE ${CTEST_BINARY_DIRECTORY}/detailed.log
-  \"#        CMAKE_CXX_COMPILER:     \${CMAKE_CXX_COMPILER_ID} \${CMAKE_CXX_COMPILER_VERSION} on platform \${CMAKE_SYSTEM_NAME} \${CMAKE_SYSTEM_PROCESSOR}\"
-  )"
-    )
-  EXECUTE_PROCESS(
-    COMMAND ${CMAKE_COMMAND} ${_options} "-G${CTEST_CMAKE_GENERATOR}" .
-    OUTPUT_QUIET ERROR_QUIET
-    WORKING_DIRECTORY ${CTEST_BINARY_DIRECTORY}/query_for_compiler
-    )
-  FILE(REMOVE_RECURSE ${CTEST_BINARY_DIRECTORY}/query_for_compiler)
+  MESSAGE(FATAL_ERROR "could not find detailed.log")
 ENDIF()
 
 IF(EXISTS ${CTEST_BINARY_DIRECTORY}/detailed.log)
@@ -304,6 +291,13 @@ IF(EXISTS ${CTEST_BINARY_DIRECTORY}/detailed.log)
       _compiler_id MATCHES "CMAKE_CXX_COMPILER" )
     SET(CTEST_BUILD_NAME "${_compiler_id}")
   ENDIF()
+
+
+  FILE(STRINGS ${CTEST_BINARY_DIRECTORY}/detailed.log _use_petsc_line
+    REGEX "ASPECT_USE_PETSC:"
+    )
+  STRING(REGEX REPLACE "^.*#.*ASPECT_USE_PETSC: *(.*)$" "\\1" USE_PETSC ${_use_petsc_line})
+
 ENDIF()
 
 #
@@ -347,22 +341,21 @@ STRING(REGEX REPLACE "^\"([^ ]+) ([^ ]+) ([^\"]+)\""
          "\\3" _git_WC_AUTHOR "${_git_WC_INFO}")
 
 EXECUTE_PROCESS(
-   COMMAND ${GIT_EXECUTABLE} rev-parse --abbrev-ref ${_git_WC_REV}
+   COMMAND ${GIT_EXECUTABLE} symbolic-ref HEAD
    WORKING_DIRECTORY ${CTEST_SOURCE_DIRECTORY}
-   OUTPUT_VARIABLE _git_WC_NAME
+   OUTPUT_VARIABLE _git_WC_BRANCH
    RESULT_VARIABLE _result
    OUTPUT_STRIP_TRAILING_WHITESPACE
    )
 
-IF (NOT "${_git_WC_NAME}" STREQUAL "master")
-  SET(_branch "${_git_WC_NAME}")
-ELSE()
-  SET(_branch "")
+STRING(REGEX REPLACE "refs/heads/" ""
+  _git_WC_BRANCH "${_git_WC_BRANCH}")
+
+IF(USE_PETSC)
+  SET(CTEST_BUILD_NAME "${CTEST_BUILD_NAME}-PETSc")
 ENDIF()
 
-
-
-SET(CTEST_BUILD_NAME "${CTEST_BUILD_NAME}-${_branch}")
+SET(CTEST_BUILD_NAME "${CTEST_BUILD_NAME}-${_git_WC_BRANCH}")
 
 
 
@@ -373,14 +366,13 @@ SET(CTEST_BUILD_NAME "${CTEST_BUILD_NAME}-${_branch}")
 FILE(WRITE ${CTEST_BINARY_DIRECTORY}/revision.log
 "###
 #
-#  git information:
-#        REV-NAME: ${_git_WC_NAME}
-#        SHORTREV: ${_git_WC_SHORTREV}
-#        REV:      ${_git_WC_REV}
-#        AUTHOR:   ${_git_WC_AUTHOR}
+#  Git information:
+#    Branch: ${_git_WC_BRANCH}
+#    Commit: ${_git_WC_REV}
+#    Author: ${_git_WC_AUTHOR}
 #
 ###"
-    )
+  )
 
 #
 # Append config file name to CTEST_BUILD_NAME:
@@ -423,10 +415,6 @@ ENDIF()
 #                          Run the testsuite:                          #
 #                                                                      #
 ########################################################################
-
-IF(NOT "${_branch}" STREQUAL "")
-  SET_PROPERTY(GLOBAL PROPERTY SubProject ${_branch})
-ENDIF()
 
 CTEST_START(Experimental TRACK ${TRACK})
 
@@ -481,19 +469,17 @@ IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
   ENDIF()
 ENDIF()
 
-#IF(NOT "${_svn_WC_REVISION}" STREQUAL "")
-  FILE(WRITE ${_path}/Update.xml
+FILE(WRITE ${_path}/Update.xml
 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <Update mode=\"Client\" Generator=\"ctest-${CTEST_VERSION}\">
-    <Site>${CTEST_SITE}</Site>
-      <BuildName>${CTEST_BUILD_NAME}</BuildName>
-        <BuildStamp>${_tag}-${TRACK}</BuildStamp>
-	<UpdateType>GIT</UpdateType>
-	<Revision>${_git_WC_SHORTREV}</Revision>
-        <Path>${_branch}</Path>
+<Site>${CTEST_SITE}</Site>
+<BuildName>${CTEST_BUILD_NAME}</BuildName>
+<BuildStamp>${_tag}-${TRACK}</BuildStamp>
+<UpdateType>GIT</UpdateType>
+<Revision>${_git_WC_SHORTREV}</Revision>
+<Path>${_git_WC_BRANCH}</Path>
 </Update>"
-    )
-#ENDIF()
+  )
 
 IF("${submit}")
 MESSAGE("-- Running CTEST_SUBMIT()")

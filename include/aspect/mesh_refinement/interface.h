@@ -24,6 +24,7 @@
 
 #include <aspect/global.h>
 #include <aspect/plugins.h>
+#include <aspect/simulator_access.h>
 
 #include <deal.II/base/std_cxx1x/shared_ptr.h>
 #include <deal.II/base/table_handler.h>
@@ -36,6 +37,7 @@ namespace aspect
   using namespace dealii;
 
   template <int dim> class Simulator;
+  template <int dim> class SimulatorAccess;
 
 
   /**
@@ -57,9 +59,9 @@ namespace aspect
      * indicate a larger error).
      *
      * Second, after cells get flagged for coarsening and refinement (using
-     * the first approach), tag_additional_cells() is executed for each plugin.
-     * Here the plugin is free to set or clear coarsen and refine flags on
-     * any cell.
+     * the first approach), tag_additional_cells() is executed for each
+     * plugin. Here the plugin is free to set or clear coarsen and refine
+     * flags on any cell.
      *
      * Access to the data of the simulator is granted by the @p protected
      * member functions of the SimulatorAccess class, i.e., classes
@@ -80,6 +82,13 @@ namespace aspect
         ~Interface ();
 
         /**
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters is run and after
+         * the SimulatorAccess (if applicable) is initialized.
+         */
+        virtual void initialize ();
+
+        /**
          * Execute this mesh refinement criterion. The default implementation
          * sets all the error indicators to zero.
          *
@@ -94,18 +103,18 @@ namespace aspect
 
         /**
          * After cells have been marked for coarsening/refinement, apply
-         * additional criteria independent of the error estimate. The
-         * default implementation does nothing.
+         * additional criteria independent of the error estimate. The default
+         * implementation does nothing.
          *
          * This function is also called during the initial global refinement
-         * cycle. At this point you do not have access to solutions, DoFHandlers,
-         * or finite element spaces. You can check if this is the case by
-         * querying this->get_dof_handler().n_dofs() == 0.
+         * cycle. At this point you do not have access to solutions,
+         * DoFHandlers, or finite element spaces. You can check if this is the
+         * case by querying this->get_dof_handler().n_dofs() == 0.
          */
         virtual
         void
         tag_additional_cells () const;
-      
+
         /**
          * Declare the parameters this class takes through input files.
          * Derived classes should overload this function if they actually do
@@ -146,7 +155,7 @@ namespace aspect
      * @ingroup MeshRefinement
      */
     template <int dim>
-    class Manager
+    class Manager : public ::aspect::SimulatorAccess<dim>
     {
       public:
         /**
@@ -154,16 +163,6 @@ namespace aspect
          * functions.
          */
         virtual ~Manager ();
-
-        /**
-         * Initialize the plugins handled by this object for a given
-         * simulator.
-         *
-         * @param simulator A reference to the main simulator object to which
-         * the postprocessor implemented in the derived class should be
-         * applied.
-         */
-        void initialize (const Simulator<dim> &simulator);
 
         /**
          * Execute all of the mesh refinement objects that have been requested
@@ -262,12 +261,6 @@ namespace aspect
          * parameter file.
          */
         std::list<std_cxx1x::shared_ptr<Interface<dim> > > mesh_refinement_objects;
-
-        /**
-         * An MPI communicator that spans the set of processors on which the
-         * simulator object lives.
-         */
-        MPI_Comm mpi_communicator;
     };
 
 

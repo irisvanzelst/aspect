@@ -55,22 +55,24 @@ namespace aspect
         virtual ~Interface();
 
         /**
-         * Initialization function.
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters is run and after
+         * the SimulatorAccess (if applicable) is initialized.
          */
         virtual
         void
         initialize ();
 
         /**
-         * A function that is called at the beginning of each time step.
-         * The default implementation of the function does nothing, but
-         * derived classes that need more elaborate setups for a given time
-         * step may overload the function.
+         * A function that is called at the beginning of each time step. The
+         * default implementation of the function does nothing, but derived
+         * classes that need more elaborate setups for a given time step may
+         * overload the function.
          *
-         * The point of this function is to allow complex heating
-         * models to do an initialization step once at the beginning of each
-         * time step. An example would be a model that take into account
-         * the decay of heat generating elements.
+         * The point of this function is to allow complex heating models to do
+         * an initialization step once at the beginning of each time step. An
+         * example would be a model that take into account the decay of heat
+         * generating elements.
          */
         virtual
         void
@@ -111,15 +113,15 @@ namespace aspect
 
 
     /**
-     * Register a heating model so that it can be
-     * selected from the parameter file.
+     * Register a heating model so that it can be selected from the parameter
+     * file.
      *
      * @param name A string that identifies the heating model
      * @param description A text description of what this model does and that
      * will be listed in the documentation of the parameter file.
      * @param declare_parameters_function A pointer to a function that can be
-     * used to declare the parameters that this heating
-     * model wants to read from input files.
+     * used to declare the parameters that this heating model wants to read
+     * from input files.
      * @param factory_function A pointer to a function that can create an
      * object of this heating model.
      *
@@ -137,9 +139,8 @@ namespace aspect
      * object that describes it. Ownership of the pointer is transferred to
      * the caller.
      *
-     * This function makes the newly created object read its parameters from
-     * the input parameter object, and then initializes it with the given
-     * geometry model.
+     * The model object returned is not yet initialized and has not read its
+     * runtime parameters yet.
      *
      * @ingroup HeatingModels
      */
@@ -148,17 +149,15 @@ namespace aspect
     create_heating_model (ParameterHandler &prm);
 
     /**
-     * Return a list of names of all implemented heating models,
-     * separated by '|' so that it can be used in an object of type
-     * Patterns::Selection.
+     * Return a list of names of all implemented heating models, separated by
+     * '|' so that it can be used in an object of type Patterns::Selection.
      */
     template <int dim>
     std::string
     get_names ();
 
     /**
-     * Declare the runtime parameters of the registered heating
-     * models.
+     * Declare the runtime parameters of the registered heating models.
      *
      * @ingroup HeatingModels
      */
@@ -170,8 +169,8 @@ namespace aspect
 
     /**
      * Given a class name, a name, and a description for the parameter file
-     * for a heating model, register it with the
-     * functions that can declare their parameters and create these objects.
+     * for a heating model, register it with the functions that can declare
+     * their parameters and create these objects.
      *
      * @ingroup HeatingModels
      */

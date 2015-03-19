@@ -54,6 +54,13 @@ namespace aspect
         virtual ~Interface();
 
         /**
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters is run and after
+         * the SimulatorAccess (if applicable) is initialized.
+         */
+        virtual void initialize ();
+
+        /**
          * Return the gravity vector as a function of position.
          */
         virtual Tensor<1,dim> gravity_vector (const Point<dim> &position) const = 0;
@@ -119,6 +126,9 @@ namespace aspect
      * A function that given the name of a model returns a pointer to an
      * object that describes it. Ownership of the pointer is transferred to
      * the caller.
+     *
+     * The model object returned is not yet initialized and has not read its
+     * runtime parameters yet.
      *
      * @ingroup GravityModels
      */

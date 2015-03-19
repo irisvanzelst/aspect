@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,13 +35,17 @@ namespace aspect
     Interface<dim>::~Interface ()
     {}
 
+    template <int dim>
+    void
+    Interface<dim>::initialize ()
+    {}
 
     template <int dim>
     void
     Interface<dim>::execute (Vector<float> &error_indicators) const
     {
       for (unsigned int i=0; i<error_indicators.size(); ++i)
-    	error_indicators[i] = 0;
+        error_indicators[i] = 0;
     }
 
 
@@ -70,33 +74,6 @@ namespace aspect
     template <int dim>
     Manager<dim>::~Manager()
     {}
-
-
-    template <int dim>
-    void
-    Manager<dim>::initialize (const Simulator<dim> &simulator)
-    {
-      for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::iterator
-           p = mesh_refinement_objects.begin();
-           p != mesh_refinement_objects.end(); ++p)
-        if (dynamic_cast<const SimulatorAccess<dim>*>(p->get()) != 0)
-          dynamic_cast<SimulatorAccess<dim>&>(**p).initialize (simulator);
-
-      // also extract the MPI communicator over which this simulator
-      // operates so that we can later scale vectors that live on
-      // different processors. getting at this communicator is a bit
-      // indirect but requires no extra interfaces (we need the
-      // intermediary MySimulatorAccess class since SimulatorAccess's
-      // get_mpi_communicator function is only protected; through the
-      // 'using' declaration we can promote it to a public member).
-      class MySimulatorAccess : public SimulatorAccess<dim>
-      {
-        public:
-          using SimulatorAccess<dim>::get_mpi_communicator;
-      } simulator_access;
-      simulator_access.initialize (simulator);
-      mpi_communicator = simulator_access.get_mpi_communicator();
-    }
 
 
 
@@ -128,7 +105,7 @@ namespace aspect
               if (normalize_criteria == true)
                 {
                   const double global_max = Utilities::MPI::max (all_error_indicators[index].linfty_norm(),
-                                                                 mpi_communicator);
+                                                                 this->get_mpi_communicator());
                   if (global_max != 0)
                     all_error_indicators[index] /= global_max;
                 }
@@ -430,11 +407,18 @@ namespace aspect
       AssertThrow (plugin_names.size() >= 1,
                    ExcMessage ("You need to provide at least one mesh refinement criterion in the input file!"));
       for (unsigned int name=0; name<plugin_names.size(); ++name)
-        mesh_refinement_objects.push_back (std_cxx1x::shared_ptr<Interface<dim> >
-                                           (std_cxx1x::get<dim>(registered_plugins)
-                                            .create_plugin (plugin_names[name],
-                                                            "Mesh refinement::Refinement criteria merge operation",
-                                                            prm)));
+        {
+          mesh_refinement_objects.push_back (std_cxx1x::shared_ptr<Interface<dim> >
+                                             (std_cxx1x::get<dim>(registered_plugins)
+                                              .create_plugin (plugin_names[name],
+                                                              "Mesh refinement::Refinement criteria merge operation")));
+
+          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*mesh_refinement_objects.back()))
+            sim->initialize (this->get_simulator());
+
+          mesh_refinement_objects.back()->parse_parameters (prm);
+          mesh_refinement_objects.back()->initialize ();
+        }
     }
 
 

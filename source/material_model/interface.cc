@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -208,9 +208,7 @@ namespace aspect
       prm.leave_subsection ();
 
       Interface<dim> *plugin = std_cxx1x::get<dim>(registered_plugins).create_plugin (model_name,
-                                                                                      "Material model::Model name",
-                                                                                      prm);
-      plugin->initialize();
+                                                                                      "Material model::Model name");
       return plugin;
     }
 

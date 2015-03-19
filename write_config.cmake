@@ -16,7 +16,7 @@
 # along with ASPECT; see the file doc/COPYING.  If not see
 # <http://www.gnu.org/licenses/>.
 
-#  $Id: CMakeLists.txt 2387 2014-03-31 18:54:18Z bangerth $
+#  $Id$
 
 SET(_log_detailed "${CMAKE_BINARY_DIR}/detailed.log")
 FILE(REMOVE ${_log_detailed})
@@ -31,6 +31,7 @@ _detailed(
 #  ASPECT configuration:
 #        DEAL_II_DIR:            ${deal.II_DIR}
 #        DEAL_II VERSION:        ${DEAL_II_PACKAGE_VERSION}
+#        ASPECT_USE_PETSC:       ${ASPECT_USE_PETSC}
 #        CMAKE_BUILD_TYPE:       ${CMAKE_BUILD_TYPE}
 #        CMAKE_INSTALL_PREFIX:   ${CMAKE_INSTALL_PREFIX}
 #        CMAKE_SOURCE_DIR:       ${CMAKE_SOURCE_DIR} 

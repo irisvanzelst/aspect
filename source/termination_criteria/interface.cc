@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -34,6 +34,10 @@ namespace aspect
     Interface<dim>::~Interface ()
     {}
 
+    template <int dim>
+    void
+    Interface<dim>::initialize ()
+    {}
 
     template <int dim>
     void
@@ -54,18 +58,6 @@ namespace aspect
 
 
 // ------------------------------ Manager -----------------------------
-
-    template <int dim>
-    void
-    Manager<dim>::initialize (const Simulator<dim> &simulator)
-    {
-      for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::iterator
-           p = termination_objects.begin();
-           p != termination_objects.end(); ++p)
-        dynamic_cast<SimulatorAccess<dim>&>(**p).initialize (simulator);
-
-      SimulatorAccess<dim>::initialize (simulator);
-    }
 
     template <int dim>
     double Manager<dim>::check_for_last_time_step (const double time_step) const
@@ -199,7 +191,7 @@ namespace aspect
         // construct a string for Patterns::MultipleSelection that
         // contains the names of all registered termination criteria
         const std::string pattern_of_names
-          = std_cxx1x::get<dim>(registered_plugins).get_pattern_of_names (true);
+          = std_cxx1x::get<dim>(registered_plugins).get_pattern_of_names ();
         prm.declare_entry("Termination criteria",
                           "end time",
                           Patterns::MultipleSelection(pattern_of_names),
@@ -242,15 +234,19 @@ namespace aspect
       }
       prm.leave_subsection();
 
-      // go through the list, create objects and let them parse
+      // go through the list, create objects, initialize them, and let them parse
       // their own parameters
       for (unsigned int name=0; name<plugin_names.size(); ++name)
         {
           termination_objects.push_back (std_cxx1x::shared_ptr<Interface<dim> >
                                          (std_cxx1x::get<dim>(registered_plugins)
                                           .create_plugin (plugin_names[name],
-                                                          "Termination criteria::Termination criteria",
-                                                          prm)));
+                                                          "Termination criteria::Termination criteria")));
+          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*termination_objects.back()))
+            sim->initialize (this->get_simulator());
+          termination_objects.back()->parse_parameters (prm);
+          termination_objects.back()->initialize ();
+
           termination_obj_names.push_back(plugin_names[name]);
         }
     }
