@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,12 +14,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
 #include <aspect/boundary_temperature/function.h>
+#include <aspect/utilities.h>
 #include <aspect/global.h>
 
 namespace aspect
@@ -37,11 +38,12 @@ namespace aspect
     template <int dim>
     double
     Function<dim>::
-    temperature (const GeometryModel::Interface<dim> &geometry_model,
-                 const unsigned int                   boundary_indicator,
-                 const Point<dim>                    &position) const
+    boundary_temperature (const types::boundary_id /*boundary_indicator*/,
+                          const Point<dim> &position) const
     {
-      return boundary_temperature_function.value(position);
+      Utilities::NaturalCoordinate<dim> point =
+        this->get_geometry_model().cartesian_to_other_coordinates(position, coordinate_system);
+      return boundary_temperature_function.value(Utilities::convert_array_to_point<dim>(point.get_coordinates()));
     }
 
 
@@ -62,7 +64,7 @@ namespace aspect
     template <int dim>
     double
     Function<dim>::
-    minimal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const
+    minimal_temperature (const std::set<types::boundary_id> &) const
     {
       return min_temperature;
     }
@@ -72,7 +74,7 @@ namespace aspect
     template <int dim>
     double
     Function<dim>::
-    maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const
+    maximal_temperature (const std::set<types::boundary_id> &) const
     {
       return max_temperature;
     }
@@ -86,14 +88,25 @@ namespace aspect
       {
         prm.enter_subsection("Function");
         {
+          prm.declare_entry ("Coordinate system", "cartesian",
+                             Patterns::Selection ("cartesian|spherical|depth"),
+                             "A selection that determines the assumed coordinate "
+                             "system for the function variables. Allowed values "
+                             "are `cartesian', `spherical', and `depth'. `spherical' coordinates "
+                             "are interpreted as r,phi or r,phi,theta in 2D/3D "
+                             "respectively with theta being the polar angle. `depth' "
+                             "will create a function, in which only the first "
+                             "parameter is non-zero, which is interpreted to "
+                             "be the depth of the point.");
+
           Functions::ParsedFunction<dim>::declare_parameters (prm, 1);
 
           prm.declare_entry ("Minimal temperature", "273",
                              Patterns::Double (),
-                             "Minimal temperature. Units: K.");
+                             "Minimal temperature. Units: $\\si{K}$.");
           prm.declare_entry ("Maximal temperature", "3773",
                              Patterns::Double (),
-                             "Maximal temperature. Units: K.");
+                             "Maximal temperature. Units: $\\si{K}$.");
         }
         prm.leave_subsection();
       }
@@ -108,20 +121,26 @@ namespace aspect
       prm.enter_subsection("Boundary temperature model");
       {
         prm.enter_subsection("Function");
-        try
-          {
-            boundary_temperature_function.parse_parameters (prm);
-          }
-        catch (...)
-          {
-            std::cerr << "ERROR: FunctionParser failed to parse\n"
-                      << "\t'Boundary temperature model.Function'\n"
-                      << "with expression\n"
-                      << "\t'" << prm.get("Function expression") << "'";
-            throw;
-          }
-        min_temperature = prm.get_double ("Minimal temperature");
-        max_temperature = prm.get_double ("Maximal temperature");
+        {
+          coordinate_system = Utilities::Coordinates::string_to_coordinate_system(prm.get("Coordinate system"));
+
+          try
+            {
+              boundary_temperature_function.parse_parameters (prm);
+            }
+          catch (...)
+            {
+              std::cerr << "ERROR: FunctionParser failed to parse\n"
+                        << "\t'Boundary temperature model.Function'\n"
+                        << "with expression\n"
+                        << "\t'" << prm.get("Function expression") << "'"
+                        << "More information about the cause of the parse error \n"
+                        << "is shown below.\n";
+              throw;
+            }
+          min_temperature = prm.get_double ("Minimal temperature");
+          max_temperature = prm.get_double ("Maximal temperature");
+        }
         prm.leave_subsection();
       }
       prm.leave_subsection();
@@ -155,7 +174,7 @@ namespace aspect
                                                "know certain pieces of information such as the "
                                                "minimal and maximal temperature on the boundary. "
                                                "For operations that require this, for example in "
-                                               "postprocessing, this boundary temperature model "
+                                               "post-processing, this boundary temperature model "
                                                "must therefore be told what the minimal and "
                                                "maximal values on the boundary are. This is done "
                                                "using parameters set in section ``Boundary temperature model/Initial temperature''."

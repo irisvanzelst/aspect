@@ -6,7 +6,7 @@ set Start time                             = 0
 set End time                               = 2000
 set Use years in output instead of seconds = false
 set CFL number                             = 1.0
-set Output directory                       = output
+set Output directory                       = output-van-keken-discontinuous
 
 subsection Geometry model
   set Model name = box
@@ -16,9 +16,7 @@ subsection Geometry model
   end
 end
 
-subsection Model settings
-  set Include adiabatic heating               = false
-  set Include shear heating                   = false
+subsection Boundary velocity model
   set Tangential velocity boundary indicators = left, right
   set Zero velocity boundary indicators       = bottom, top
 end
@@ -45,10 +43,10 @@ end
 # Note: The temperature plays no role in this model
 
 subsection Boundary temperature model
-  set Model name = box
+  set List of model names = box
 end
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = function
   subsection Function
     set Function expression = 0
@@ -64,7 +62,7 @@ subsection Compositional fields
   set Number of fields = 1
 end
 
-subsection Compositional initial conditions
+subsection Initial composition model
   set Model name = function
   subsection Function
     set Variable names      = x,z

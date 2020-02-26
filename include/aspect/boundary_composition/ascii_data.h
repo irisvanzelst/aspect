@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__boundary_composition_ascii_data_h
-#define __aspect__boundary_composition_ascii_data_h
+#ifndef _aspect_boundary_composition_ascii_data_h
+#define _aspect_boundary_composition_ascii_data_h
 
 #include <aspect/boundary_composition/interface.h>
 
@@ -35,8 +35,8 @@ namespace aspect
     using namespace dealii;
 
     /**
-     * A class that implements prescribed boundary conditions
-     * determined from a AsciiData input file.
+     * A class that implements prescribed boundary conditions determined from
+     * a AsciiData input file.
      *
      * @ingroup BoundaryCompositions
      */
@@ -54,27 +54,30 @@ namespace aspect
          * beginning of the program. Checks preconditions.
          */
         void
-        initialize ();
+        initialize () override;
+
+        // avoid -Woverloaded-virtual:
+        using Utilities::AsciiDataBoundary<dim>::initialize;
 
         /**
          * A function that is called at the beginning of each time step. For
          * the current plugin, this function loads the next data files if
-         * necessary and outputs a warning if the end of the set of data
-         * files is reached.
+         * necessary and outputs a warning if the end of the set of data files
+         * is reached.
          */
         void
-        update ();
+        update () override;
 
         /**
          * Return the boundary composition as a function of position. For the
          * current class, this function returns value from the text files.
+         *
+         * @copydoc aspect::BoundaryComposition::Interface::boundary_composition()
          */
         double
-        composition (const GeometryModel::Interface<dim> &geometry_model,
-                     const unsigned int                   boundary_indicator,
-                     const Point<dim>                    &position,
-                     const unsigned int                   compositional_field) const;
-
+        boundary_composition (const types::boundary_id boundary_indicator,
+                              const Point<dim> &position,
+                              const unsigned int compositional_field) const override;
 
         /**
          * Declare the parameters this class takes through input files.
@@ -87,7 +90,7 @@ namespace aspect
          * Read the parameters this class declares from the parameter file.
          */
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
     };
   }
 }

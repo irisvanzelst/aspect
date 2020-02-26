@@ -20,23 +20,30 @@ subsection Geometry model
   subsection Spherical shell
     set Inner radius  = 3481000
     set Outer radius  = 6336000
+    set Opening angle = 90
   end
 end
 
 
-subsection Model settings
-  set Zero velocity boundary indicators       = 0
-  set Tangential velocity boundary indicators = 1
-  set Prescribed velocity boundary indicators =
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
 
-  set Fixed temperature boundary indicators   = 0,1
+subsection Boundary velocity model
+  set Zero velocity boundary indicators       = inner
+end
 
-  set Include shear heating                   = false
+subsection Boundary velocity model
+  set Tangential velocity boundary indicators = outer,west,south,east
+end
+
+subsection Boundary temperature model
+  set Fixed temperature boundary indicators   = inner,outer
 end
 
 
 subsection Boundary temperature model
-  set Model name = spherical constant
+  set List of model names = spherical constant
   subsection Spherical constant
     set Inner temperature = 1600
     set Outer temperature = 1600
@@ -44,11 +51,11 @@ subsection Boundary temperature model
 end
 
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = S40RTS perturbation
   subsection S40RTS perturbation
     set Initial condition file name           = S40RTS.sph
-    set vs to density scaling                 = 0.3
+    set Vs to density scaling                 = 0.3
     set Thermal expansion coefficient in initial temperature scaling = 4e-5
     set Reference temperature                 = 1600
     set Remove degree 0 from perturbation     = true
@@ -57,12 +64,12 @@ end
 
 
 subsection Gravity model
-  set Model name = radial earth-like
+  set Model name = ascii data
 end
 
 
 subsection Mesh refinement
-  set Initial global refinement          = 0
+  set Initial global refinement          = 1
   set Initial adaptive refinement        = 0
   set Strategy                           = temperature
   set Time steps between mesh refinement = 15
@@ -73,6 +80,7 @@ subsection Postprocess
   set List of postprocessors = visualization, temperature statistics
 
   subsection Visualization
+    set Interpolate output = false
     set Output format                 = gnuplot
     set Time between graphical output = 0
   end

@@ -2,14 +2,14 @@ set Dimension = 2
 set CFL number                             = 1.0
 set End time                               = 0
 set Start time                             = 0
-set Adiabatic surface temperature          = 0
+set Adiabatic surface temperature          = 1.0
 set Surface pressure                       = 0
 set Use years in output instead of seconds = false  # default: true
-set Nonlinear solver scheme                = IMPES
+set Nonlinear solver scheme                = single Advection, single Stokes
 
 
 subsection Boundary temperature model
-  set Model name = box
+  set List of model names = box
 end
 
 
@@ -33,7 +33,7 @@ subsection Compositional fields
   set Number of fields          = 2
 end
 
-subsection Compositional initial conditions
+subsection Initial composition model
   set Model name = function
 
   subsection Function
@@ -43,7 +43,7 @@ subsection Compositional initial conditions
 end
 
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = perturbed box
 end
 
@@ -68,10 +68,19 @@ subsection Mesh refinement
 end
 
 
-subsection Model settings
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
+
+subsection Boundary temperature model
   set Fixed temperature boundary indicators   = 0, 1
-  set Prescribed velocity boundary indicators =
+end
+
+subsection Boundary velocity model
   set Tangential velocity boundary indicators = 1
+end
+
+subsection Boundary velocity model
   set Zero velocity boundary indicators       = 0, 2, 3
 end
 
@@ -79,6 +88,7 @@ subsection Postprocess
   set List of postprocessors = visualization, velocity statistics, basic statistics,  temperature statistics, heat flux statistics
 
    subsection Visualization
+    set Interpolate output = false
     set Output format                 = gnuplot
 
    end

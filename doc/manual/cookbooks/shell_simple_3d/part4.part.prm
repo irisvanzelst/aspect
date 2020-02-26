@@ -1,4 +1,4 @@
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = function 
   subsection Function
     set Function expression = 1473 
@@ -6,5 +6,5 @@ subsection Initial conditions
 end
 
 subsection Gravity model
-  set Model name = radial earth-like 
+  set Model name = ascii data
 end

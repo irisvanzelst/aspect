@@ -36,7 +36,11 @@ subsection Geometry model
 end
 
 
-subsection Model settings
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
+
+subsection Boundary velocity model
   set Tangential velocity boundary indicators = 0,1,2,3,4,5
 end
 
@@ -65,10 +69,10 @@ end
 # temperature boundary conditions.
 
 subsection Boundary temperature model
-  set Model name = box
+  set List of model names = box
 end
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = function
 
   subsection Function
@@ -92,7 +96,7 @@ subsection Compositional fields
   set Number of fields = 1
 end
 
-subsection Compositional initial conditions
+subsection Initial composition model
   set Model name = function
 
   subsection Function
@@ -125,7 +129,7 @@ subsection Mesh refinement
 end
 
 
-############### Parameters describing the what to do with the solution
+############### Parameters describing what to do with the solution
 # The final section allows us to choose which postprocessors to
 # run at the end of each time step. We select to generate graphical
 # output that will consist of the primary variables (velocity, pressure,
@@ -137,6 +141,7 @@ subsection Postprocess
   set List of postprocessors = visualization, velocity statistics, basic statistics
 
   subsection Visualization
+    set Interpolate output = false
     set List of output variables = density, viscosity
     set Output format                 = gnuplot
   end

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,16 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
-
+#include <deal.II/base/signaling_nan.h>
 #include <aspect/boundary_temperature/spherical_constant.h>
+#include <aspect/geometry_model/sphere.h>
 #include <aspect/geometry_model/spherical_shell.h>
+#include <aspect/geometry_model/chunk.h>
+#include <aspect/geometry_model/ellipsoidal_chunk.h>
 
 #include <utility>
 #include <limits>
@@ -35,27 +38,21 @@ namespace aspect
     template <int dim>
     double
     SphericalConstant<dim>::
-    temperature (const GeometryModel::Interface<dim> &geometry_model,
-                 const unsigned int                   boundary_indicator,
-                 const Point<dim>                    &location) const
+    boundary_temperature (const types::boundary_id boundary_indicator,
+                          const Point<dim> &) const
     {
-      // verify that the geometry is in fact a spherical shell since only
-      // for this geometry do we know for sure what boundary indicators it
-      // uses and what they mean
-      Assert (dynamic_cast<const GeometryModel::SphericalShell<dim>*>(&geometry_model)
-              != 0,
-              ExcMessage ("This boundary model is only implemented if the geometry is "
-                          "in fact a spherical shell."));
+      const GeometryModel::Interface<dim> *geometry_model = &this->get_geometry_model();
+      const std::string boundary_name = geometry_model->translate_id_to_symbol_name(boundary_indicator);
 
-      switch (boundary_indicator)
+      if (boundary_name == "bottom")
+        return inner_temperature;
+      else if (boundary_name =="top")
+        return outer_temperature;
+      else
         {
-          case 0:
-            return inner_temperature;
-          case 1:
-            return outer_temperature;
-          default:
-            Assert (false, ExcMessage ("Unknown boundary indicator."));
-            return std::numeric_limits<double>::quiet_NaN();
+          Assert (false, ExcMessage ("Unknown boundary indicator for geometry model. "
+                                     "The given boundary should be ``top'' or ``bottom''."));
+          return numbers::signaling_nan<double>();
         }
     }
 
@@ -63,7 +60,7 @@ namespace aspect
     template <int dim>
     double
     SphericalConstant<dim>::
-    minimal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const
+    minimal_temperature (const std::set<types::boundary_id> &) const
     {
       return std::min (inner_temperature, outer_temperature);
     }
@@ -73,7 +70,7 @@ namespace aspect
     template <int dim>
     double
     SphericalConstant<dim>::
-    maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const
+    maximal_temperature (const std::set<types::boundary_id> &) const
     {
       return std::max (inner_temperature, outer_temperature);
     }
@@ -90,10 +87,10 @@ namespace aspect
         {
           prm.declare_entry ("Outer temperature", "0",
                              Patterns::Double (),
-                             "Temperature at the outer boundary (lithosphere water/air). Units: K.");
+                             "Temperature at the outer boundary (lithosphere water/air). Units: $\\si{K}$.");
           prm.declare_entry ("Inner temperature", "6000",
                              Patterns::Double (),
-                             "Temperature at the inner boundary (core mantle boundary). Units: K.");
+                             "Temperature at the inner boundary (core mantle boundary). Units: $\\si{K}$.");
         }
         prm.leave_subsection ();
       }
@@ -127,7 +124,8 @@ namespace aspect
     ASPECT_REGISTER_BOUNDARY_TEMPERATURE_MODEL(SphericalConstant,
                                                "spherical constant",
                                                "A model in which the temperature is chosen constant on "
-                                               "the inner and outer boundaries of a spherical shell. "
+                                               "the inner and outer boundaries of a spherical shell, ellipsoidal "
+                                               "chunk or chunk. "
                                                "Parameters are read from subsection 'Spherical constant'.")
   }
 }

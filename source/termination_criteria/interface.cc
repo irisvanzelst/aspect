@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,14 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
 #include <aspect/termination_criteria/interface.h>
 #include <aspect/simulator.h>
+#include <aspect/utilities.h>
 
 #include <typeinfo>
 
@@ -63,7 +64,7 @@ namespace aspect
     double Manager<dim>::check_for_last_time_step (const double time_step) const
     {
       double new_time_step = time_step;
-      for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::const_iterator
+      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
            p = termination_objects.begin();
            p != termination_objects.end(); ++p)
         {
@@ -88,8 +89,8 @@ namespace aspect
 
       // call the execute() functions of all plugins we have
       // here in turns.
-      std::list<std::string>::const_iterator  itn = termination_obj_names.begin();;
-      for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::const_iterator
+      std::list<std::string>::const_iterator  itn = termination_obj_names.begin();
+      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
            p = termination_objects.begin();
            p != termination_objects.end(); ++p,++itn)
         {
@@ -166,11 +167,11 @@ namespace aspect
 
     namespace
     {
-      std_cxx1x::tuple
+      std::tuple
       <void *,
       void *,
-      internal::Plugins::PluginList<Interface<2> >,
-      internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      aspect::internal::Plugins::PluginList<Interface<2> >,
+      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
     }
 
 
@@ -191,7 +192,7 @@ namespace aspect
         // construct a string for Patterns::MultipleSelection that
         // contains the names of all registered termination criteria
         const std::string pattern_of_names
-          = std_cxx1x::get<dim>(registered_plugins).get_pattern_of_names ();
+          = std::get<dim>(registered_plugins).get_pattern_of_names ();
         prm.declare_entry("Termination criteria",
                           "end time",
                           Patterns::MultipleSelection(pattern_of_names),
@@ -201,13 +202,13 @@ namespace aspect
                           "termination criterion will always be used."
                           "The following termination criteria are available:\n\n"
                           +
-                          std_cxx1x::get<dim>(registered_plugins).get_description_string());
+                          std::get<dim>(registered_plugins).get_description_string());
       }
       prm.leave_subsection();
 
       // now declare the parameters of each of the registered
       // plugins in turn
-      std_cxx1x::get<dim>(registered_plugins).declare_parameters (prm);
+      std::get<dim>(registered_plugins).declare_parameters (prm);
     }
 
 
@@ -216,7 +217,7 @@ namespace aspect
     void
     Manager<dim>::parse_parameters (ParameterHandler &prm)
     {
-      Assert (std_cxx1x::get<dim>(registered_plugins).plugins != 0,
+      Assert (std::get<dim>(registered_plugins).plugins != nullptr,
               ExcMessage ("No termination criteria plugins registered!?"));
 
       // first find out which plugins are requested
@@ -226,11 +227,15 @@ namespace aspect
         do_checkpoint_on_terminate = prm.get_bool("Checkpoint on termination");
 
         plugin_names = Utilities::split_string_list(prm.get("Termination criteria"));
+        AssertThrow(Utilities::has_unique_entries(plugin_names),
+                    ExcMessage("The list of strings for the parameter "
+                               "'Termination criteria/Termination criteria' contains entries more than once. "
+                               "This is not allowed. Please check your parameter file."));
 
         // as described, the end time plugin is always active
         if (std::find (plugin_names.begin(), plugin_names.end(), "end time")
             == plugin_names.end())
-          plugin_names.push_back ("end time");
+          plugin_names.emplace_back("end time");
       }
       prm.leave_subsection();
 
@@ -238,12 +243,12 @@ namespace aspect
       // their own parameters
       for (unsigned int name=0; name<plugin_names.size(); ++name)
         {
-          termination_objects.push_back (std_cxx1x::shared_ptr<Interface<dim> >
-                                         (std_cxx1x::get<dim>(registered_plugins)
+          termination_objects.push_back (std::unique_ptr<Interface<dim> >
+                                         (std::get<dim>(registered_plugins)
                                           .create_plugin (plugin_names[name],
                                                           "Termination criteria::Termination criteria")));
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*termination_objects.back()))
-            sim->initialize (this->get_simulator());
+            sim->initialize_simulator (this->get_simulator());
           termination_objects.back()->parse_parameters (prm);
           termination_objects.back()->initialize ();
 
@@ -259,10 +264,20 @@ namespace aspect
                                                   void (*declare_parameters_function) (ParameterHandler &),
                                                   Interface<dim> *(*factory_function) ())
     {
-      std_cxx1x::get<dim>(registered_plugins).register_plugin (name,
-                                                               description,
-                                                               declare_parameters_function,
-                                                               factory_function);
+      std::get<dim>(registered_plugins).register_plugin (name,
+                                                         description,
+                                                         declare_parameters_function,
+                                                         factory_function);
+    }
+
+
+
+    template <int dim>
+    void
+    Manager<dim>::write_plugin_graph (std::ostream &out)
+    {
+      std::get<dim>(registered_plugins).write_plugin_graph ("Termination criteria interface",
+                                                            out);
     }
 
   }
@@ -278,10 +293,10 @@ namespace aspect
     {
       template <>
       std::list<internal::Plugins::PluginList<TerminationCriteria::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<TerminationCriteria::Interface<2> >::plugins = 0;
+      internal::Plugins::PluginList<TerminationCriteria::Interface<2> >::plugins = nullptr;
       template <>
       std::list<internal::Plugins::PluginList<TerminationCriteria::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<TerminationCriteria::Interface<3> >::plugins = 0;
+      internal::Plugins::PluginList<TerminationCriteria::Interface<3> >::plugins = nullptr;
     }
   }
 

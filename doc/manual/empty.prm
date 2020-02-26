@@ -2,6 +2,8 @@
 # by running aspect.
 # sadly we need to set a few where there are no default values:
 
+set End time = 0.0
+
 subsection Geometry model
   set Model name = box
 end
@@ -15,9 +17,15 @@ subsection Gravity model
 end
 
 subsection Boundary temperature model
-  set Model name = box
+  set List of model names = box
 end
 
-subsection Initial conditions
-  set Model name = perturbed box
+subsection Initial temperature model
+  set Model name = adiabatic
+end
+
+subsection Solver parameters
+  subsection Stokes solver parameters
+    set Use direct solver for Stokes system = true
+  end
 end

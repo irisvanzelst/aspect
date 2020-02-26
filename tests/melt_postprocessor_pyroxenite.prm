@@ -1,9 +1,14 @@
 # This test checks if the postprocessor 'melt fraction' works as 
 # intended. The visulaization output is then a p-T-diagramme of
-# the melt fraction of pyroxebite using the melting model of 
+# the melt fraction of pyroxenite using the melting model of 
 # Sobolev et. al, 2010 (Nature)
 # with the temperature ranging from 1000°C to 1900°C on the x axis 
 # and the pressure ranging from 0 GPa to 8 GPa on the y axis.
+
+# The data can be plotted in gnuplot using:
+# set view map
+# splot "file1" using 5:6:8 with points pointtype 5 pointsize 1 palette,
+#       "file2" using 5:6:8 with points pointtype 5 pointsize 1 palette
 
 # MPI: 2
 
@@ -38,6 +43,7 @@ end
 
 subsection Compositional fields
   set Number of fields = 1
+  set Names of fields = pyroxenite
 end
 
 
@@ -51,7 +57,7 @@ end
 # constants. We choose a linear temperature profile that
 # matches the boundary conditions defined below plus
 # a small perturbation:
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = function
 
   subsection Function
@@ -60,7 +66,7 @@ subsection Initial conditions
   end
 end
 
-subsection Compositional initial conditions
+subsection Initial composition model
   set Model name = function
 
   subsection Function
@@ -70,30 +76,19 @@ subsection Compositional initial conditions
 end
 
 subsection Boundary temperature model
-  set Model name = box
+  set List of model names = box
 end
 
 subsection Boundary composition model
-  set Model name = box
+  set List of model names = box
 end
 
-subsection Model settings
-  # The next parameters then describe on which parts of the
-  # boundary we prescribe a zero or nonzero velocity and
-  # on which parts the flow is allowed to be tangential.
-  # Here, all four sides of the box allow tangential
-  # unrestricted flow but with a zero normal component:
-  set Zero velocity boundary indicators       =
-  set Prescribed velocity boundary indicators =
-  set Tangential velocity boundary indicators = 0,1,2,3
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
 
-  # The final part of this section describes whether we
-  # want to include adiabatic heating (from a small
-  # compressibility of the medium) or from shear friction,
-  # as well as the rate of internal heating. We do not
-  # want to use any of these options here:
-  set Include adiabatic heating               = false
-  set Include shear heating                   = false
+subsection Boundary velocity model
+  set Tangential velocity boundary indicators = 0,1,2,3
 end
 
 
@@ -132,7 +127,7 @@ end
 # on. We here use a globally refined mesh without
 # adaptive mesh refinement.
 subsection Mesh refinement
-  set Initial global refinement                = 6
+  set Initial global refinement                = 4
   set Initial adaptive refinement              = 0
   set Time steps between mesh refinement       = 0
 end
@@ -152,6 +147,7 @@ subsection Postprocess
   set List of postprocessors = visualization
 
   subsection Visualization
+    set Interpolate output = false
     set Output format = gnuplot
     set Time between graphical output = 0.01
     set List of output variables = melt fraction

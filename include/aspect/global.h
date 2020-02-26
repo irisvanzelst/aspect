@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011, 2012, 2014 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,46 +14,168 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__global_h
-#define __aspect__global_h
+#ifndef _aspect_global_h
+#define _aspect_global_h
 
-#ifdef ASPECT_USE_PETSC
-#include <deal.II/lac/petsc_block_vector.h>
-#include <deal.II/lac/petsc_block_sparse_matrix.h>
-#include <deal.II/lac/petsc_precondition.h>
-#else
-#include <deal.II/lac/trilinos_block_vector.h>
-#include <deal.II/lac/trilinos_block_sparse_matrix.h>
-#include <deal.II/lac/trilinos_precondition.h>
-#endif
+#include <deal.II/base/mpi.h>
+
+DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
 
 #include <deal.II/lac/generic_linear_algebra.h>
 
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 
-#include <deal.II/base/mpi.h>
-#include <deal.II/base/multithread_info.h>
+DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 
+
+#include <aspect/compat.h>
 
 namespace aspect
 {
   /**
-   * A variable whose value denotes the number of seconds in one year.
+   * The following are a set of global constants which may be used by ASPECT:
+   * (for sources of data and values used by ASPECT, see source/global.cc)
    */
-  extern const double year_in_seconds;
+  namespace constants
+  {
+    /**
+     * Number of seconds in a year [s]
+     */
+    extern const double year_in_seconds;
+
+    /**
+     * Zero degrees Celsius to Kelvin [K]
+     */
+    extern const double celsius_to_kelvin;
+
+    /**
+     * Gas constant (also known as R) [J K^-1 mol^-1]
+     */
+    extern const double gas_constant;
+    /**
+     * Avogadro's constant [mol^-1]
+     */
+    extern const double avogadro;
+    /**
+     * Gravitational constant [m^3 kg^-1 s^-2]
+     */
+    extern const double big_g;
+
+    /**
+     * Constants for Earth:
+     */
+    namespace earth
+    {
+
+      /**
+       * Masses are taken from Yoder (1995)
+       */
+      namespace masses
+      {
+        /**
+         * Planet mass [kg]
+         */
+        extern const double planet;
+        /**
+         * Mass of the whole core [kg]
+         */
+        extern const double core;
+        /**
+         * Mass of the mantle [kg]
+         */
+        extern const double mantle;
+      }
+
+      /**
+       * Earth structure radii taken from the IASP91 model:
+       */
+      namespace iasp91_radii
+      {
+        /**
+         * Inner core radius [m], equivalent of 5150 km depth
+         */
+        extern const double inner_core;
+        /**
+         * Inner core radius [m], equivalent of 2889 km depth
+         */
+        extern const double core;
+        /**
+         * Lower mantle radius [m], equivalent of 660 km depth
+         */
+        extern const double lower_mantle;
+        /**
+         * Radius [m], equivalent of 5150 km depth
+         */
+        extern const double planet;
+      }
+
+      /**
+       * Gravity values taken from the PREM (Dziewonski and Anderson, 1981):
+       */
+      namespace prem_gravity
+      {
+        /**
+         * Inner core boundary gravity [ms^-2]
+         */
+        extern const double icb;
+        /**
+         * Core-mantle boundary gravity [ms^-2]
+         */
+        extern const double cmb;
+        /**
+         * Upper-lower mantle boundary gravity [ms^-2]
+         */
+        extern const double ulmb;
+        /**
+         * Surface gravity [ms^-2]
+         */
+        extern const double surface;
+      }
+
+      /**
+       * "Standard gravity" (average gravitational acceleration at surface
+       * [ms^-2]
+       */
+      extern const double surface_gravity;
+    }
+
+    /**
+     * Constants for Mars:
+     */
+    namespace mars
+    {
+
+      /**
+       * Mars structure radii
+       */
+      namespace radii
+      {
+        /**
+         * Planetary radius [m]
+         */
+        extern const double planet;
+        /**
+         * Core radius [m]
+         */
+        extern const double core;
+      }
+      /**
+       * Surface gravity [ms^-2]
+       */
+      extern const double surface_gravity;
+    }
+  }
 
   /**
-   * A variable that denotes whether we should periodically output statistics
-   * about memory consumption, run times, etc via the
-   * Simulator::output_statistics() function or other means.
+   * Number of seconds in a year [s] (deprecated)
    */
-  extern const bool output_parallel_statistics;
+  using constants::year_in_seconds;
 
 
   /**
@@ -114,6 +236,11 @@ namespace aspect
     typedef dealii::PETScWrappers::MPI::BlockSparseMatrix BlockSparseMatrix;
 
     /**
+     * Typedef for the base class for all preconditioners.
+     */
+    typedef dealii::PETScWrappers::PreconditionerBase PreconditionBase;
+
+    /**
      * Typedef for the AMG preconditioner type used for the top left block of
      * the Stokes matrix.
      */
@@ -141,8 +268,12 @@ namespace aspect
     /**
      * Typedef for the block compressed sparsity pattern type.
      */
-    typedef dealii::BlockCompressedSimpleSparsityPattern BlockCompressedSparsityPattern;
+    typedef dealii::BlockDynamicSparsityPattern BlockDynamicSparsityPattern;
 
+    /**
+     * Typedef for the compressed sparsity pattern type.
+     */
+    typedef dealii::DynamicSparsityPattern DynamicSparsityPattern;
 #else
     /**
      * Typedef for the vector type used.
@@ -165,6 +296,11 @@ namespace aspect
      * multiple blocks.
      */
     typedef dealii::TrilinosWrappers::BlockSparseMatrix BlockSparseMatrix;
+
+    /**
+     * Typedef for the base class for all preconditioners.
+     */
+    typedef dealii::TrilinosWrappers::PreconditionBase PreconditionBase;
 
     /**
      * Typedef for the AMG preconditioner type used for the top left block of
@@ -193,44 +329,24 @@ namespace aspect
     /**
      * Typedef for the block compressed sparsity pattern type.
      */
-    typedef dealii::TrilinosWrappers::BlockSparsityPattern BlockCompressedSparsityPattern;
+    typedef dealii::TrilinosWrappers::BlockSparsityPattern BlockDynamicSparsityPattern;
 
+    /**
+     * Typedef for the compressed sparsity pattern type.
+     */
+    typedef dealii::TrilinosWrappers::SparsityPattern DynamicSparsityPattern;
 #endif
   }
 }
 
 
-template < class Stream>
-void print_aspect_header(Stream &stream)
-{
-  const int n_tasks = dealii::Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD);
-
-  stream << "-----------------------------------------------------------------------------\n"
-         << "-- This is ASPECT, the Advanced Solver for Problems in Earth's ConvecTion.\n"
-         << "--     . version 1.3.pre\n" //VERSION-INFO. Do not edit by hand.
-#ifdef DEBUG
-         << "--     . running in DEBUG mode\n"
-#else
-         << "--     . running in OPTIMIZED mode\n"
-#endif
-         << "--     . running with " << n_tasks << " MPI process" << (n_tasks == 1 ? "\n" : "es\n");
-  const int n_threads =
-#if DEAL_II_VERSION_GTE(8,3,0)
-      dealii::MultithreadInfo::n_threads();
-#else
-      dealii::multithread_info.n_threads();
-#endif
-  if (n_threads>1)
-    stream << "--     . using " << n_threads << " threads " << (n_tasks == 1 ? "\n" : "each\n");
-#ifdef ASPECT_USE_PETSC
-  stream << "--     . using PETSc\n";
-#else
-  stream << "--     . using Trilinos\n";
-#endif
-  stream << "-----------------------------------------------------------------------------\n"
-         << std::endl;
-}
-
+/**
+ * Print a header into the given stream that will be written both to screen
+ * and to the log file and that provides basic information about what is
+ * running, with how many processes, and using which linear algebra library.
+ */
+template <class Stream>
+void print_aspect_header(Stream &stream);
 
 /**
  * A macro that is used in instantiating the ASPECT classes and functions for

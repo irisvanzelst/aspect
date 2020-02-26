@@ -1,18 +1,19 @@
 set Dimension = 2
 set CFL number                             = 1.0
 set End time                               = 1e9
-set Output directory                       = output
+set Output directory                       = output-nettranslation
 set Resume computation                     = false
 set Start time                             = 0
 set Adiabatic surface temperature          = 0
 set Surface pressure                       = 0
 set Pressure normalization = no
-set Linear solver tolerance = 1.e-7
 set Use years in output instead of seconds = true
-set Nonlinear solver scheme                = IMPES
+set Nonlinear solver scheme                = single Advection, single Stokes
 
 subsection Boundary temperature model
-  set Model name = box
+  set Fixed temperature boundary indicators = bottom, top
+  set List of model names = box
+
   subsection Box
     set Top temperature = 0.0
     set Bottom temperature = 1000.0
@@ -51,7 +52,7 @@ subsection Gravity model
 end
 
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = function
   subsection Function 
     set Variable names      = x,y
@@ -84,13 +85,11 @@ subsection Mesh refinement
 end
 
 
-subsection Model settings
-  set Include adiabatic heating               = false
-  set Include shear heating                   = false
-  set Fixed temperature boundary indicators   = bottom, top
-  set Prescribed velocity boundary indicators =
+subsection Boundary velocity model
   set Tangential velocity boundary indicators = bottom, top
-  set Zero velocity boundary indicators       = 
+end
+
+subsection Nullspace removal
   set Remove nullspace = net translation
 end
 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2013 by the authors of the ASPECT code.
+  Copyright (C) 2013 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,17 +14,17 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__adiabatic_conditions_interface_h
-#define __aspect__adiabatic_conditions_interface_h
+#ifndef _aspect_adiabatic_conditions_interface_h
+#define _aspect_adiabatic_conditions_interface_h
 
 #include <aspect/plugins.h>
 #include <aspect/geometry_model/interface.h>
-
+#include <aspect/simulator_access.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/distributed/tria.h>
 
@@ -51,14 +51,14 @@ namespace aspect
      * @ingroup AdiabaticConditions
      */
     template <int dim>
-    class Interface
+    class Interface: public SimulatorAccess<dim>
     {
       public:
         /**
          * Destructor. Made virtual to enforce that derived classes also have
          * virtual destructors.
          */
-        virtual ~Interface();
+        ~Interface() override;
 
         /**
          * Initialization function. This function is called once at the
@@ -72,7 +72,7 @@ namespace aspect
         /**
          * Some plugins need to know whether the adiabatic conditions are
          * already calculated. Namely all plugins that are needed to create
-         * the adiabatic conditions but themselves depedend on the adiabatic
+         * the adiabatic conditions but themselves depend on the adiabatic
          * profile. Utilizing this function they may behave differently on
          * initialization of the adiabatic conditions and at model runtime.
          */
@@ -95,6 +95,25 @@ namespace aspect
         double temperature (const Point<dim> &p) const = 0;
 
         /**
+         * Return the adiabatic pressure at a given point of the domain.
+         */
+        virtual
+        double pressure (const Point<dim> &p) const = 0;
+
+        /**
+         * Return the reference_density at a given point of the domain.
+         */
+        virtual
+        double density (const Point<dim> &p) const = 0;
+
+        /**
+         * Return the derivative of the density with respect to depth
+         * at the given point @p p.
+         */
+        virtual
+        double density_derivative (const Point<dim> &p) const = 0;
+
+        /**
          * Return the adiabatic temperature profile as a vector of values
          * corresponding to increasing depth.
          *
@@ -103,13 +122,25 @@ namespace aspect
          * of depth slices.
          */
         virtual
-        void get_adiabatic_temperature_profile(std::vector<double> &values) const = 0;
+        void get_adiabatic_temperature_profile(std::vector<double> &values) const;
 
         /**
-         * Return the adiabatic pressure at a given point of the domain.
+         * Like get_adiabatic_temperature_profile() but for the pressure.
          */
         virtual
-        double pressure (const Point<dim> &p) const = 0;
+        void get_adiabatic_pressure_profile(std::vector<double> &values) const;
+
+        /**
+         * Like get_adiabatic_temperature_profile() but for the density.
+         */
+        virtual
+        void get_adiabatic_density_profile(std::vector<double> &values) const;
+
+        /**
+         * Like get_adiabatic_temperature_profile() but for the density derivative.
+         */
+        virtual
+        void get_adiabatic_density_derivative_profile(std::vector<double> &values) const;
 
 
         /**
@@ -181,6 +212,20 @@ namespace aspect
     template <int dim>
     void
     declare_parameters (ParameterHandler &prm);
+
+
+    /**
+     * For the current plugin subsystem, write a connection graph of all of the
+     * plugins we know about, in the format that the
+     * programs dot and neato understand. This allows for a visualization of
+     * how all of the plugins that ASPECT knows about are interconnected, and
+     * connect to other parts of the ASPECT code.
+     *
+     * @param output_stream The stream to write the output to.
+     */
+    template <int dim>
+    void
+    write_plugin_graph (std::ostream &output_stream);
 
 
     /**

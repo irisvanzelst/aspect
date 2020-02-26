@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
 #include <aspect/postprocess/temperature_statistics.h>
-#include <aspect/simulator_access.h>
+#include <aspect/boundary_temperature/interface.h>
 
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/fe/fe_values.h>
@@ -50,14 +50,10 @@ namespace aspect
 
       std::vector<double> temperature_values(n_q_points);
 
-      typename DoFHandler<dim>::active_cell_iterator
-      cell = this->get_dof_handler().begin_active(),
-      endc = this->get_dof_handler().end();
-
       double local_temperature_integral = 0;
 
       // compute the integral quantities by quadrature
-      for (; cell!=endc; ++cell)
+      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
         if (cell->is_locally_owned())
           {
             fe_values.reinit (cell);
@@ -119,14 +115,14 @@ namespace aspect
                             global_max_temperature);
       if ((this->get_fixed_temperature_boundary_indicators().size() > 0)
           &&
-          (this->get_boundary_temperature().maximal_temperature(this->get_fixed_temperature_boundary_indicators())
+          (this->get_boundary_temperature_manager().maximal_temperature(this->get_fixed_temperature_boundary_indicators())
            !=
-           this->get_boundary_temperature().minimal_temperature(this->get_fixed_temperature_boundary_indicators())))
+           this->get_boundary_temperature_manager().minimal_temperature(this->get_fixed_temperature_boundary_indicators())))
         statistics.add_value ("Average nondimensional temperature (K)",
                               (global_mean_temperature - global_min_temperature) /
-                              (this->get_boundary_temperature().maximal_temperature(this->get_fixed_temperature_boundary_indicators())
+                              (this->get_boundary_temperature_manager().maximal_temperature(this->get_fixed_temperature_boundary_indicators())
                                -
-                               this->get_boundary_temperature().minimal_temperature(this->get_fixed_temperature_boundary_indicators())));
+                               this->get_boundary_temperature_manager().minimal_temperature(this->get_fixed_temperature_boundary_indicators())));
 
       // also make sure that the other columns filled by the this object
       // all show up with sufficient accuracy and in scientific notation
@@ -143,9 +139,9 @@ namespace aspect
 
         if ((this->get_fixed_temperature_boundary_indicators().size() > 0)
             &&
-            (this->get_boundary_temperature().maximal_temperature(this->get_fixed_temperature_boundary_indicators())
+            (this->get_boundary_temperature_manager().maximal_temperature(this->get_fixed_temperature_boundary_indicators())
              !=
-             this->get_boundary_temperature().minimal_temperature(this->get_fixed_temperature_boundary_indicators())))
+             this->get_boundary_temperature_manager().minimal_temperature(this->get_fixed_temperature_boundary_indicators())))
           {
             statistics.set_precision ("Average nondimensional temperature (K)", 8);
             statistics.set_scientific ("Average nondimensional temperature (K)", true);

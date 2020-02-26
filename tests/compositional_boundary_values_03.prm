@@ -8,11 +8,11 @@ set Start time                             = 0
 set Adiabatic surface temperature          = 0
 set Surface pressure                       = 0
 set Use years in output instead of seconds = false  # default: true
-set Nonlinear solver scheme                = IMPES
+set Nonlinear solver scheme                = single Advection, single Stokes
 
 
 subsection Boundary temperature model
-  set Model name = box
+  set List of model names = box
 end
 
 
@@ -34,7 +34,7 @@ end
 
 
 # temperature field doesn't matter. set it to zero
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = function
   subsection Function
     set Function expression = x
@@ -71,11 +71,19 @@ subsection Mesh refinement
 end
 
 
-subsection Model settings
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
+
+subsection Boundary temperature model
   set Fixed temperature boundary indicators   = 0, 1, 2, 3
+end
+
+subsection Boundary composition model
   set Fixed composition boundary indicators   = 0, 2
-  set Tangential velocity boundary indicators =
-  set Zero velocity boundary indicators       =
+end
+
+subsection Boundary velocity model
   set Prescribed velocity boundary indicators = 0: function, 1: function, 2: function, 3: function
 end
 
@@ -94,7 +102,7 @@ subsection Compositional fields
   set Number of fields = 2
 end
 
-subsection Compositional initial conditions
+subsection Initial composition model
   set Model name = function
 
   subsection Function
@@ -104,7 +112,7 @@ subsection Compositional initial conditions
 end
 
 subsection Boundary composition model
-  set Model name = box
+  set List of model names = box
   subsection Box
     set Left composition = 10, -10
     set Right composition = 20, -20

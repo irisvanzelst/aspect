@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,16 +14,17 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
-
-#ifndef __aspect__model_multicomponent_h
-#define __aspect__model_multicomponent_h
+#ifndef _aspect_material_model_multicomponent_h
+#define _aspect_material_model_multicomponent_h
 
 #include <aspect/material_model/interface.h>
 #include <aspect/simulator_access.h>
+#include <aspect/material_model/equation_of_state/multicomponent_incompressible.h>
+
 
 namespace aspect
 {
@@ -60,71 +61,28 @@ namespace aspect
      * @ingroup MaterialModels
      */
     template <int dim>
-    class Multicomponent : public MaterialModel::InterfaceCompatibility<dim>, public ::aspect::SimulatorAccess<dim>
+    class Multicomponent : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
+
         /**
-         * @name Physical parameters used in the basic equations
-         * @{
+         * Function to compute the material properties in @p out given the
+         * inputs in @p in. If MaterialModelInputs.strain_rate has the length
+         * 0, then the viscosity does not need to be computed.
          */
-        virtual double viscosity (const double                  temperature,
-                                  const double                  pressure,
-                                  const std::vector<double>    &compositional_fields,
-                                  const SymmetricTensor<2,dim> &strain_rate,
-                                  const Point<dim>             &position) const;
-
-        virtual double density (const double temperature,
-                                const double pressure,
-                                const std::vector<double> &compositional_fields,
-                                const Point<dim> &position) const;
-
-        virtual double compressibility (const double temperature,
-                                        const double pressure,
-                                        const std::vector<double> &compositional_fields,
-                                        const Point<dim> &position) const;
-
-        virtual double specific_heat (const double temperature,
-                                      const double pressure,
-                                      const std::vector<double> &compositional_fields,
-                                      const Point<dim> &position) const;
-
-        virtual double thermal_expansion_coefficient (const double      temperature,
-                                                      const double      pressure,
-                                                      const std::vector<double> &compositional_fields,
-                                                      const Point<dim> &position) const;
-
-        virtual double thermal_conductivity (const double temperature,
-                                             const double pressure,
-                                             const std::vector<double> &compositional_fields,
-                                             const Point<dim> &position) const;
-        /**
-         * @}
-         */
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
         /**
          * @name Qualitative properties one can ask a material model
          * @{
          */
 
-        virtual bool
-        viscosity_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        density_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        compressibility_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        specific_heat_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        thermal_conductivity_depends_on (const NonlinearDependence::Dependence dependence) const;
-
         /**
          * This model is not compressible, so this returns false.
          */
-        virtual bool is_compressible () const;
+        bool is_compressible () const override;
+
         /**
          * @}
          */
@@ -133,15 +91,7 @@ namespace aspect
          * @name Reference quantities
          * @{
          */
-        virtual double reference_viscosity () const;
-
-        virtual double reference_density () const;
-
-        virtual double reference_thermal_expansion_coefficient () const;
-
-        double reference_thermal_diffusivity () const;
-
-        double reference_cp () const;
+        double reference_viscosity () const override;
         /**
          * @}
          */
@@ -161,26 +111,14 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
+
         /**
          * @}
          */
 
       private:
-        /**
-         * From a list of compositional fields of length N, we come up with an
-         * N+1 length list that which also includes the fraction of
-         * ``background mantle''. This list should sum to one, and is
-         * interpreted as volume fractions.  If the sum of the
-         * compositional_fields is greater than one, we assume that there is
-         * no background mantle (i.e., that field value is zero).  Otherwise,
-         * the difference between the sum of the compositional fields and 1.0
-         * is assumed to be the amount of background mantle.
-         */
-        const std::vector<double> compute_volume_fractions(
-          const std::vector<double> &compositional_fields) const;
         /**
          * Reference temperature for thermal expansion.  All components use
          * the same reference_T.
@@ -189,22 +127,8 @@ namespace aspect
 
         /**
          * Enumeration for selecting which viscosity averaging scheme to use.
-         * Select between harmonic, arithmetic, geometric, and
-         * maximum_composition.  The max composition scheme simply uses the
-         * viscosity of whichever field has the highes volume fraction.
          */
-        enum
-        {
-          harmonic,
-          arithmetic,
-          geometric,
-          maximum_composition
-        } viscosity_averaging;
-
-        /**
-         * Vector for field densities, read from parameter file .
-         */
-        std::vector<double> densities;
+        MaterialUtilities::CompositionalAveragingOperation viscosity_averaging;
 
         /**
          * Vector for field viscosities, read from parameter file.
@@ -212,19 +136,11 @@ namespace aspect
         std::vector<double> viscosities;
 
         /**
-         * Vector for field thermal expnsivities, read from parameter file.
-         */
-        std::vector<double> thermal_expansivities;
-
-        /**
          * Vector for field thermal conductivities, read from parameter file.
          */
         std::vector<double> thermal_conductivities;
 
-        /**
-         * Vector for field specific heats, read from parameter file.
-         */
-        std::vector<double> specific_heats;
+        EquationOfState::MulticomponentIncompressible<dim> equation_of_state;
     };
 
   }

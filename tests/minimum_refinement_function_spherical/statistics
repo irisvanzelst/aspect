@@ -1,13 +1,13 @@
 # 1: Time step number
 # 2: Time (years)
-# 3: Number of mesh cells
-# 4: Number of Stokes degrees of freedom
-# 5: Number of temperature degrees of freedom
-# 6: Iterations for temperature solver
-# 7: Iterations for Stokes solver
-# 8: Velocity iterations in Stokes preconditioner
-# 9: Schur complement iterations in Stokes preconditioner
-# 10: Time step size (years)
+# 3: Time step size (years)
+# 4: Number of mesh cells
+# 5: Number of Stokes degrees of freedom
+# 6: Number of temperature degrees of freedom
+# 7: Iterations for temperature solver
+# 8: Iterations for Stokes solver
+# 9: Velocity iterations in Stokes preconditioner
+# 10: Schur complement iterations in Stokes preconditioner
 # 11: Visualization file name
 # 12: RMS velocity (m/year)
 # 13: Max. velocity (m/year)
@@ -15,11 +15,11 @@
 # 15: Average temperature (K)
 # 16: Maximal temperature (K)
 # 17: Average nondimensional temperature (K)
-# 18: Outward heat flux through boundary with indicator 0 ("inner") (W)
-# 19: Outward heat flux through boundary with indicator 1 ("outer") (W)
+# 18: Outward heat flux through boundary with indicator 0 ("bottom") (W)
+# 19: Outward heat flux through boundary with indicator 1 ("top") (W)
 # 20: Outward heat flux through boundary with indicator 2 ("left") (W)
 # 21: Outward heat flux through boundary with indicator 3 ("right") (W)
-0 0.0000e+00  48  515  225 0 23  24 175 1.3943e+10 output-minimum_refinement_function_spherical/solution-00000 8.26553347e-07 1.46805462e-06 1.40000000e+03 1.62704692e+03 1.80000000e+03 6.48705474e-02 1.03703096e+03 1.97812895e+03 2.57201764e+03 2.57201764e+03 
-0 0.0000e+00 144 1475  649 0 46  52 147 8.9025e+09 output-minimum_refinement_function_spherical/solution-00001 6.23272841e-07 1.16385730e-06 1.40000000e+03 1.62699623e+03 1.80000000e+03 6.48560666e-02 9.60178250e+02 1.92744684e+03 2.47867944e+03 2.47867944e+03 
-0 0.0000e+00 357 3608 1597 0 48 136 165 5.0569e+09 output-minimum_refinement_function_spherical/solution-00002 6.23350500e-07 1.16412673e-06 1.40000000e+03 1.62699588e+03 1.80000000e+03 6.48559650e-02 9.60178250e+02 1.92744684e+03 2.47867944e+03 2.47867944e+03 
-0 0.0000e+00 573 5768 2557 0 48 138 164 3.7653e+09 output-minimum_refinement_function_spherical/solution-00003 6.23324387e-07 1.16409110e-06 1.40000000e+03 1.62699587e+03 1.80000000e+03 6.48559630e-02 9.60178250e+02 1.92744684e+03 2.47867944e+03 2.47867944e+03 
+0 0.000000000000e+00 0.000000000000e+00  48  515  225 0  18  20  142 output-minimum_refinement_function_spherical/solution/solution-00000 8.26382106e-07 1.46723225e-06 1.40000000e+03 1.62702626e+03 1.80000000e+03 6.48646444e-02 1.02670863e+03 1.92453272e+03 0.00000000e+00 0.00000000e+00 
+0 0.000000000000e+00 0.000000000000e+00 144 1475  649 0  42  44  369 output-minimum_refinement_function_spherical/solution/solution-00001 6.20167880e-07 1.15737327e-06 1.40000000e+03 1.62701261e+03 1.80000000e+03 6.48607445e-02 9.83436761e+02 1.97131988e+03 0.00000000e+00 0.00000000e+00 
+0 0.000000000000e+00 0.000000000000e+00 357 3608 1597 0 218 347 1962 output-minimum_refinement_function_spherical/solution/solution-00002 6.20199604e-07 1.15739472e-06 1.40000000e+03 1.62701191e+03 1.80000000e+03 6.48605450e-02 9.83436766e+02 1.97131984e+03 0.00000000e+00 0.00000000e+00 
+0 0.000000000000e+00 0.000000000000e+00 573 5768 2557 0 219 363 1987 output-minimum_refinement_function_spherical/solution/solution-00003 6.20166387e-07 1.15734233e-06 1.40000000e+03 1.62701189e+03 1.80000000e+03 6.48605405e-02 9.83436769e+02 1.97131984e+03 0.00000000e+00 0.00000000e+00 

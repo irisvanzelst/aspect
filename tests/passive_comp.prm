@@ -38,7 +38,6 @@ set Start time                             = 0
 # such conversion happens.
 set Use years in output instead of seconds = false
 
-
 subsection Boundary temperature model
   # Select one of the following models:
   #
@@ -49,7 +48,7 @@ subsection Boundary temperature model
   #
   # `box': A model in which the temperature is chosen constant on
   # the left and right sides of a box.
-  set Model name = spherical constant
+  set List of model names = spherical constant
 
 
   subsection Spherical constant
@@ -133,21 +132,7 @@ end
 
 
 subsection Gravity model
-  # Select one of the following models:
-  #
-  # `vertical': A gravity model in which
-  # the gravity direction is vertically downward and at constant
-  # magnitude.
-  #
-  # `radial constant': A gravity model in which the gravity
-  # direction is radially inward and at constant magnitude. The magnitude is
-  # read from the parameter file in subsection 'Radial constant'.
-  #
-  # `radial earth-like': A gravity model in which the gravity direction is radially
-  # inward and with a magnitude that matches that of the earth at the
-  # core-mantle boundary as well as at the surface and in between is
-  # physically correct under the assumption of a constant density.
-  set Model name = radial earth-like
+  set Model name = ascii data
 
 
   subsection Radial constant
@@ -159,7 +144,7 @@ subsection Gravity model
 end
 
 
-subsection Initial conditions
+subsection Initial temperature model
   # Select one of the following models:
   #
   # `spherical hexagonal perturbation':
@@ -201,7 +186,7 @@ subsection Initial conditions
 
 end
 
-subsection Compositional initial conditions
+subsection Initial composition model
   # Select one of the following models:
   #
   # `function':
@@ -294,37 +279,20 @@ subsection Mesh refinement
 end
 
 
-subsection Model settings
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
+
+subsection Boundary temperature model
   # A comma separated list of integers denoting those boundaries on which the
   # temperature is fixed and described by the boundary temperature object
   # selected in its own section of this input file. All boundary indicators
   # used by the geometry but not explicitly listed here will end up with
   # no-flux (insulating) boundary conditions.
   set Fixed temperature boundary indicators   = 0,1
+end
 
-  # Whether to include shear heating into the model or not. From a physical
-  # viewpoint, shear heating should always be used but may be undesirable when
-  # comparing results with known benchmarks that do not include this term in
-  # the temperature equation.
-  set Include shear heating                   = true
-
-  # A comma separated list of integers denoting those boundaries on which the
-  # velocity is tangential but prescribed, i.e., where external forces act to
-  # prescribe a particular velocity. This is often used to prescribe a
-  # velocity that equals that of overlying plates.
-  set Prescribed velocity boundary indicators =
-
-  # H0
-
-  # A comma separated list of integers denoting those boundaries on which the
-  # velocity is tangential and unrestrained, i.e., where no external forces
-  # act to prescribe a particular tangential velocity (although there is a
-  # force that requires the flow to be tangential).
-  set Tangential velocity boundary indicators =
-
-  # A comma separated list of integers denoting those boundaries on which the
-  # velocity is zero.
-  set Zero velocity boundary indicators       =
+subsection Boundary velocity model
   set Prescribed velocity boundary indicators = 0: function, 1:function
 end
 
@@ -380,6 +348,7 @@ subsection Postprocess
 
 
   subsection Visualization
+    set Interpolate output = false
 
     set Number of grouped files       = 0
 
@@ -401,3 +370,7 @@ subsection Postprocess
 end
 
 
+
+subsection Heating model
+  set List of model names =  shear heating
+end

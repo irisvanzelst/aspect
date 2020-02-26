@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,17 +14,12 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
-
-
+#include <aspect/simulator.h>
 #include <aspect/postprocess/visualization/dynamic_topography.h>
-#include <aspect/simulator_access.h>
-
-#include <deal.II/base/quadrature_lib.h>
-#include <deal.II/fe/fe_values.h>
-
+#include <aspect/postprocess/dynamic_topography.h>
 
 namespace aspect
 {
@@ -33,204 +28,75 @@ namespace aspect
     namespace VisualizationPostprocessors
     {
       template <int dim>
-      std::pair<std::string, Vector<float> *>
-      DynamicTopography<dim>::execute() const
-      {
-        std::pair<std::string, Vector<float> *>
-        return_value ("dynamic_topography",
-                      new Vector<float>(this->get_triangulation().n_active_cells()));
-
-        // evaluate a single point per cell
-        const QMidpoint<dim> quadrature_formula;
-        const QMidpoint<dim-1> quadrature_formula_face;
-
-        Assert(quadrature_formula_face.size()==1, ExcInternalError());
-
-        FEValues<dim> fe_values (this->get_mapping(),
-                                 this->get_fe(),
-                                 quadrature_formula,
-                                 update_values   |
-                                 update_gradients   |
-                                 update_quadrature_points );
-
-        FEFaceValues<dim> fe_face_values (this->get_mapping(),
-                                          this->get_fe(),
-                                          quadrature_formula_face,
-                                          update_JxW_values);
-
-        typename MaterialModel::Interface<dim>::MaterialModelInputs in(fe_values.n_quadrature_points, this->n_compositional_fields());
-        typename MaterialModel::Interface<dim>::MaterialModelOutputs out(fe_values.n_quadrature_points, this->n_compositional_fields());
-
-        std::vector<std::vector<double> > composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
-
-        double integrated_topography = 0;
-        double integrated_surface_area = 0;
-
-        // loop over all of the surface cells and if one less than h/3 away from
-        // the top surface, evaluate the stress at its center
-        typename DoFHandler<dim>::active_cell_iterator
-        cell = this->get_dof_handler().begin_active(),
-        endc = this->get_dof_handler().end();
-
-        unsigned int cell_index = 0;
-        for (; cell!=endc; ++cell,++cell_index)
-          if (cell->is_locally_owned())
-            if (cell->at_boundary())
-              {
-                // see if the cell is at the *top* boundary, not just any boundary
-                unsigned int top_face_idx = numbers::invalid_unsigned_int;
-                {
-                  for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
-                    if (cell->at_boundary(f) && this->get_geometry_model().depth (cell->face(f)->center()) < cell->face(f)->minimum_vertex_distance()/3)
-                      {
-                        top_face_idx = f;
-                        break;
-                      }
-                }
-                if (top_face_idx == numbers::invalid_unsigned_int)
-                  {
-                    (*return_value.second)(cell_index) = 0;
-                    continue;
-                  }
-                fe_values.reinit (cell);
-
-                // get the various components of the solution, then
-                // evaluate the material properties there
-                fe_values[this->introspection().extractors.temperature]
-                .get_function_values (this->get_solution(), in.temperature);
-                fe_values[this->introspection().extractors.pressure]
-                .get_function_values (this->get_solution(), in.pressure);
-                fe_values[this->introspection().extractors.velocities]
-                .get_function_symmetric_gradients (this->get_solution(), in.strain_rate);
-
-
-                in.position = fe_values.get_quadrature_points();
-
-                for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
-                  fe_values[this->introspection().extractors.compositional_fields[c]]
-                  .get_function_values(this->get_solution(),
-                                       composition_values[c]);
-                for (unsigned int i=0; i<fe_values.n_quadrature_points; ++i)
-                  {
-                    for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
-                      in.composition[i][c] = composition_values[c][i];
-                  }
-
-                this->get_material_model().evaluate(in, out);
-
-
-                // for each of the quadrature points, evaluate the
-                // stress and compute the component in direction of the
-                // gravity vector
-
-                double dynamic_topography_x_volume = 0;
-                double volume = 0;
-
-                // Compute the integral of the dynamic topography function
-                // over the entire cell, by looping over all quadrature points
-                // (currently, there is only one, but the code is generic).
-                for (unsigned int q=0; q<quadrature_formula.size(); ++q)
-                  {
-                    const Point<dim> location = fe_values.quadrature_point(q);
-                    const double viscosity = out.viscosities[q];
-                    const double density   = out.densities[q];
-
-                    const SymmetricTensor<2,dim> strain_rate = in.strain_rate[q] - 1./3 * trace(in.strain_rate[q]) * unit_symmetric_tensor<dim>();
-                    const SymmetricTensor<2,dim> shear_stress = 2 * viscosity * strain_rate;
-
-                    const Tensor<1,dim> gravity = this->get_gravity_model().gravity_vector(location);
-                    const Tensor<1,dim> gravity_direction = gravity/gravity.norm();
-
-                    // Subtract the dynamic pressure
-                    const double dynamic_pressure   = in.pressure[q] - this->get_adiabatic_conditions().pressure(location);
-                    const double sigma_rr           = gravity_direction * (shear_stress * gravity_direction) - dynamic_pressure;
-                    const double dynamic_topography = - sigma_rr / gravity.norm() / density;
-
-                    // JxW provides the volume quadrature weights. This is a general formulation
-                    // necessary for when a quadrature formula is used that has more than one point.
-                    dynamic_topography_x_volume += dynamic_topography * fe_values.JxW(q);
-                    volume += fe_values.JxW(q);
-                  }
-
-                const double dynamic_topography_cell_average = dynamic_topography_x_volume / volume;
-                // Compute the associated surface area to later compute the surfaces weighted integral
-                fe_face_values.reinit(cell, top_face_idx);
-                const double surface = fe_face_values.JxW(0);
-
-                integrated_topography += dynamic_topography_cell_average*surface;
-                integrated_surface_area += surface;
-
-                (*return_value.second)(cell_index) = dynamic_topography_cell_average;
-              }
-
-        // Calculate surface weighted average dynamic topography
-        const double average_topography = Utilities::MPI::sum (integrated_topography,this->get_mpi_communicator())
-                                          / Utilities::MPI::sum (integrated_surface_area,this->get_mpi_communicator());
-
-        // subtract the average dynamic topography
-        cell_index = 0;
-        cell = this->get_dof_handler().begin_active();
-        if (subtract_mean_dyn_topography)
-          for (; cell!=endc; ++cell,++cell_index)
-            if (cell->is_locally_owned()
-                && (*return_value.second)(cell_index) != 0
-                && cell->at_boundary())
-              {
-                for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
-                  if (cell->at_boundary(f) && this->get_geometry_model().depth (cell->face(f)->center()) < cell->face(f)->minimum_vertex_distance()/3)
-                    {
-                      (*return_value.second)(cell_index) -= average_topography;
-                      break;
-                    }
-              }
-
-        return return_value;
-      }
+      DynamicTopography<dim>::
+      DynamicTopography ()
+        :
+        DataPostprocessorScalar<dim> ("dynamic_topography",
+                                      update_quadrature_points)
+      {}
 
       template <int dim>
       void
       DynamicTopography<dim>::
-      declare_parameters (ParameterHandler &prm)
+      evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
+                            std::vector<Vector<double> > &computed_quantities) const
       {
-        prm.enter_subsection("Postprocess");
-        {
-          prm.enter_subsection("Visualization");
-          {
-            prm.enter_subsection("Dynamic Topography");
-            {
-              prm.declare_entry ("Subtract mean of dynamic topography", "false",
-                                 Patterns::Bool (),
-                                 "Option to remove the mean dynamic topography "
-                                 "in the outputted data file (not visualization). "
-                                 "'true' subtracts the mean, 'false' leaves "
-                                 "the calculated dynamic topography as is. ");
+        for (unsigned int q=0; q<computed_quantities.size(); ++q)
+          computed_quantities[q](0) = 0;
 
-            }
-            prm.leave_subsection();
+        const Postprocess::DynamicTopography<dim> &dynamic_topography =
+          this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::DynamicTopography<dim> >();
+
+        auto cell = input_data.template get_cell<DoFHandler<dim> >();
+
+        // We only want to output dynamic topography at the top and bottom
+        // boundary, so only compute it if the current cell has
+        // a face at the top or bottom boundary.
+        bool cell_at_top_or_bottom_boundary = false;
+        for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+          if (cell->at_boundary(f) &&
+              (this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "top" ||
+               this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "bottom"))
+            cell_at_top_or_bottom_boundary = true;
+
+        if (cell_at_top_or_bottom_boundary)
+          {
+            std::vector<Point<dim>> quadrature_points(input_data.evaluation_points.size());
+            for (unsigned int i=0; i<input_data.evaluation_points.size(); ++i)
+              quadrature_points[i] = this->get_mapping().transform_real_to_unit_cell(cell,input_data.evaluation_points[i]);
+
+            const Quadrature<dim> quadrature_formula(quadrature_points);
+
+            FEValues<dim> fe_volume_values (this->get_mapping(),
+                                            this->get_fe(),
+                                            quadrature_formula,
+                                            update_values);
+
+            fe_volume_values.reinit(cell);
+
+            std::vector<double> dynamic_topography_values(quadrature_formula.size());
+
+            // It might seem unintuitive to use the extractor for the temperature block,
+            // but that is where dynamic_topography.topography_vector() stores the values.
+            // See the documentation of that function for more details.
+            fe_volume_values[this->introspection().extractors.temperature].get_function_values(dynamic_topography.topography_vector(),
+                dynamic_topography_values);
+
+            for (unsigned int q=0; q<quadrature_formula.size(); ++q)
+              computed_quantities[q](0) = dynamic_topography_values[q];
           }
-          prm.leave_subsection();
-        }
-        prm.leave_subsection();
       }
 
 
+
+      /**
+       * Register the other postprocessor that we need: DynamicTopography
+       */
       template <int dim>
-      void
-      DynamicTopography<dim>::parse_parameters (ParameterHandler &prm)
+      std::list<std::string>
+      DynamicTopography<dim>::required_other_postprocessors() const
       {
-        prm.enter_subsection("Postprocess");
-        {
-          prm.enter_subsection("Visualization");
-          {
-            prm.enter_subsection("Dynamic Topography");
-            {
-              subtract_mean_dyn_topography              = prm.get_bool("Subtract mean of dynamic topography");
-            }
-            prm.leave_subsection();
-          }
-          prm.leave_subsection();
-        }
-        prm.leave_subsection();
+        return std::list<std::string> (1, "dynamic topography");
       }
     }
   }
@@ -247,7 +113,7 @@ namespace aspect
       ASPECT_REGISTER_VISUALIZATION_POSTPROCESSOR(DynamicTopography,
                                                   "dynamic topography",
                                                   "A visualization output object that generates output "
-                                                  "for the dynamic topography. The approach to determine the "
+                                                  "for the dynamic topography at the top and bottom of the model space. The approach to determine the "
                                                   "dynamic topography requires us to compute the stress tensor and "
                                                   "evaluate the component of it in the direction in which "
                                                   "gravity acts. In other words, we compute "
@@ -258,8 +124,14 @@ namespace aspect
                                                   "from the total pressure $p$ computed as part of the Stokes "
                                                   "solve. From this, the dynamic "
                                                   "topography is computed using the formula "
-                                                  "$h=\\frac{\\sigma_{rr}}{\\|\\mathbf g\\| \\rho}$ where $\\rho$ "
-                                                  "is the density at the cell center."
+                                                  "$h=\\frac{\\sigma_{rr}}{(\\mathbf g \\cdot \\mathbf n)  \\rho}$ where $\\rho$ "
+                                                  "is the density at the cell center. For the bottom surface we chose the convection "
+                                                  "that positive values are up (out) and negative values are in (down), analogous to "
+                                                  "the deformation of the upper surface. "
+                                                  "Note that this implementation takes "
+                                                  "the direction of gravity into account, which means that reversing the flow "
+                                                  "in backward advection calculations will not reverse the instantaneous topography "
+                                                  "because the reverse flow will be divided by the reverse surface gravity."
                                                   "\n\n"
                                                   "Strictly speaking, the dynamic topography is of course a "
                                                   "quantity that is only of interest at the surface. However, "

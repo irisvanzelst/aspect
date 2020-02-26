@@ -3,7 +3,7 @@
 set Dimension                              = 2
 set Use years in output instead of seconds = true
 set End time                               = 5.0e8
-set Output directory                       = output
+set Output directory                       = output-sphere
 
 
 subsection Material model
@@ -23,25 +23,27 @@ subsection Geometry model
 end
 
 
-subsection Model settings
-  set Zero velocity boundary indicators       = 
-  set Tangential velocity boundary indicators = surface
-  set Prescribed velocity boundary indicators =
-  set Fixed temperature boundary indicators   = surface
-  set Include shear heating                   = false 
+subsection Boundary velocity model
+  set Tangential velocity boundary indicators = top
+end
+
+
+subsection Nullspace removal
   set Remove nullspace = net rotation
 end
 
 
 subsection Boundary temperature model
-  set Model name = constant
+  set Fixed temperature boundary indicators = top
+  set List of model names = constant
+
   subsection Constant
-    set Boundary indicator to temperature mappings = surface: 0.0 
+    set Boundary indicator to temperature mappings = top: 0.0 
   end
 end
 
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = function
   subsection Function
     set Function expression = if( sqrt( (x-5.e5)^2 + (y-5.e5)^2) < 1.e5, 0, 100)
@@ -52,6 +54,7 @@ end
 subsection Gravity model
   set Model name = radial linear
   subsection Radial linear
+    set Magnitude at bottom = 0.0
     set Magnitude at surface = 4.5
   end
 end

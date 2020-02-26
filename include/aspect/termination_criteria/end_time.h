@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011, 2012 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,16 +14,16 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__termination_criteria_end_time_h
-#define __aspect__termination_criteria_end_time_h
+#ifndef _aspect_termination_criteria_end_time_h
+#define _aspect_termination_criteria_end_time_h
 
 #include <aspect/termination_criteria/interface.h>
-#include <aspect/simulator.h>
+#include <aspect/simulator_access.h>
 
 namespace aspect
 {
@@ -44,7 +44,7 @@ namespace aspect
         /**
          * Check this termination criterion and possibly reduce time step size
          */
-        double check_for_last_time_step (const double time_step) const;
+        double check_for_last_time_step (const double time_step) const override;
 
         /**
          * Evaluate this termination criterion.
@@ -52,9 +52,8 @@ namespace aspect
          * @return Whether to terminate the simulation (true) or continue
          * (false).
          */
-        virtual
         bool
-        execute (void);
+        execute () override;
 
         /**
          * Declare the parameters this class takes through input files.
@@ -66,9 +65,8 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
       private:
         double end_time;

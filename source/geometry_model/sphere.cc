@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,21 +14,29 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
 #include <aspect/geometry_model/sphere.h>
+#include <aspect/geometry_model/initial_topography_model/zero_topography.h>
 
 #include <deal.II/grid/grid_generator.h>
-#include <deal.II/grid/tria_boundary_lib.h>
-
+#include <aspect/utilities.h>
 
 namespace aspect
 {
   namespace GeometryModel
   {
+    template <int dim>
+    Sphere<dim>::Sphere()
+      :
+      spherical_manifold()
+    {}
+
+
+
     template <int dim>
     void
     Sphere<dim>::
@@ -37,8 +45,9 @@ namespace aspect
       GridGenerator::hyper_ball (coarse_grid,
                                  Point<dim>(),
                                  R);
-      static const HyperBallBoundary<dim> boundary_ball(Point<dim>(), R);
-      coarse_grid.set_boundary (0, boundary_ball);
+
+      coarse_grid.set_manifold(0,spherical_manifold);
+      coarse_grid.set_all_manifold_ids_on_boundary(0);
     }
 
 
@@ -58,7 +67,7 @@ namespace aspect
     Sphere<dim>::
     get_symbolic_boundary_names_map () const
     {
-      static const std::pair<std::string,types::boundary_id> mapping("surface", 0);
+      static const std::pair<std::string,types::boundary_id> mapping("top", 0);
       return std::map<std::string,types::boundary_id> (&mapping,
                                                        &mapping+1);
     }
@@ -86,6 +95,12 @@ namespace aspect
       return std::min (std::max (R-position.norm(), 0.), maximal_depth());
     }
 
+    template <int dim>
+    double
+    Sphere<dim>::height_above_reference_surface(const Point<dim> &position) const
+    {
+      return position.norm()-radius();
+    }
 
 
     template <int dim>
@@ -120,6 +135,55 @@ namespace aspect
     }
 
 
+
+    template <int dim>
+    bool
+    Sphere<dim>::point_is_in_domain(const Point<dim> &point) const
+    {
+      AssertThrow(!this->get_parameters().mesh_deformation_enabled ||
+                  this->get_timestep_number() == 0,
+                  ExcMessage("After displacement of the mesh, this function can no longer be used to determine whether a point lies in the domain or not."));
+
+      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()),
+                  ExcMessage("After adding topography, this function can no longer be used to determine whether a point lies in the domain or not."));
+
+      const double radius = point.norm();
+
+      if (radius > R+std::numeric_limits<double>::epsilon()*R)
+        return false;
+
+      return true;
+    }
+
+
+
+    template <int dim>
+    std::array<double,dim>
+    Sphere<dim>::cartesian_to_natural_coordinates(const Point<dim> &position) const
+    {
+      return Utilities::Coordinates::cartesian_to_spherical_coordinates<dim>(position);
+    }
+
+
+
+    template <int dim>
+    aspect::Utilities::Coordinates::CoordinateSystem
+    Sphere<dim>::natural_coordinate_system() const
+    {
+      return aspect::Utilities::Coordinates::CoordinateSystem::spherical;
+    }
+
+
+
+    template <int dim>
+    Point<dim>
+    Sphere<dim>::natural_to_cartesian_coordinates(const std::array<double,dim> &position) const
+    {
+      return Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(position);
+    }
+
+
+
     template <int dim>
     void
     Sphere<dim>::declare_parameters (ParameterHandler &prm)
@@ -130,7 +194,7 @@ namespace aspect
         {
           prm.declare_entry ("Radius", "6371000",
                              Patterns::Double (0),
-                             "Radius of the sphere. Units: m.");
+                             "Radius of the sphere. Units: $\\si{m}$.");
         }
         prm.leave_subsection();
       }
@@ -163,9 +227,22 @@ namespace aspect
   {
     ASPECT_REGISTER_GEOMETRY_MODEL(Sphere,
                                    "sphere",
-                                   "Geometry model for sphere with a user specified radius. This geometry "
-                                   "has only a single boundary, so the only valid boundary indicator to "
-                                   "specify in the input file is ``0''. It can also be referenced by the "
-                                   "symbolic name ``surface'' in input files.")
+                                   "A geometry model for a sphere with a user specified "
+                                   "radius. This geometry has only a single boundary, so "
+                                   "the only valid boundary indicator to "
+                                   "specify in input files is ``0''. It can also be "
+                                   "referenced by the symbolic name ``surface'' in "
+                                   "input files."
+                                   "\n\n"
+                                   "Despite the name, this geometry does not imply the use of "
+                                   "a spherical coordinate system when used in 2d. Indeed, "
+                                   "in 2d the geometry is simply a circle in a Cartesian "
+                                   "coordinate system and consequently would correspond to "
+                                   "a cross section of the fluid filled interior of an "
+                                   "infinite cylinder where one has made the assumption that "
+                                   "the velocity in direction of the cylinder axes is zero. "
+                                   "This is consistent with the definition of what we consider "
+                                   "the two-dimension case given in "
+                                   "Section~\\ref{sec:meaning-of-2d}.")
   }
 }

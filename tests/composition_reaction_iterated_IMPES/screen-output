@@ -1,10 +1,3 @@
------------------------------------------------------------------------------
--- This is ASPECT, the Advanced Solver for Problems in Earth's ConvecTion.
---     . version 1.3.pre
---     . running in OPTIMIZED mode
---     . running with 1 MPI process
---     . using Trilinos
------------------------------------------------------------------------------
 
 Loading shared library <./libcomposition_reaction_iterated_IMPES.so>
 
@@ -13,61 +6,65 @@ Number of degrees of freedom: 26,439 (8,450+1,089+4,225+4,225+4,225+4,225)
 
 *** Timestep 0:  t=0 seconds
    Solving temperature system... 0 iterations.
-   Solving C_1 system ... 0 iterations.
+   Skipping C_1 composition solve because RHS is zero.
    Solving C_2 system ... 11 iterations.
-   Solving C_3 system ... 0 iterations.
+   Skipping C_3 composition solve because RHS is zero.
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 30+5 iterations.
-      Nonlinear residuals: 1.37468e-11, 0, 0.0346137, 0, 22.3625
+   Solving Stokes system... 61+0 iterations.
+      Relative nonlinear residuals (temperature, compositional fields, Stokes system): 1.62191e-16, 0, 1, 0, 1
+      Relative nonlinear residual (total system) after nonlinear iteration 1: 1
 
-      residual: 1
    Solving temperature system... 0 iterations.
    Solving C_1 system ... 11 iterations.
    Solving C_2 system ... 0 iterations.
    Solving C_3 system ... 11 iterations.
-   Solving Stokes system... 30+2 iterations.
-      Nonlinear residuals: 1.49513e-11, 0.0346137, 1.97955e-14, 0.0346137, 0.172797
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 40+0 iterations.
+      Relative nonlinear residuals (temperature, compositional fields, Stokes system): 1.68836e-16, 0, 5.71852e-13, 0, 0.00772709
+      Relative nonlinear residual (total system) after nonlinear iteration 2: 0.00772709
 
-      residual: 0.00772709
    Solving temperature system... 0 iterations.
    Solving C_1 system ... 0 iterations.
    Solving C_2 system ... 0 iterations.
    Solving C_3 system ... 0 iterations.
-   Solving Stokes system... 0 iterations.
-      Nonlinear residuals: 1.56239e-11, 1.97942e-14, 1.97955e-14, 1.97942e-14, 2.0376e-06
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 0+0 iterations.
+      Relative nonlinear residuals (temperature, compositional fields, Stokes system): 1.68359e-16, 0, 5.71852e-13, 0, 8.29714e-08
+      Relative nonlinear residual (total system) after nonlinear iteration 3: 8.29714e-08
 
-      residual: 9.11168e-08
 
    Postprocessing:
      Compositions min/max/mass: 1/1/2 // 1/1/2 // 1/1/2
-     Writing graphical output:  output-composition_reaction_iterated_IMPES/solution-00000
+     Writing graphical output:  output-composition_reaction_iterated_IMPES/solution/solution-00000
 
 *** Timestep 1:  t=0.01 seconds
-   Solving temperature system... 9 iterations.
+   Solving temperature system... 11 iterations.
    Solving C_1 system ... 11 iterations.
    Solving C_2 system ... 11 iterations.
    Solving C_3 system ... 11 iterations.
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 13 iterations.
-      Nonlinear residuals: 331.725, 0.0346137, 0.0346137, 0.0346137, 2.58291e-05
+   Solving Stokes system... 14+0 iterations.
+      Relative nonlinear residuals (temperature, compositional fields, Stokes system): 0.00396167, 0.5, 0.5, 0.5, 1.17683e-06
+      Relative nonlinear residual (total system) after nonlinear iteration 1: 0.5
 
-      residual: 0.5
-   Solving temperature system... 5 iterations.
+   Solving temperature system... 4 iterations.
    Solving C_1 system ... 11 iterations.
    Solving C_2 system ... 0 iterations.
    Solving C_3 system ... 11 iterations.
-   Solving Stokes system... 30+2 iterations.
-      Nonlinear residuals: 0.0161267, 0.0346137, 6.51931e-14, 0.0346137, 0.172797
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 40+0 iterations.
+      Relative nonlinear residuals (temperature, compositional fields, Stokes system): 1.89261e-07, 0.5, 2.16118e-13, 0.5, 0.00783271
+      Relative nonlinear residual (total system) after nonlinear iteration 2: 0.5
 
-      residual: 0.5
-   Solving temperature system... 5 iterations.
+   Solving temperature system... 6 iterations.
    Solving C_1 system ... 0 iterations.
    Solving C_2 system ... 0 iterations.
    Solving C_3 system ... 0 iterations.
-   Solving Stokes system... 0 iterations.
-      Nonlinear residuals: 0.0118361, 6.52004e-14, 6.5193e-14, 6.52004e-14, 2.06654e-06
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 0+0 iterations.
+      Relative nonlinear residuals (temperature, compositional fields, Stokes system): 4.94026e-07, 2.16177e-13, 2.16121e-13, 2.16177e-13, 8.42636e-08
+      Relative nonlinear residual (total system) after nonlinear iteration 3: 4.94026e-07
 
-      residual: 1.4051e-07
 
    Postprocessing:
      Compositions min/max/mass: 3/3/6 // 2/2/4 // 3/3/6
@@ -76,21 +73,6 @@ Termination requested by criterion: end time
 
 
 +---------------------------------------------+------------+------------+
-| Total wallclock time elapsed since start    |      2.68s |            |
-|                                             |            |            |
-| Section                         | no. calls |  wall time | % of total |
 +---------------------------------+-----------+------------+------------+
-| Assemble Stokes system          |         6 |     0.832s |        31% |
-| Assemble composition system     |        18 |     0.622s |        23% |
-| Assemble temperature system     |         6 |     0.298s |        11% |
-| Build Stokes preconditioner     |         2 |     0.155s |       5.8% |
-| Build composition preconditioner|        18 |     0.102s |       3.8% |
-| Build temperature preconditioner|         2 |    0.0117s |      0.44% |
-| Solve Stokes system             |         6 |     0.401s |        15% |
-| Solve composition system        |        18 |    0.0416s |       1.6% |
-| Solve temperature system        |         6 |    0.0115s |      0.43% |
-| Initialization                  |         2 |    0.0339s |       1.3% |
-| Postprocessing                  |         2 |    0.0766s |       2.9% |
-| Setup dof systems               |         1 |    0.0741s |       2.8% |
 +---------------------------------+-----------+------------+------------+
 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011, 2012 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__postprocess_depth_average_h
-#define __aspect__postprocess_depth_average_h
+#ifndef _aspect_postprocess_depth_average_h
+#define _aspect_postprocess_depth_average_h
 
 #include <aspect/postprocess/interface.h>
 #include <aspect/simulator_access.h>
@@ -49,11 +49,10 @@ namespace aspect
         DepthAverage ();
 
         /**
-         * Generate graphical output from the current solution.
+         * Evaluate the solution and compute the requested depth averages.
          */
-        virtual
         std::pair<std::string,std::string>
-        execute (TableHandler &statistics);
+        execute (TableHandler &statistics) override;
 
         /**
          * Declare the parameters this class takes through input files.
@@ -65,21 +64,18 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
         /**
          * Save the state of this object.
          */
-        virtual
-        void save (std::map<std::string, std::string> &status_strings) const;
+        void save (std::map<std::string, std::string> &status_strings) const override;
 
         /**
          * Restore the state of the object.
          */
-        virtual
-        void load (const std::map<std::string, std::string> &status_strings);
+        void load (const std::map<std::string, std::string> &status_strings) override;
 
         /**
          * Serialize the contents of this class as far as they are not read
@@ -90,34 +86,33 @@ namespace aspect
 
       private:
         /**
-         * Interval between the generation of output. This parameter is read
+         * Interval between the generation of output in seconds. This parameter is read
          * from the input file and consequently is not part of the state that
          * needs to be saved and restored.
-         *
-         * For technical reasons, this value is stored as given in the input
-         * file and upon use is either interpreted as seconds or years,
-         * depending on how the global flag in the input parameter file is
-         * set.
          */
         double output_interval;
 
         /**
-         * A time (in years) after which the next time step should produce
-         * graphical output again.
+         * A time (in seconds) the last output has been produced.
          */
-        double next_output_time;
+        double last_output_time;
 
         /**
-         * The format in which to produce graphical output. This also
-         * determines the extension of the file name to which to write.
+         * The formats in which to produce graphical output. This also
+         * determines the extension of the file names to which to write.
          */
-        DataOutBase::OutputFormat output_format;
+        std::vector<std::string> output_formats;
 
         /**
          * Number of zones in depth direction over which we are supposed to
          * average.
          */
         unsigned int n_depth_zones;
+
+        /**
+         * List of the quantities to calculate for each depth zone.
+         */
+        std::vector<std::string> variables;
 
         /**
          * A structure for a single time step record.
@@ -137,13 +132,14 @@ namespace aspect
         std::vector<DataPoint> entries;
 
         /**
-         * Compute the next output time from the current one. In the simplest
-         * case, this is simply the previous next output time plus the
-         * interval, but in general we'd like to ensure that it is larger than
-         * the current time to avoid falling behind with next_output_time and
-         * having to catch up once the time step becomes larger.
+         * Set the time output was supposed to be written. In the simplest
+         * case, this is the previous last output time plus the interval, but
+         * in general we'd like to ensure that it is the largest supposed
+         * output time, which is smaller than the current time, to avoid
+         * falling behind with last_output_time and having to catch up once
+         * the time step becomes larger. This is done after every output.
          */
-        void set_next_output_time (const double current_time);
+        void set_last_output_time (const double current_time);
     };
   }
 }

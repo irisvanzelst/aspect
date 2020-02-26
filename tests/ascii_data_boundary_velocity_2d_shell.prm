@@ -17,7 +17,7 @@ subsection Geometry model
   end
 end
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = harmonic perturbation
   subsection Harmonic perturbation
     set Magnitude = 3
@@ -27,7 +27,7 @@ end
 
 
 subsection Boundary temperature model
-  set Model name = spherical constant
+  set List of model names = spherical constant
   subsection Spherical constant
     set Inner temperature = 3000
     set Outer temperature = 273
@@ -35,16 +35,16 @@ subsection Boundary temperature model
 end
 
 
-subsection Model settings
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
+
+subsection Boundary temperature model
   set Fixed temperature boundary indicators   = inner, outer
+end
 
-  set Zero velocity boundary indicators       =
+subsection Boundary velocity model
   set Prescribed velocity boundary indicators = left: ascii data,right:ascii data, inner: ascii data, outer: ascii data
-
-  set Tangential velocity boundary indicators = 
-
-  set Include adiabatic heating               = false
-  set Include shear heating                   = false
 end
 
 
@@ -52,7 +52,7 @@ subsection Boundary velocity model
   subsection Ascii data model
     set Data file name       = shell_2d_%s.0.txt
     
-    set Data directory = $ASPECT_SOURCE_DIR/data/velocity-boundary-conditions/ascii-data/test/
+    set Data directory = $ASPECT_SOURCE_DIR/data/boundary-velocity/ascii-data/test/
     set Scale factor = 1
   end
 end

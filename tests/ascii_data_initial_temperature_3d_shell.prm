@@ -18,25 +18,21 @@ subsection Geometry model
 end
 
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = ascii data
   subsection Ascii data model
-    set Data directory       = $ASPECT_SOURCE_DIR/data/initial-conditions/ascii-data/test/
+    set Data directory       = $ASPECT_SOURCE_DIR/data/initial-temperature/ascii-data/test/
     set Data file name       = shell_3d.txt
   end
 end
 
 
-subsection Model settings
-  set Fixed temperature boundary indicators   =
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
 
-  set Zero velocity boundary indicators       =
+subsection Boundary velocity model
   set Prescribed velocity boundary indicators = west:function, east:function, south:function, inner:function, outer:function
-
-  set Tangential velocity boundary indicators = 
-
-  set Include adiabatic heating               = false
-  set Include shear heating                   = false
 end
 
 subsection Boundary velocity model

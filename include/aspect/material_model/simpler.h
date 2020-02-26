@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011, 2012 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,16 +14,16 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
- */
+*/
 
-
-#ifndef __aspect__model_simpler_h
-#define __aspect__model_simpler_h
+#ifndef _aspect_material_model_simpler_h
+#define _aspect_material_model_simpler_h
 
 #include <aspect/material_model/interface.h>
-#include <aspect/simulator_access.h>
+#include <aspect/material_model/rheology/constant_viscosity.h>
+#include <aspect/material_model/equation_of_state/linearized_incompressible.h>
 
 namespace aspect
 {
@@ -46,29 +46,12 @@ namespace aspect
     {
       public:
 
-        virtual bool
-        viscosity_depends_on (const NonlinearDependence::Dependence dependence) const;
+        bool is_compressible () const override;
 
-        virtual bool
-        density_depends_on (const NonlinearDependence::Dependence dependence) const;
+        double reference_viscosity () const override;
 
-        virtual bool
-        compressibility_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        specific_heat_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        thermal_conductivity_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool is_compressible () const;
-
-        virtual double reference_viscosity () const;
-
-        virtual double reference_density () const;
-
-        virtual void evaluate(const typename Interface<dim>::MaterialModelInputs &in,
-                              typename Interface<dim>::MaterialModelOutputs &out) const;
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
 
         /**
@@ -85,20 +68,19 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
+
         /**
          * @}
          */
 
       private:
-        double reference_rho;
         double reference_T;
-        double eta;
-        double thermal_alpha;
-        double reference_specific_heat;
         double k_value;
+
+        Rheology::ConstantViscosity constant_rheology;
+        EquationOfState::LinearizedIncompressible<dim> equation_of_state;
     };
 
   }

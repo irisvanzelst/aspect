@@ -1,13 +1,13 @@
 # 1: Time step number
 # 2: Time (years)
-# 3: Number of mesh cells
-# 4: Number of Stokes degrees of freedom
-# 5: Number of temperature degrees of freedom
-# 6: Iterations for temperature solver
-# 7: Iterations for Stokes solver
-# 8: Velocity iterations in Stokes preconditioner
-# 9: Schur complement iterations in Stokes preconditioner
-# 10: Time step size (years)
+# 3: Time step size (years)
+# 4: Number of mesh cells
+# 5: Number of Stokes degrees of freedom
+# 6: Number of temperature degrees of freedom
+# 7: Iterations for temperature solver
+# 8: Iterations for Stokes solver
+# 9: Velocity iterations in Stokes preconditioner
+# 10: Schur complement iterations in Stokes preconditioner
 # 11: Visualization file name
 # 12: RMS velocity (m/year)
 # 13: Max. velocity (m/year)
@@ -19,9 +19,9 @@
 # 19: Outward heat flux through boundary with indicator 1 ("right") (W)
 # 20: Outward heat flux through boundary with indicator 2 ("bottom") (W)
 # 21: Outward heat flux through boundary with indicator 3 ("top") (W)
-0 0.0000e+00  64  659  289 0 18 19  54 5.2172e+09 output-maximum_refinement_function_cartesian/solution-00000 3.79980811e-06 5.98257532e-06 1.62300000e+03 1.74279167e+03 1.87300000e+03 3.42261905e-02 2.37801676e-11 7.92672255e-12 2.14021509e-11 -4.60057899e-12 
-0 0.0000e+00  88  963  425 0 18 19 140 2.5926e+09 output-maximum_refinement_function_cartesian/solution-00001 3.79833711e-06 6.02562908e-06 1.62300000e+03 1.74539583e+03 1.87300000e+03 3.49702381e-02 9.05911149e-12 6.79433361e-12 4.45028852e-11  1.12950818e-11 
-0 0.0000e+00 184 1981  877 0 18 19 140 1.2942e+09 output-maximum_refinement_function_cartesian/solution-00002 3.79792541e-06 6.03630598e-06 1.62300000e+03 1.74669792e+03 1.87300000e+03 3.53422619e-02 9.05911149e-12 6.79433361e-12 1.68725951e-11 -3.68602556e-11 
-0 0.0000e+00 304 3395 1505 0 32 21  23 6.4686e+08 output-maximum_refinement_function_cartesian/solution-00003 3.79785046e-06 6.03894462e-06 1.62300000e+03 1.74709804e+03 1.90425000e+03 3.54565817e-02 9.05911149e-12 6.79433361e-12 5.86577469e-11 -1.02822907e-10 
-0 0.0000e+00 232 2567 1137 0 29 30 231 6.4689e+08 output-maximum_refinement_function_cartesian/solution-00004 3.79789516e-06 6.03901749e-06 1.62300000e+03 1.74684711e+03 1.90425000e+03 3.53848896e-02 9.05911149e-12 6.79433361e-12 5.86577469e-11 -1.02822907e-10 
-0 0.0000e+00 256 2881 1277 0 32 19  24 6.5524e+08 output-maximum_refinement_function_cartesian/solution-00005 3.79787681e-06 6.03616729e-06 1.62300000e+03 1.74693528e+03 1.90425000e+03 3.54100787e-02 9.05911149e-12 6.79433361e-12 1.68725951e-11 -3.68602556e-11 
+0 0.000000000000e+00 0.000000000000e+00  64  659  289 0 14 16  45 output-maximum_refinement_function_cartesian/solution/solution-00000 3.79980809e-06 5.98257535e-06 1.62300000e+03 1.74279167e+03 1.87300000e+03 3.42261905e-02 1.21832879e-11 0.00000000e+00 0.00000000e+00 2.01397475e+00 
+0 0.000000000000e+00 0.000000000000e+00  88  963  425 0 14 16 116 output-maximum_refinement_function_cartesian/solution/solution-00001 3.79833720e-06 6.02562929e-06 1.62300000e+03 1.74539583e+03 1.87300000e+03 3.49702381e-02 1.25377263e-11 0.00000000e+00 0.00000000e+00 1.00164264e+00 
+0 0.000000000000e+00 0.000000000000e+00 184 1981  877 0 13 15 109 output-maximum_refinement_function_cartesian/solution/solution-00002 3.79792550e-06 6.03630614e-06 1.62300000e+03 1.74669792e+03 1.87300000e+03 3.53422619e-02 1.25377026e-11 0.00000000e+00 0.00000000e+00 4.99654344e-01 
+0 0.000000000000e+00 0.000000000000e+00 304 3395 1505 0 31 33 255 output-maximum_refinement_function_cartesian/solution/solution-00003 3.79785046e-06 6.03894476e-06 1.62300000e+03 1.74709804e+03 1.90425000e+03 3.54565817e-02 1.25376954e-11 0.00000000e+00 0.00000000e+00 2.49616681e-01 
+0 0.000000000000e+00 0.000000000000e+00 232 2567 1137 0 30 32 247 output-maximum_refinement_function_cartesian/solution/solution-00004 3.79789515e-06 6.03901769e-06 1.62300000e+03 1.74684711e+03 1.90425000e+03 3.53848896e-02 1.25377000e-11 0.00000000e+00 0.00000000e+00 2.49631031e-01 
+0 0.000000000000e+00 0.000000000000e+00 256 2881 1277 0 30 32 247 output-maximum_refinement_function_cartesian/solution/solution-00005 3.79787682e-06 6.03616731e-06 1.62300000e+03 1.74693528e+03 1.90425000e+03 3.54100787e-02 1.25376982e-11 0.00000000e+00 0.00000000e+00 4.99575248e-01 

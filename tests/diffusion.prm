@@ -90,15 +90,6 @@ set Surface pressure                       = 0
 # such conversion happens.
 set Use years in output instead of seconds = false  # default: true
 
-# Select one of the following solver schemes:
-#
-# 'IMPES': This is the IMplicit Pressure Explicit Saturation scheme. In a first
-# step the variables velocity and pressure are computed from equations without
-# time derivatives. In a second step the variable temperature is updated by
-# using an explicit time step.
-set Nonlinear solver scheme                = IMPES
-
-
 subsection Boundary temperature model
   # Select one of the following models:
   #
@@ -108,7 +99,7 @@ subsection Boundary temperature model
   # `spherical constant': A model in which the temperature is chosen constant
   # on the inner and outer boundaries of a spherical shell. Parameters are
   # read from subsection 'Sherical constant'.
-  set Model name = box
+  set List of model names = box
 
   subsection Box
     set Bottom temperature = 0
@@ -172,25 +163,11 @@ end
 
 
 subsection Gravity model
-  # Select one of the following models:
-  #
-  # `radial constant': A gravity model in which the gravity direction is
-  # radially inward and at constant magnitude. The magnitude is read from the
-  # parameter file in subsection 'Radial constant'.
-  #
-  # `radial earth-like': A gravity model in which the gravity direction is
-  # radially inward and with a magnitude that matches that of the earth at the
-  # core-mantle boundary as well as at the surface and in between is
-  # physically correct under the assumption of a constant density.
-  #
-  # `vertical': A gravity model in which the gravity direction is vertically
-  # downward and at constant magnitude.
   set Model name = vertical
-
 end
 
 
-subsection Initial conditions
+subsection Initial temperature model
   # Select one of the following models:
   #
   # `perturbed box': An initial temperature field in which the temperature is
@@ -290,43 +267,25 @@ subsection Mesh refinement
 end
 
 
-subsection Model settings
-  # Whether to include adiabatic heating into the model or not. From a
-  # physical viewpoint, adiabatic heating should always be used but may be
-  # undesirable when comparing results with known benchmarks that do not
-  # include this term in the temperature equation.
-  set Include adiabatic heating               = false
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
 
-  # Whether to include shear heating into the model or not. From a physical
-  # viewpoint, shear heating should always be used but may be undesirable when
-  # comparing results with known benchmarks that do not include this term in
-  # the temperature equation.
-  set Include shear heating                   = false # default: true
-
-  # H0
-
+subsection Boundary temperature model
   # A comma separated list of integers denoting those boundaries on which the
   # temperature is fixed and described by the boundary temperature object
   # selected in its own section of this input file. All boundary indicators
   # used by the geometry but not explicitly listed here will end up with
   # no-flux (insulating) boundary conditions.
   set Fixed temperature boundary indicators   = 2, 3
+end
 
-  # A comma separated list of integers denoting those boundaries on which the
-  # velocity is tangential but prescribed, i.e., where external forces act to
-  # prescribe a particular velocity. This is often used to prescribe a
-  # velocity that equals that of overlying plates.
-  set Prescribed velocity boundary indicators =
-
+subsection Boundary velocity model
   # A comma separated list of integers denoting those boundaries on which the
   # velocity is tangential and unrestrained, i.e., where no external forces
   # act to prescribe a particular tangential velocity (although there is a
   # force that requires the flow to be tangential).
   set Tangential velocity boundary indicators = 0,1,2,3
-
-  # A comma separated list of integers denoting those boundaries on which the
-  # velocity is zero.
-  set Zero velocity boundary indicators       =
 end
 
 subsection Checkpointing
@@ -382,6 +341,7 @@ subsection Postprocess
   end
 
   subsection Visualization
+    set Interpolate output = false
     # VTU file output supports grouping files from several CPUs into one file
     # using MPI I/O when writing on a parallel filesystem. Select 0 for no
     # grouping. This will disable parallel file output and instead write one

@@ -1,10 +1,3 @@
------------------------------------------------------------------------------
--- This is ASPECT, the Advanced Solver for Problems in Earth's ConvecTion.
---     . version 1.2.pre
---     . running in DEBUG mode
---     . running with 2 MPI processes
---     . using Trilinos
------------------------------------------------------------------------------
 
 Number of active cells: 64 (on 4 levels)
 Number of degrees of freedom: 948 (578+81+289)
@@ -12,27 +5,14 @@ Number of degrees of freedom: 948 (578+81+289)
 *** Timestep 0:  t=0 years
    Solving temperature system... 0 iterations.
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 18 iterations.
+   Solving Stokes system... 15+0 iterations.
 
    Postprocessing:
-
-     Reference density (kg/m^3):                    3300
-     Reference gravity (m/s^2):                     10
-     Reference thermal expansion (1/K):             2e-05
-     Temperature contrast across model domain (K): 3500
-     Model domain depth (m):                        500000
-     Reference thermal diffusivity (m^2/s):         1.13939e-06
-     Reference viscosity (Pas):                     5e+24
-     Ra number:                                     50.6848
-     k_value:                                       4.7
-     reference_cp:                                  1250
-     reference_thermal_diffusivity:                 1.13939e-06
-
-     Writing graphical output:           output-minimum_refinement_function_cartesian/solution-00000
+     Writing graphical output:           output-minimum_refinement_function_cartesian/solution/solution-00000
      RMS, max velocity:                  3.8e-06 m/year, 5.98e-06 m/year
      Temperature min/avg/max:            1623 K, 1743 K, 1873 K
-     Heat fluxes through boundary parts: 2.378e-11 W, 7.927e-12 W, 2.14e-11 W, -4.601e-12 W
-     Writing depth average               output-minimum_refinement_function_cartesian/depth_average.gnuplot
+     Heat fluxes through boundary parts: 8.837e-12 W, 0 W, 0 W, 2.014 W
+     Writing depth average:              output-minimum_refinement_function_cartesian/depth_average
 
 Number of active cells: 232 (on 5 levels)
 Number of degrees of freedom: 3,348 (2,050+273+1,025)
@@ -40,27 +20,14 @@ Number of degrees of freedom: 3,348 (2,050+273+1,025)
 *** Timestep 0:  t=0 years
    Solving temperature system... 0 iterations.
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 30+2 iterations.
+   Solving Stokes system... 37+0 iterations.
 
    Postprocessing:
-
-     Reference density (kg/m^3):                    3300
-     Reference gravity (m/s^2):                     10
-     Reference thermal expansion (1/K):             2e-05
-     Temperature contrast across model domain (K): 3500
-     Model domain depth (m):                        500000
-     Reference thermal diffusivity (m^2/s):         1.13939e-06
-     Reference viscosity (Pas):                     5e+24
-     Ra number:                                     50.6848
-     k_value:                                       4.7
-     reference_cp:                                  1250
-     reference_thermal_diffusivity:                 1.13939e-06
-
-     Writing graphical output:           output-minimum_refinement_function_cartesian/solution-00001
+     Writing graphical output:           output-minimum_refinement_function_cartesian/solution/solution-00001
      RMS, max velocity:                  3.8e-06 m/year, 6.03e-06 m/year
      Temperature min/avg/max:            1623 K, 1745 K, 1873 K
-     Heat fluxes through boundary parts: 3.68e-11 W, -2.265e-13 W, 6.228e-11 W, 1.073e-11 W
-     Writing depth average               output-minimum_refinement_function_cartesian/depth_average.gnuplot
+     Heat fluxes through boundary parts: 1.741e-11 W, 0 W, 0 W, 1.002 W
+     Writing depth average:              output-minimum_refinement_function_cartesian/depth_average
 
 Number of active cells: 640 (on 6 levels)
 Number of degrees of freedom: 8,969 (5,504+713+2,752)
@@ -68,77 +35,52 @@ Number of degrees of freedom: 8,969 (5,504+713+2,752)
 *** Timestep 0:  t=0 years
    Solving temperature system... 0 iterations.
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 30+2 iterations.
+   Solving Stokes system... 36+0 iterations.
 
    Postprocessing:
-
-     Reference density (kg/m^3):                    3300
-     Reference gravity (m/s^2):                     10
-     Reference thermal expansion (1/K):             2e-05
-     Temperature contrast across model domain (K): 3500
-     Model domain depth (m):                        500000
-     Reference thermal diffusivity (m^2/s):         1.13939e-06
-     Reference viscosity (Pas):                     5e+24
-     Ra number:                                     50.6848
-     k_value:                                       4.7
-     reference_cp:                                  1250
-     reference_thermal_diffusivity:                 1.13939e-06
-
-     Writing graphical output:           output-minimum_refinement_function_cartesian/solution-00002
+     Writing graphical output:           output-minimum_refinement_function_cartesian/solution/solution-00002
      RMS, max velocity:                  3.8e-06 m/year, 6.04e-06 m/year
      Temperature min/avg/max:            1623 K, 1747 K, 1873 K
-     Heat fluxes through boundary parts: 4.983e-11 W, 1.687e-11 W, 5.209e-11 W, -2.837e-11 W
-     Writing depth average               output-minimum_refinement_function_cartesian/depth_average.gnuplot
+     Heat fluxes through boundary parts: 2.599e-11 W, 0 W, 0 W, 0.4997 W
+     Writing depth average:              output-minimum_refinement_function_cartesian/depth_average
 
-Number of active cells: 1,018 (on 7 levels)
-Number of degrees of freedom: 14,302 (8,786+1,123+4,393)
+Number of active cells: 1,114 (on 7 levels)
+Number of degrees of freedom: 15,973 (9,814+1,252+4,907)
 
 *** Timestep 0:  t=0 years
    Solving temperature system... 0 iterations.
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 30+2 iterations.
+   Solving Stokes system... 40+0 iterations.
 
    Postprocessing:
 
-     Reference density (kg/m^3):                    3300
-     Reference gravity (m/s^2):                     10
-     Reference thermal expansion (1/K):             2e-05
-     Temperature contrast across model domain (K): 3500
      Model domain depth (m):                        500000
-     Reference thermal diffusivity (m^2/s):         1.13939e-06
-     Reference viscosity (Pas):                     5e+24
-     Ra number:                                     50.6848
-     k_value:                                       4.7
-     reference_cp:                                  1250
-     reference_thermal_diffusivity:                 1.13939e-06
+     Temperature contrast across model domain (K):  3500
+     Reference depth (m):                           0
+     Reference temperature (K):                     1623
+     Reference pressure (Pa):                       0
+     Reference gravity (m/s^2):                     10
+     Reference density (kg/m^3):                    3212.22
+     Reference thermal expansion coefficient (1/K): 2e-05
+     Reference specific heat capacity (J/(K*kg)):   1250
+     Reference thermal conductivity (W/(m*K)):      4.7
+     Reference viscosity (Pa*s):                    5e+24
+     Reference thermal diffusivity (m^2/s):         1.17053e-06
+     Rayleigh number:                               48.0243
 
-     Writing graphical output:           output-minimum_refinement_function_cartesian/solution-00003
+     Writing graphical output:           output-minimum_refinement_function_cartesian/solution/solution-00003
      RMS, max velocity:                  3.8e-06 m/year, 6.04e-06 m/year
      Temperature min/avg/max:            1623 K, 1747 K, 1873 K
-     Heat fluxes through boundary parts: 5.209e-11 W, 1.982e-11 W, 5.039e-11 W, -2.837e-11 W
-     Writing depth average               output-minimum_refinement_function_cartesian/depth_average.gnuplot
+     Heat fluxes through boundary parts: 2.492e-11 W, 0 W, 0 W, 0.2496 W
+     Writing depth average:              output-minimum_refinement_function_cartesian/depth_average
 
-Number of active cells: 1,024 (on 7 levels)
-Number of degrees of freedom: 14,374 (8,830+1,129+4,415)
+Number of active cells: 1,216 (on 7 levels)
+Number of degrees of freedom: 17,300 (10,630+1,355+5,315)
 
 Termination requested by criterion: end time
 
 
 +---------------------------------------------+------------+------------+
-| Total wallclock time elapsed since start    |      9.74s |            |
-|                                             |            |            |
-| Section                         | no. calls |  wall time | % of total |
 +---------------------------------+-----------+------------+------------+
-| Assemble Stokes system          |         4 |      1.47s |        15% |
-| Assemble temperature system     |         4 |     0.715s |       7.3% |
-| Build Stokes preconditioner     |         4 |      1.15s |        12% |
-| Build temperature preconditioner|         4 |    0.0252s |      0.26% |
-| Solve Stokes system             |         4 |      0.41s |       4.2% |
-| Solve temperature system        |         4 |    0.0153s |      0.16% |
-| Initialization                  |         5 |     0.405s |       4.2% |
-| Postprocessing                  |         4 |      2.81s |        29% |
-| Refine mesh structure, part 1   |         4 |      1.04s |        11% |
-| Refine mesh structure, part 2   |         4 |    0.0444s |      0.46% |
-| Setup dof systems               |         5 |      1.33s |        14% |
 +---------------------------------+-----------+------------+------------+
 

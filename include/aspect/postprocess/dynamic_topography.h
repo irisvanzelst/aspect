@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011, 2012 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__postprocess_surface_topography_h
-#define __aspect__postprocess_surface_topography_h
+#ifndef _aspect_postprocess_surface_topography_h
+#define _aspect_postprocess_surface_topography_h
 
 #include <aspect/postprocess/interface.h>
 #include <aspect/simulator_access.h>
@@ -32,7 +32,7 @@ namespace aspect
   {
 
     /**
-     * A postprocessor that computes dynamic topography at the surface.
+     * A postprocessor that computes dynamic topography at the top and bottom of the domain.
      *
      * @ingroup Postprocessing
      */
@@ -43,31 +43,87 @@ namespace aspect
         /**
          * Evaluate the solution for the dynamic topography.
          */
-        virtual
         std::pair<std::string,std::string>
-        execute (TableHandler &statistics);
-
+        execute (TableHandler &statistics) override;
 
         /**
-         * Declare the parameters this class takes through input files.
+         * Return the topography vector as calculated by CBF formulation.
+         * The velocity components store the surface-normal traction,
+         * and the temperature component stores the dynamic topography
+         * computed from that traction.
+         */
+        const LinearAlgebra::BlockVector &
+        topography_vector() const;
+
+        /**
+         * Return the cellwise topography vector as calculated by CBF formulation,
+         * where indices of the vector correspond to cell indices.
+         * This vector is considerably smaller than the full topography vector returned
+         * by topography_vector(), and is useful for text output and visualization.
+         */
+        const Vector<float> &
+        cellwise_topography() const;
+
+        /**
+         * Register the other postprocessor that we need: BoundaryPressures
+         */
+        std::list<std::string>
+        required_other_postprocessors() const override;
+
+        /**
+         * Parse the parameters for the postprocessor.
+         */
+        void
+        parse_parameters (ParameterHandler &prm) override;
+
+        /**
+         * Declare the parameters for the postprocessor.
          */
         static
         void
         declare_parameters (ParameterHandler &prm);
 
-        /**
-         * Read the parameters this class declares from the parameter file.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
-
       private:
         /**
-         * A parameter that we read from the input file that denotes whether
-         * we should subtract the mean topography or not.
+         * Output the dynamic topography solution to
+         * a file.
          */
-        bool subtract_mean_dyn_topography;
+        void output_to_file(bool upper, std::vector<std::pair<Point<dim>, double> > &values);
+
+        /**
+         * A vector which stores the surface stress values calculated
+         * by the postprocessor.
+         */
+        LinearAlgebra::BlockVector topo_vector;
+
+        /**
+         * A vector which stores the surface stress values calculated
+         * at the midpoint of each surface cell face. This can be
+         * given to a visualization postprocessor to output dynamic topography.
+         */
+        Vector<float> visualization_values;
+
+        /**
+         * A parameter that allows users to set the density value
+         * above the top surface.
+         */
+        double density_above;
+
+        /**
+         * A parameter that allows users to set the density value
+         * below the bottom surface.
+         */
+        double density_below;
+
+        /**
+         * Whether to output the surface topography.
+         */
+        bool output_surface;
+
+        /**
+         * Whether to output the bottom topography.
+         */
+        bool output_bottom;
     };
   }
 }

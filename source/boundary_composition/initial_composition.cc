@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
 #include <aspect/boundary_composition/initial_composition.h>
-#include <aspect/simulator_access.h>
+#include <aspect/initial_composition/interface.h>
 
 
 namespace aspect
@@ -32,19 +32,18 @@ namespace aspect
     template <int dim>
     double
     InitialComposition<dim>::
-    composition (const GeometryModel::Interface<dim> &geometry_model,
-                 const unsigned int                   boundary_indicator,
-                 const Point<dim>                    &location,
-                 const unsigned int                   compositional_field) const
+    boundary_composition (const types::boundary_id /*boundary_indicator*/,
+                          const Point<dim> &position,
+                          const unsigned int compositional_field) const
     {
-      return this->get_compositional_initial_conditions().initial_composition(location, compositional_field);
+      return this->get_initial_composition_manager().initial_composition(position, compositional_field);
     }
 
 
     template <int dim>
     double
     InitialComposition<dim>::
-    minimal_composition (const std::set<types::boundary_id> &fixed_boundary_ids) const
+    minimal_composition (const std::set<types::boundary_id> &) const
     {
       return min_composition;
     }
@@ -54,7 +53,7 @@ namespace aspect
     template <int dim>
     double
     InitialComposition<dim>::
-    maximal_composition (const std::set<types::boundary_id> &fixed_boundary_ids) const
+    maximal_composition (const std::set<types::boundary_id> &) const
     {
       return max_composition;
     }
@@ -116,7 +115,7 @@ namespace aspect
                                                "know certain pieces of information such as the "
                                                "minimal and maximal composition on the boundary. "
                                                "For operations that require this, for example in "
-                                               "postprocessing, this boundary composition model "
+                                               "post-processing, this boundary composition model "
                                                "must therefore be told what the minimal and "
                                                "maximal values on the boundary are. This is done "
                                                "using parameters set in section ``Boundary composition model/Initial composition''.")

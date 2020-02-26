@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011, 2012 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__mesh_refinement_composition_h
-#define __aspect__mesh_refinement_composition_h
+#ifndef _aspect_mesh_refinement_composition_h
+#define _aspect_mesh_refinement_composition_h
 
 #include <aspect/mesh_refinement/interface.h>
 #include <aspect/simulator_access.h>
@@ -49,9 +49,8 @@ namespace aspect
          * provides an error indicator. This vector will already have the
          * correct size when the function is called.
          */
-        virtual
         void
-        execute (Vector<float> &error_indicators) const;
+        execute (Vector<float> &error_indicators) const override;
 
         /**
          * Declare the parameters this class takes through input files.
@@ -63,9 +62,8 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
       private:
         /**

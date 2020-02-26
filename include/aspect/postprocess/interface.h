@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011, 2012 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,23 +14,26 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__postprocess_interface_h
-#define __aspect__postprocess_interface_h
+#ifndef _aspect_postprocess_interface_h
+#define _aspect_postprocess_interface_h
 
 #include <aspect/global.h>
 #include <aspect/plugins.h>
 #include <aspect/simulator_access.h>
 
-#include <deal.II/base/std_cxx1x/shared_ptr.h>
+#include <memory>
 #include <deal.II/base/table_handler.h>
 #include <deal.II/base/parameter_handler.h>
 
 #include <boost/serialization/split_member.hpp>
+#include <boost/core/demangle.hpp>
+
+#include <typeinfo>
 
 
 namespace aspect
@@ -81,6 +84,12 @@ namespace aspect
         virtual void initialize ();
 
         /**
+         * Update function. This should be called before each postprocessor
+         * is run and allows an opportunity to prepare/update temporary data
+         */
+        virtual void update ();
+
+        /**
          * Execute this postprocessor. Derived classes will implement this
          * function to do whatever they want to do to evaluate the solution at
          * the current time step.
@@ -128,6 +137,29 @@ namespace aspect
         void
         parse_parameters (ParameterHandler &prm);
 
+        /**
+         * A function that is used to indicate to the postprocessor manager which
+         * other postprocessor(s) the current one depends upon. The returned
+         * list contains the names (as strings, as you would write them in
+         * the input file) of the postprocessors it requires. The manager
+         * will ensure that these postprocessors are indeed used, even if
+         * they were not explicitly listed in the input file, and are indeed
+         * run <i>before</i> this postprocessor every time they are executed.
+         *
+         * The default implementation of this function returns an empty list.
+         *
+         * @note This mechanism is intended to support postprocessors that
+         * do not want to recompute information that other postprocessors
+         * already compute (or could compute, if they were run -- which
+         * we can ensure using the current function). To do so, a postprocessor
+         * of course needs to be able to access these other postprocessors.
+         * This can be done by deriving your postprocessor from
+         * SimulatorAccess, and then using the SimulatorAccess::find_postprocessor()
+         * function.
+         */
+        virtual
+        std::list<std::string>
+        required_other_postprocessors () const;
 
         /**
          * Save the state of this object to the argument given to this
@@ -202,11 +234,37 @@ namespace aspect
          * in the input file (and are consequently currently active) and see
          * if one of them has the desired type specified by the template
          * argument. If so, return a pointer to it. If no postprocessor is
-         * active that matches the given type, return a NULL pointer.
+         * active that matches the given type, return a nullptr.
+         *
+         * @deprecated Use has_matching_postprocessor() and
+         * get_matching_postprocessor() instead.
          */
         template <typename PostprocessorType>
+        DEAL_II_DEPRECATED
         PostprocessorType *
         find_postprocessor () const;
+
+        /**
+         * Go through the list of all postprocessors that have been selected
+         * in the input file (and are consequently currently active) and return
+         * true if one of them has the desired type specified by the template
+         * argument.
+         */
+        template <typename PostprocessorType>
+        bool
+        has_matching_postprocessor () const;
+
+        /**
+         * Go through the list of all postprocessors that have been selected
+         * in the input file (and are consequently currently active) and see
+         * if one of them has the type specified by the template
+         * argument or can be casted to that type. If so, return a reference
+         * to it. If no postprocessor is active that matches the given type,
+         * throw an exception.
+         */
+        template <typename PostprocessorType>
+        const PostprocessorType &
+        get_matching_postprocessor () const;
 
         /**
          * Declare the parameters of all known postprocessors, as well as of
@@ -268,6 +326,19 @@ namespace aspect
                                 Interface<dim> *(*factory_function) ());
 
         /**
+         * For the current plugin subsystem, write a connection graph of all of the
+         * plugins we know about, in the format that the
+         * programs dot and neato understand. This allows for a visualization of
+         * how all of the plugins that ASPECT knows about are interconnected, and
+         * connect to other parts of the ASPECT code.
+         *
+         * @param output_stream The stream to write the output to.
+         */
+        static
+        void
+        write_plugin_graph (std::ostream &output_stream);
+
+        /**
          * Exception.
          */
         DeclException1 (ExcPostprocessorNameNotFound,
@@ -280,7 +351,7 @@ namespace aspect
          * A list of postprocessor objects that have been requested in the
          * parameter file.
          */
-        std::list<std_cxx1x::shared_ptr<Interface<dim> > > postprocessors;
+        std::vector<std::unique_ptr<Interface<dim> > > postprocessors;
     };
 
 
@@ -294,10 +365,8 @@ namespace aspect
       // let all the postprocessors save their data in a map and then
       // serialize that
       std::map<std::string,std::string> saved_text;
-      for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::const_iterator
-           p = postprocessors.begin();
-           p != postprocessors.end(); ++p)
-        (*p)->save (saved_text);
+      for (const auto &p : postprocessors)
+        p->save (saved_text);
 
       ar &saved_text;
     }
@@ -315,31 +384,60 @@ namespace aspect
       std::map<std::string,std::string> saved_text;
       ar &saved_text;
 
-      for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::iterator
-           p = postprocessors.begin();
-           p != postprocessors.end(); ++p)
-        (*p)->load (saved_text);
+      for (auto &p : postprocessors)
+        p->load (saved_text);
     }
 
-    /**
-     * Go through the list of all postprocessors that have been selected in
-     * the input file (and are consequently currently active) and see if one
-     * of them has the desired type specified by the template argument. If so,
-     * return a pointer to it. If no postprocessor is active that matches the
-     * given type, return a NULL pointer.
-     */
+
+
     template <int dim>
     template <typename PostprocessorType>
     inline
     PostprocessorType *
     Manager<dim>::find_postprocessor () const
     {
-      for (typename std::list<std_cxx1x::shared_ptr<Interface<dim> > >::const_iterator
-           p = postprocessors.begin();
-           p != postprocessors.end(); ++p)
-        if (PostprocessorType *x = dynamic_cast<PostprocessorType *> ( (*p).get()) )
+      for (auto &p : postprocessors)
+        if (PostprocessorType *x = dynamic_cast<PostprocessorType *> ( p.get()) )
           return x;
-      return NULL;
+      return nullptr;
+    }
+
+
+
+    template <int dim>
+    template <typename PostprocessorType>
+    inline
+    bool
+    Manager<dim>::has_matching_postprocessor () const
+    {
+      for (const auto &p : postprocessors)
+        if (Plugins::plugin_type_matches<PostprocessorType>(*p))
+          return true;
+
+      return false;
+    }
+
+
+
+    template <int dim>
+    template <typename PostprocessorType>
+    inline
+    const PostprocessorType &
+    Manager<dim>::get_matching_postprocessor () const
+    {
+      AssertThrow(has_matching_postprocessor<PostprocessorType> (),
+                  ExcMessage("You asked Postprocess::Manager::get_matching_postprocessor() for a "
+                             "postprocessor of type <" + boost::core::demangle(typeid(PostprocessorType).name()) + "> "
+                             "that could not be found in the current model. Activate this "
+                             "postprocessor in the input file."));
+
+      typename std::vector<std::unique_ptr<Interface<dim> > >::const_iterator postprocessor;
+      for (const auto &p : postprocessors)
+        if (Plugins::plugin_type_matches<PostprocessorType>(*p))
+          return Plugins::get_plugin_as_type<PostprocessorType>(*p);
+
+      // We will never get here, because we had the Assert above. Just to avoid warnings.
+      return Plugins::get_plugin_as_type<PostprocessorType>(*(*postprocessor));
     }
 
 

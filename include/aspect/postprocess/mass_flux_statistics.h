@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__postprocess_mass_flux_statistics_h
-#define __aspect__postprocess_mass_flux_statistics_h
+#ifndef _aspect_postprocess_mass_flux_statistics_h
+#define _aspect_postprocess_mass_flux_statistics_h
 
 #include <aspect/postprocess/interface.h>
 #include <aspect/simulator_access.h>
@@ -32,8 +32,8 @@ namespace aspect
   {
 
     /**
-     * A postprocessor that computes some statistics about the material_flux in
-     * and out of boundaries.
+     * A postprocessor that computes some statistics about the material_flux
+     * in and out of boundaries.
      *
      * @ingroup Postprocessing
      */
@@ -44,9 +44,8 @@ namespace aspect
         /**
          * Evaluate the solution for some mass_flux statistics.
          */
-        virtual
         std::pair<std::string,std::string>
-        execute (TableHandler &statistics);
+        execute (TableHandler &statistics) override;
     };
   }
 }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,16 +14,17 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
 #include <aspect/global.h>
 #include <aspect/gravity_model/interface.h>
+#include <aspect/simulator_access.h>
 
 #include <deal.II/base/exceptions.h>
-#include <deal.II/base/std_cxx1x/tuple.h>
+#include <tuple>
 
 #include <list>
 
@@ -49,13 +50,13 @@ namespace aspect
     template <int dim>
     void
     Interface<dim>::
-    declare_parameters (dealii::ParameterHandler &prm)
+    declare_parameters (dealii::ParameterHandler &)
     {}
 
 
     template <int dim>
     void
-    Interface<dim>::parse_parameters (dealii::ParameterHandler &prm)
+    Interface<dim>::parse_parameters (dealii::ParameterHandler &)
     {}
 
 
@@ -64,11 +65,11 @@ namespace aspect
 
     namespace
     {
-      std_cxx1x::tuple
+      std::tuple
       <void *,
       void *,
-      internal::Plugins::PluginList<Interface<2> >,
-      internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      aspect::internal::Plugins::PluginList<Interface<2> >,
+      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
     }
 
 
@@ -80,10 +81,10 @@ namespace aspect
                             void (*declare_parameters_function) (ParameterHandler &),
                             Interface<dim> *(*factory_function) ())
     {
-      std_cxx1x::get<dim>(registered_plugins).register_plugin (name,
-                                                               description,
-                                                               declare_parameters_function,
-                                                               factory_function);
+      std::get<dim>(registered_plugins).register_plugin (name,
+                                                         description,
+                                                         declare_parameters_function,
+                                                         factory_function);
     }
 
 
@@ -98,8 +99,18 @@ namespace aspect
       }
       prm.leave_subsection ();
 
-      return std_cxx1x::get<dim>(registered_plugins).create_plugin (model_name,
-                                                                    "Gravity model::Model name");
+      // If one sets the model name to an empty string in the input file,
+      // ParameterHandler produces an error while reading the file. However,
+      // if one omits specifying any model name at all (not even setting it to
+      // the empty string) then the value we get here is the empty string. If
+      // we don't catch this case here, we end up with awkward downstream
+      // errors because the value obviously does not conform to the Pattern.
+      AssertThrow(model_name != "unspecified",
+                  ExcMessage("You need to select a Gravity model "
+                             "(`set Model name' in `subsection Gravity model')."));
+
+      return std::get<dim>(registered_plugins).create_plugin (model_name,
+                                                              "Gravity model::Model name");
     }
 
 
@@ -112,26 +123,27 @@ namespace aspect
       prm.enter_subsection ("Gravity model");
       {
         const std::string pattern_of_names
-          = std_cxx1x::get<dim>(registered_plugins).get_pattern_of_names ();
-        try
-          {
-            prm.declare_entry ("Model name", "",
-                               Patterns::Selection (pattern_of_names),
-                               "Select one of the following models:\n\n"
-                               +
-                               std_cxx1x::get<dim>(registered_plugins).get_description_string());
-          }
-        catch (const ParameterHandler::ExcValueDoesNotMatchPattern &)
-          {
-            // ignore the fact that the default value for this parameter
-            // does not match the pattern
-          }
+          = std::get<dim>(registered_plugins).get_pattern_of_names ();
+        prm.declare_entry ("Model name", "unspecified",
+                           Patterns::Selection (pattern_of_names+"|unspecified"),
+                           "Select one of the following models:\n\n"
+                           +
+                           std::get<dim>(registered_plugins).get_description_string());
       }
       prm.leave_subsection ();
 
-      std_cxx1x::get<dim>(registered_plugins).declare_parameters (prm);
+      std::get<dim>(registered_plugins).declare_parameters (prm);
     }
 
+
+
+    template <int dim>
+    void
+    write_plugin_graph (std::ostream &out)
+    {
+      std::get<dim>(registered_plugins).write_plugin_graph ("Gravity model interface",
+                                                            out);
+    }
   }
 }
 
@@ -144,10 +156,10 @@ namespace aspect
     {
       template <>
       std::list<internal::Plugins::PluginList<GravityModel::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<GravityModel::Interface<2> >::plugins = 0;
+      internal::Plugins::PluginList<GravityModel::Interface<2> >::plugins = nullptr;
       template <>
       std::list<internal::Plugins::PluginList<GravityModel::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<GravityModel::Interface<3> >::plugins = 0;
+      internal::Plugins::PluginList<GravityModel::Interface<3> >::plugins = nullptr;
     }
   }
 
@@ -166,6 +178,10 @@ namespace aspect
   template  \
   void \
   declare_parameters<dim> (ParameterHandler &); \
+  \
+  template \
+  void \
+  write_plugin_graph<dim> (std::ostream &); \
   \
   template \
   Interface<dim> * \

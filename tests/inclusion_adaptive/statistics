@@ -1,17 +1,17 @@
 # 1: Time step number
 # 2: Time (seconds)
-# 3: Number of mesh cells
-# 4: Number of Stokes degrees of freedom
-# 5: Number of temperature degrees of freedom
-# 6: Iterations for temperature solver
-# 7: Iterations for Stokes solver
-# 8: Velocity iterations in Stokes preconditioner
-# 9: Schur complement iterations in Stokes preconditioner
-# 10: Time step size (seconds)
+# 3: Time step size (seconds)
+# 4: Number of mesh cells
+# 5: Number of Stokes degrees of freedom
+# 6: Number of temperature degrees of freedom
+# 7: Number of nonlinear iterations
+# 8: Iterations for Stokes solver
+# 9: Velocity iterations in Stokes preconditioner
+# 10: Schur complement iterations in Stokes preconditioner
 # 11: Visualization file name
-0 0.0000e+00  64  659  289 0 23  24  95 8.8424e-02 output-inclusion_adaptive/solution-00000 
-0 0.0000e+00  76  803  353 0 27  28 116 8.8424e-02 output-inclusion_adaptive/solution-00001 
-0 0.0000e+00 100 1055  465 0 28  29 128 8.8424e-02 output-inclusion_adaptive/solution-00002 
-0 0.0000e+00 172 1847  817 0 30  32 129 8.7930e-02 output-inclusion_adaptive/solution-00003 
-0 0.0000e+00 268 2891 1281 0 43 306  68 7.5257e-02 output-inclusion_adaptive/solution-00004 
-0 0.0000e+00 430 4691 2081 0 41 286  60 6.3301e-02 output-inclusion_adaptive/solution-00005 
+0 0.000000000000e+00 0.000000000000e+00  64  659  289 1  18  20  79 output-inclusion_adaptive/solution/solution-00000 
+0 0.000000000000e+00 0.000000000000e+00 100 1055  465 1  21  23  99 output-inclusion_adaptive/solution/solution-00001 
+0 0.000000000000e+00 0.000000000000e+00 172 1847  817 1  22  24 100 output-inclusion_adaptive/solution/solution-00002 
+0 0.000000000000e+00 0.000000000000e+00 268 2891 1281 1 142 146 607 output-inclusion_adaptive/solution/solution-00003 
+0 0.000000000000e+00 0.000000000000e+00 433 4727 2097 1 143 147 733 output-inclusion_adaptive/solution/solution-00004 
+0 0.000000000000e+00 0.000000000000e+00 706 7724 3429 1 130 134 666 output-inclusion_adaptive/solution/solution-00005 

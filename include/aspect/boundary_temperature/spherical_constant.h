@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011, 2012 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,16 +14,17 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
-#ifndef __aspect__boundary_temperature_spherical_constant_h
-#define __aspect__boundary_temperature_spherical_constant_h
+#ifndef _aspect_boundary_temperature_spherical_constant_h
+#define _aspect_boundary_temperature_spherical_constant_h
 
 #include <aspect/boundary_temperature/interface.h>
 
+#include <aspect/simulator_access.h>
 
 namespace aspect
 {
@@ -38,28 +39,17 @@ namespace aspect
      * @ingroup BoundaryTemperatures
      */
     template <int dim>
-    class SphericalConstant : public Interface<dim>
+    class SphericalConstant : public Interface<dim>, public SimulatorAccess<dim>
     {
       public:
         /**
-         * Return the temperature that is to hold at a particular location on
-         * the boundary of the domain. This function returns the constant
-         * temperatures read from the parameter file for the inner and outer
-         * boundaries.
+         * This function returns the constant compositions read from the
+         * parameter file for the inner and outer boundaries.
          *
-         * @param geometry_model The geometry model that describes the domain.
-         * This may be used to determine whether the boundary temperature
-         * model is implemented for this geometry.
-         * @param boundary_indicator The boundary indicator of the part of the
-         * boundary of the domain on which the point is located at which we
-         * are requesting the temperature.
-         * @param location The location of the point at which we ask for the
-         * temperature.
+         * @copydoc aspect::BoundaryTemperature::Interface::boundary_temperature()
          */
-        virtual
-        double temperature (const GeometryModel::Interface<dim> &geometry_model,
-                            const unsigned int                   boundary_indicator,
-                            const Point<dim>                    &location) const;
+        double boundary_temperature (const types::boundary_id boundary_indicator,
+                                     const Point<dim> &position) const override;
 
         /**
          * Return the minimal the temperature on that part of the boundary on
@@ -68,8 +58,7 @@ namespace aspect
          * This value is used in computing dimensionless numbers such as the
          * Nusselt number indicating heat flux.
          */
-        virtual
-        double minimal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const;
+        double minimal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const override;
 
         /**
          * Return the maximal the temperature on that part of the boundary on
@@ -78,8 +67,7 @@ namespace aspect
          * This value is used in computing dimensionless numbers such as the
          * Nusselt number indicating heat flux.
          */
-        virtual
-        double maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const;
+        double maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const override;
 
         /**
          * Declare the parameters this class takes through input files. This
@@ -92,9 +80,8 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
       private:
         /**

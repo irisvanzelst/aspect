@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,13 +14,13 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
 
 #include <aspect/boundary_temperature/initial_temperature.h>
-#include <aspect/simulator_access.h>
+#include <aspect/initial_temperature/interface.h>
 
 
 namespace aspect
@@ -32,18 +32,17 @@ namespace aspect
     template <int dim>
     double
     InitialTemperature<dim>::
-    temperature (const GeometryModel::Interface<dim> &geometry_model,
-                 const unsigned int                   boundary_indicator,
-                 const Point<dim>                    &location) const
+    boundary_temperature (const types::boundary_id,
+                          const Point<dim> &position) const
     {
-      return this->get_initial_conditions().initial_temperature(location);
+      return this->get_initial_temperature_manager().initial_temperature(position);
     }
 
 
     template <int dim>
     double
     InitialTemperature<dim>::
-    minimal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const
+    minimal_temperature (const std::set<types::boundary_id> &) const
     {
       return min_temperature;
     }
@@ -53,7 +52,7 @@ namespace aspect
     template <int dim>
     double
     InitialTemperature<dim>::
-    maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const
+    maximal_temperature (const std::set<types::boundary_id> &) const
     {
       return max_temperature;
     }
@@ -70,10 +69,10 @@ namespace aspect
         {
           prm.declare_entry ("Minimal temperature", "0",
                              Patterns::Double (),
-                             "Minimal temperature. Units: K.");
+                             "Minimal temperature. Units: $\\si{K}$.");
           prm.declare_entry ("Maximal temperature", "3773",
                              Patterns::Double (),
-                             "Maximal temperature. Units: K.");
+                             "Maximal temperature. Units: $\\si{K}$.");
         }
         prm.leave_subsection ();
       }
@@ -115,7 +114,7 @@ namespace aspect
                                                "know certain pieces of information such as the "
                                                "minimal and maximal temperature on the boundary. "
                                                "For operations that require this, for example in "
-                                               "postprocessing, this boundary temperature model "
+                                               "post-processing, this boundary temperature model "
                                                "must therefore be told what the minimal and "
                                                "maximal values on the boundary are. This is done "
                                                "using parameters set in section ``Boundary temperature model/Initial temperature''.")

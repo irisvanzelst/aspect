@@ -5,7 +5,7 @@
 set Dimension                              = 2
 set Use years in output instead of seconds = true
 set End time                               = 1.5e9
-set Output directory                       = output
+set Output directory                       = output-netrot
 
 
 subsection Material model
@@ -29,22 +29,21 @@ subsection Geometry model
 end
 
 
-subsection Model settings
-  set Zero velocity boundary indicators       = 
-  set Tangential velocity boundary indicators = inner, outer
-  set Prescribed velocity boundary indicators =
+subsection Boundary velocity model
+  set Tangential velocity boundary indicators = bottom, top
+end
 
-  set Fixed temperature boundary indicators   = inner, outer
 
-  set Include shear heating                   = true
-
+subsection Nullspace removal
   # net rotation|net translation|angular momentum|translational momentum
   set Remove nullspace = net rotation
 end
 
 
 subsection Boundary temperature model
-  set Model name = spherical constant
+  set Fixed temperature boundary indicators = bottom, top
+  set List of model names = spherical constant
+
   subsection Spherical constant
     set Inner temperature = 4273
     set Outer temperature = 973
@@ -52,13 +51,13 @@ subsection Boundary temperature model
 end
 
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = spherical hexagonal perturbation
 end
 
 
 subsection Gravity model
-  set Model name = radial earth-like
+  set Model name = ascii data
 end
 
 
@@ -82,4 +81,8 @@ subsection Postprocess
   subsection Depth average
     set Time between graphical output = 1e6
   end
+end
+
+subsection Heating model
+  set List of model names =  shear heating
 end

@@ -1,0 +1,31 @@
+# 1: Time step number
+# 2: Time (years)
+# 3: Time step size (years)
+# 4: Number of mesh cells
+# 5: Number of Stokes degrees of freedom
+# 6: Number of temperature degrees of freedom
+# 7: Number of degrees of freedom for all compositions
+# 8: Number of nonlinear iterations
+# 9: Iterations for temperature solver
+# 10: Iterations for composition solver 1
+# 11: Iterations for composition solver 2
+# 12: Iterations for Stokes solver
+# 13: Velocity iterations in Stokes preconditioner
+# 14: Schur complement iterations in Stokes preconditioner
+# 15: Visualization file name
+# 16: Minimal value for composition porosity
+# 17: Maximal value for composition porosity
+# 18: Global mass for composition porosity
+# 19: Minimal value for composition peridotite
+# 20: Maximal value for composition peridotite
+# 21: Global mass for composition peridotite
+# 22: RMS velocity (m/year)
+# 23: Max. velocity (m/year)
+# 24: Minimal temperature (K)
+# 25: Average temperature (K)
+# 26: Maximal temperature (K)
+# 27: Average nondimensional temperature (K)
+0 0.000000000000e+00 0.000000000000e+00 192 1891 833 450 8  0 0 0 71 87 766 output-global_melt_parallel/solution/solution-00000 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 1.08902163e-03 2.96202829e-03 2.93000000e+02 2.02282918e+03 3.70000000e+03 5.07727967e-01 
+1 1.000000000000e+06 1.000000000000e+06 192 1891 833 450 5 46 0 0 18 28 243 output-global_melt_parallel/solution/solution-00001 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 1.10954618e-03 3.03776709e-03 2.93000000e+02 2.02296963e+03 3.70000000e+03 5.07769191e-01 
+2 2.000000000000e+06 1.000000000000e+06 192 1891 833 450 4 35 0 0 13 21 185 output-global_melt_parallel/solution/solution-00002 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 1.12611540e-03 3.09959545e-03 2.93000000e+02 2.02310426e+03 3.70000000e+03 5.07808705e-01 
+3 3.000000000000e+06 1.000000000000e+06 192 1891 833 450 3 27 0 0  9 15 132 output-global_melt_parallel/solution/solution-00003 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 0.00000000e+00 1.14157212e-03 3.15743266e-03 2.93000000e+02 2.02323908e+03 3.70000000e+03 5.07848276e-01 

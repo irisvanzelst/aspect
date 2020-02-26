@@ -1,24 +1,24 @@
 # 1: Time step number
 # 2: Time (seconds)
-# 3: Number of mesh cells
-# 4: Number of Stokes degrees of freedom
-# 5: Number of temperature degrees of freedom
-# 6: Number of degrees of freedom for all compositions
-# 7: Iterations for temperature solver
-# 8: Iterations for composition solver 1
-# 9: Iterations for Stokes solver
-# 10: Velocity iterations in Stokes preconditioner
-# 11: Schur complement iterations in Stokes preconditioner
-# 12: Time step size (seconds)
+# 3: Time step size (seconds)
+# 4: Number of mesh cells
+# 5: Number of Stokes degrees of freedom
+# 6: Number of temperature degrees of freedom
+# 7: Number of degrees of freedom for all compositions
+# 8: Iterations for temperature solver
+# 9: Iterations for composition solver 1
+# 10: Iterations for Stokes solver
+# 11: Velocity iterations in Stokes preconditioner
+# 12: Schur complement iterations in Stokes preconditioner
 # 13: Visualization file name
 # 14: RMS velocity (m/s)
 # 15: Max. velocity (m/s)
 # 16: Minimal temperature (K)
 # 17: Average temperature (K)
 # 18: Maximal temperature (K)
-# 19: Outward heat flux through boundary with indicator 0 ("inner") (W)
-# 20: Outward heat flux through boundary with indicator 1 ("outer") (W)
-0 0.0000e+00 768 7392 3264 3264  0  0 43 84 42 2.8162e+12 output-passive_comp/solution-00000 5.11003633e-08 6.29377561e-08 0.00000000e+00 0.00000000e+00 0.00000000e+00  0.00000000e+00 0.00000000e+00 
-1 2.8162e+12 768 7392 3264 3264 20 18  0  0  0 2.8162e+12 output-passive_comp/solution-00001 5.11003633e-08 6.29377561e-08 0.00000000e+00 3.90624271e-04 2.75176890e-03 -2.84592331e-01 4.82343761e-02 
-2 5.6325e+12 768 7392 3264 3264 13 19  6  7 21 2.3675e+12 output-passive_comp/solution-00002 5.11003633e-08 6.29377561e-08 0.00000000e+00 7.82019172e-04 4.46392883e-03  4.18153904e-02 1.95383435e-01 
-3 8.0000e+12 768 7392 3264 3264 12 18  3  4 12 2.8162e+12 output-passive_comp/solution-00003 5.11003634e-08 6.29377561e-08 0.00000000e+00 1.10830077e-03 5.56739381e-03  4.93398214e-01 3.19827573e-01 
+# 19: Outward heat flux through boundary with indicator 0 ("bottom") (W)
+# 20: Outward heat flux through boundary with indicator 1 ("top") (W)
+0 0.000000000000e+00 0.000000000000e+00 768 7392 3264 3264  0  0 54 57 171 output-passive_comp/solution/solution-00000 5.11186150e-08 6.29577965e-08  0.00000000e+00 0.00000000e+00 0.00000000e+00 3.90925060e+01 1.23009798e+01 
+1 2.816248421717e+12 2.816248421717e+12 768 7392 3264 3264 27 19  2  4  12 output-passive_comp/solution/solution-00001 5.11186150e-08 6.29577965e-08 -1.93936445e-06 1.66582732e-04 8.26519317e-04 2.96734936e+02 1.85037351e+02 
+2 5.632496843434e+12 2.816248421717e+12 768 7392 3264 3264 17 21  4  6  18 output-passive_comp/solution/solution-00002 5.11186150e-08 6.29577965e-08 -2.20379807e-06 3.33656059e-04 1.54937419e-03 2.18007820e+02 1.67507885e+02 
+3 8.000000000000e+12 2.367503156566e+12 768 7392 3264 3264 15 19  2  4  12 output-passive_comp/solution/solution-00003 5.11186149e-08 6.29577965e-08 -3.12936458e-06 4.74348414e-04 2.08475915e-03 1.80852073e+02 1.82047374e+02 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2015 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -14,7 +14,7 @@
   GNU General Public License for more details.
 
   You should have received a copy of the GNU General Public License
-  along with ASPECT; see the file doc/COPYING.  If not see
+  along with ASPECT; see the file LICENSE.  If not see
   <http://www.gnu.org/licenses/>.
 */
 
@@ -27,16 +27,22 @@ namespace aspect
   namespace HeatingModel
   {
     template <int dim>
-    double
+    void
     ConstantHeating<dim>::
-    specific_heating_rate (const double,
-                           const double,
-                           const std::vector<double> &,
-                           const Point<dim> &) const
+    evaluate (const MaterialModel::MaterialModelInputs<dim> &/*material_model_inputs*/,
+              const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
+              HeatingModel::HeatingModelOutputs &heating_model_outputs) const
     {
-      // return a constant value
-      return radiogenic_heating_rate;
+      for (unsigned int q=0; q<heating_model_outputs.heating_source_terms.size(); ++q)
+        {
+          // return a constant value
+          heating_model_outputs.heating_source_terms[q] = radiogenic_heating_rate
+                                                          * material_model_outputs.densities[q];
+          heating_model_outputs.lhs_latent_heat_terms[q] = 0.0;
+        }
     }
+
+
 
     template <int dim>
     void

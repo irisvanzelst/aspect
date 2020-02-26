@@ -24,19 +24,25 @@ subsection Geometry model
 end
 
 
-subsection Model settings
+# The parameters below this comment were created by the update script
+# as replacement for the old 'Model settings' subsection. They can be
+# safely merged with any existing subsections with the same name.
+
+subsection Boundary velocity model
   set Zero velocity boundary indicators       = 0
+end
+
+subsection Boundary velocity model
   set Tangential velocity boundary indicators = 1
-  set Prescribed velocity boundary indicators =
+end
 
+subsection Boundary temperature model
   set Fixed temperature boundary indicators   = 0,1
-
-  set Include shear heating                   = false
 end
 
 
 subsection Boundary temperature model
-  set Model name = spherical constant
+  set List of model names = spherical constant
   subsection Spherical constant
     set Inner temperature = 1600
     set Outer temperature = 1600
@@ -44,11 +50,11 @@ subsection Boundary temperature model
 end
 
 
-subsection Initial conditions
+subsection Initial temperature model
   set Model name = S40RTS perturbation
   subsection S40RTS perturbation
     set Initial condition file name           = S20RTS.sph
-    set vs to density scaling                 = 0.3
+    set Vs to density scaling                 = 0.3
     set Thermal expansion coefficient in initial temperature scaling = 4e-5
     set Reference temperature                 = 1600
     set Remove degree 0 from perturbation     = true
@@ -57,7 +63,7 @@ end
 
 
 subsection Gravity model
-  set Model name = radial earth-like
+  set Model name = ascii data
 end
 
 
@@ -73,6 +79,7 @@ subsection Postprocess
   set List of postprocessors = visualization, temperature statistics
 
   subsection Visualization
+    set Interpolate output = false
     set Output format                 = gnuplot
     set Time between graphical output = 0
   end
