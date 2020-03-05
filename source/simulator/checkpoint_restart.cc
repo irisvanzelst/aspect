@@ -555,6 +555,14 @@ namespace aspect
                                  ">"));
       }
 
+    // Overwrite the existing statistics file with the one that would have
+    // been current at the time of the snapshot we just read back in. We
+    // do this because the simulation that created the snapshot may have
+    // continued for a few more time steps. The operation here then
+    // effectively truncates the 'statistics' file to the position from
+    // which the current simulation is going to continue.
+    output_statistics();
+
     // We have to compute the constraints here because the vector that tells
     // us if a cell is a melt cell is not saved between restarts.
     if (parameters.include_melt_transport)
@@ -582,8 +590,18 @@ namespace aspect
     ar &pre_refinement_step;
     ar &last_pressure_normalization_adjustment;
 
-    ar &postprocess_manager &statistics;
+    ar &postprocess_manager;
 
+    ar &statistics;
+
+    // We do not serialize the statistics_last_write_size and
+    // statistics_last_hash variables on purpose. This way, upon
+    // restart, they are left at the values initialized by the
+    // Simulator::Simulator() constructor, and this causes the
+    // Simulator::output_statistics() function to write the
+    // whole statistics file anew at the end of the first time
+    // step after restart. See there why this is the
+    // correct behavior after restart.
   }
 }
 
