@@ -1,22 +1,42 @@
+# Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
+#
+# This file is part of ASPECT.
+#
+# ASPECT is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# ASPECT is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with ASPECT; see the file LICENSE.  If not see
+# <http://www.gnu.org/licenses/>.
+
 ################### top matter ################
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.13.4)
 
 IF (CMP0058)
- cmake_policy(CMP0058 NEW) 
+ cmake_policy(CMP0058 NEW)
 ENDIF()
+
+PROJECT(testsuite CXX)
 
 SET(ASPECT_BINARY "${ASPECT_BINARY}" CACHE STRING "" FORCE)
 SET(Aspect_DIR "${Aspect_DIR}" CACHE STRING "" FORCE)
 SET(ASPECT_COMPARE_TEST_RESULTS "${ASPECT_COMPARE_TEST_RESULTS}" CACHE BOOL "" FORCE)
+SET(ASPECT_RUN_ALL_TESTS OFF CACHE BOOL "")
 
-FIND_PACKAGE(Aspect 2.1.0 QUIET HINTS ${Aspect_DIR})
+FIND_PACKAGE(Aspect 2.4.0 QUIET REQUIRED HINTS ${Aspect_DIR})
 DEAL_II_INITIALIZE_CACHED_VARIABLES()
 
 FIND_PACKAGE(Perl)
 
 MESSAGE(STATUS "Setting up tests with CMAKE_BUILD_TYPE ${CMAKE_BUILD_TYPE}")
 
-PROJECT(testsuite CXX)
 
 ENABLE_TESTING()
 
@@ -53,47 +73,46 @@ FUNCTION(get_mpi_count _filename)
   ENDIF()
 ENDFUNCTION()
 
+# A function that checks if a test depends on another test.
+# This is encoded in .prm files through lines of the form
+#    '# DEPENDS-ON: testname'
+# The result is returned in a variable _depends_on in the
+# caller's scope. Having test dependencies is helpful if
+# one test requires another test to finish first, for example
+# because the result of the first test is used by the later test.
+FUNCTION(get_depends_on _filename)
+  FILE(STRINGS ${_filename} _input_lines
+       REGEX "DEPENDS-ON:")
+  IF("${_input_lines}" STREQUAL "")
+    SET(_depends_on "" PARENT_SCOPE)
+  ELSE()
+    # go over the (possibly multiple) lines with DEPENDS-ON markers and choose the last
+    FOREACH(_input_line ${_input_lines})
+     SET(_last_line ${_input_line})
+    ENDFOREACH()
+    STRING(REGEX REPLACE "^ *# *DEPENDS-ON: *(.*) *$" "\\1"
+           _depends_on ${_last_line})
+    SET(_depends_on "${_depends_on}" PARENT_SCOPE)
+  ENDIF()
+ENDFUNCTION()
+
 # Analyze the .prm to decide if this test should be run or not. We are
 # checking for the following strings in the .prm:
-# 1. "LINEAR ALGEBRA: PETSC" - only run with PETSc, "LINEAR ALGEBRA: PETSC
-# TRILINOS" - run with PETSc and Trilinos. If neither is present we only run
-# using Trilinos.
-# 2. "WORLD BUILDER" - only run with World Builder.
-# 3. "QUICK_TEST" - enable the test even if RUN_ALL_TESTS is false 
+# 1. "Enable if: ASPECT_WITH_WORLD_BUILDER" - only run with World Builder.
+# 2. "Enable if: QUICK_TEST" - enable the test even if RUN_ALL_TESTS is false
 FUNCTION(SHOULD_ENABLE_TEST _filename)
 
   FILE(STRINGS ${_filename} _input_lines
-       REGEX "LINEAR ALGEBRA:")
-  IF("${_input_lines}" STREQUAL "")
-    # file doesn't contain LINEAR ALGEBRA command, so
-    # treat the test as TRILINOS.
-    IF(ASPECT_USE_PETSC)
-      SET(_use_test OFF PARENT_SCOPE)
-    ENDIF()
-
-  ELSE()
-    # merge multiple lines:
-    STRING (REPLACE ";" "" _input_lines "${_input_lines}")
-
-    IF (NOT ${_input_lines} MATCHES "PETSC" AND ASPECT_USE_PETSC)
-      SET(_use_test OFF PARENT_SCOPE)
-    ENDIF()
-
-    IF (NOT ${_input_lines} MATCHES "TRILINOS" AND NOT ASPECT_USE_PETSC)
-      SET(_use_test OFF PARENT_SCOPE)
-    ENDIF()
-  ENDIF()
-
-  FILE(STRINGS ${_filename} _input_lines
-  REGEX "WORLD BUILDER")
+       REGEX "Enable if: ASPECT_WITH_WORLD_BUILDER")
   IF(NOT "${_input_lines}" STREQUAL "")
-    IF (${_input_lines} MATCHES "WORLD BUILDER" AND NOT ASPECT_WITH_WORLD_BUILDER)
+    IF (${_input_lines} MATCHES "Enable if: ASPECT_WITH_WORLD_BUILDER"
+        AND NOT ASPECT_WITH_WORLD_BUILDER)
       SET(_use_test OFF PARENT_SCOPE)
     ENDIF()
   ENDIF()
 
   FILE(STRINGS ${_filename} _input_lines
-       REGEX "QUICK_TEST")
+       REGEX "Enable if: QUICK_TEST")
   IF(NOT ASPECT_RUN_ALL_TESTS AND "${_input_lines}" STREQUAL "")
     SET(_use_test OFF PARENT_SCOPE)
   ENDIF()
@@ -289,19 +308,31 @@ FOREACH(_test ${_tests})
       MESSAGE(FATAL_ERROR "test ${_testname}.prm is missing a folder with reference data")
     ENDIF()
 
-    # run command
+    # Create the run command.
+    # Note that we are using the timeout.sh script (which is a wrapper around
+    # the bash timeout command not available on OSX). This might seem
+    # redundant as ctest has an option to limit test time (see below), but we
+    # "prebuild" tests on the CI system, which does not use the ctest
+    # mechanism. So without this additional timeout command, tests would hang
+    # indefinitely.
+    # We are creating an empty file "/runs" if the test runs successfully without
+    # crashing. This is used later to only diff if necessary.
     IF("${_mpi_count}" STREQUAL "1")
       ADD_CUSTOM_COMMAND(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_test.sh ${EXPECT} ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp
+        COMMAND rm -f ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/runs
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/cmake/timeout.sh ${TEST_TIME_LIMIT}s ${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_test.sh ${EXPECT} ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp
         COMMAND ${_replacement_script} screen-output <${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp >${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output
+        COMMAND touch ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/runs
         DEPENDS ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm ${_testdepends})
     ELSE()
       ADD_CUSTOM_COMMAND(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output
-        COMMAND mpirun -np ${_mpi_count} ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm
+        COMMAND rm -f ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/runs
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/cmake/timeout.sh ${TEST_TIME_LIMIT}s mpirun -np ${_mpi_count} ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm
                 > ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp
         COMMAND ${_replacement_script} screen-output <${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output.tmp >${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/screen-output
+        COMMAND touch ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/runs
         DEPENDS ${ASPECT_BINARY} ${CMAKE_CURRENT_BINARY_DIR}/${_testname}.x.prm ${_testdepends})
     ENDIF()
 
@@ -338,8 +369,10 @@ FOREACH(_test ${_tests})
         # the normalized output file:
         SET(_run_file ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/${_name}.notime)
 
-        # generate .diff file:
+        # generate .diff file, only run diff if "/runs" exists (test ran successfully),
+        # otherwise GENERATE_REFERENCE_OUTPUT would overwrite reference data with garbage.
         ADD_CUSTOM_COMMAND(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/${_name}.diff
+          COMMAND test -f ${CMAKE_CURRENT_BINARY_DIR}/output-${_testname}/runs
           COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/cmake/diff_test.sh
                   ${TEST_DIFF}
                   ${_testname}/${_name}
@@ -370,6 +403,13 @@ FOREACH(_test ${_tests})
               -P ${CMAKE_SOURCE_DIR}/run_test.cmake
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
     SET_TESTS_PROPERTIES(${_testname} PROPERTIES TIMEOUT ${TEST_TIME_LIMIT})
+
+    # Check if this test depends on another test
+    GET_DEPENDS_ON(${CMAKE_CURRENT_SOURCE_DIR}/${_testname}.prm)
+    IF(NOT "${_depends_on}" STREQUAL "")
+      MESSAGE(STATUS "Test dependency detected for test:" ${_testname} ", depending on:" ${_depends_on})
+      SET_TESTS_PROPERTIES(${_testname} PROPERTIES DEPENDS ${_depends_on})
+    ENDIF()
   ENDIF()
 ENDFOREACH()
 

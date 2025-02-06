@@ -36,8 +36,6 @@ namespace aspect
    */
   namespace InclusionBenchmark
   {
-    using namespace dealii;
-
     namespace AnalyticSolutions
     {
       // based on http://geodynamics.org/hg/cs/AMR/Discontinuous_Stokes with permission
@@ -588,22 +586,22 @@ namespace aspect
 
 
         /* Output */
-        if (vel != NULL)
+        if (vel != nullptr)
           {
             vel[0] = sum2;
             vel[1] = sum1;
           }
-        if (presssure != NULL)
+        if (presssure != nullptr)
           {
             (*presssure) = sum5;
           }
-        if (total_stress != NULL)
+        if (total_stress != nullptr)
           {
             total_stress[0] = sum6;
             total_stress[1] = sum3;
             total_stress[2] = sum4;
           }
-        if (strain_rate != NULL)
+        if (strain_rate != nullptr)
           {
             /* sigma = tau - p, tau = sigma + p, tau[] = 2*eta*strain_rate[] */
             Z = exp(2.0 * B * z);
@@ -623,14 +621,14 @@ namespace aspect
       /**
        * The exact solution for the SolKz benchmark.
        */
-      template<int dim>
+      template <int dim>
       class FunctionSolKz : public Function<dim>
       {
         public:
           FunctionSolKz(unsigned int n_components) : Function<dim>(n_components) {}
 
-          virtual void vector_value(const Point<dim> &p,
-                                    Vector<double> &values) const
+          void vector_value(const Point<dim> &p,
+                            Vector<double> &values) const override
           {
             double pos[2] = {p(0), p(1)};
             double total_stress[3], strain_rate[3];
@@ -648,7 +646,7 @@ namespace aspect
 
 
 
-    template<int dim>
+    template <int dim>
     class SolKzMaterial : public MaterialModel::Interface<dim>
     {
       public:
@@ -656,10 +654,10 @@ namespace aspect
          * @name Physical parameters used in the basic equations
          * @{
          */
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override
         {
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
 
               const Point<dim> &pos = in.position[i];
@@ -693,7 +691,7 @@ namespace aspect
          * (compressible Stokes) or as $\nabla \cdot \mathbf{u}=0$
          * (incompressible Stokes).
          */
-        virtual bool is_compressible() const
+        bool is_compressible() const override
         {
           return false;
         }
@@ -701,21 +699,8 @@ namespace aspect
          * @}
          */
 
-        /**
-         * @name Reference quantities
-         * @{
-         */
-        virtual double reference_viscosity() const
-        {
-          return 1;
-        }
-
-        /**
-         * @}
-         */
-
         void
-        parse_parameters(ParameterHandler &/*prm*/)
+        parse_parameters(ParameterHandler &/*prm*/) override
         {
           // Declare dependencies on solution variables
           this->model_dependence.viscosity = MaterialModel::NonlinearDependence::none;
@@ -734,16 +719,15 @@ namespace aspect
      * The implementation of error evaluators that correspond to the
      * benchmarks defined in the paper Duretz et al. reference above.
      */
-    template<int dim>
+    template <int dim>
     class SolKzPostprocessor : public Postprocess::Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
         /**
          * Generate graphical output from the current solution.
          */
-        virtual
         std::pair<std::string, std::string>
-        execute(TableHandler &/*statistics*/)
+        execute(TableHandler &/*statistics*/) override
         {
           AnalyticSolutions::FunctionSolKz<dim> ref_func(this->introspection().n_components);
 

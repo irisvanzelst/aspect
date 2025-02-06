@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -72,13 +72,13 @@ namespace aspect
     // Additionally, the n==1 logic for normalization at the bottom is not pretty.
     for (unsigned int n=0; n<1+introspection.n_compositional_fields; ++n)
       {
-        AdvectionField advf = ((n == 0) ? AdvectionField::temperature()
-                               : AdvectionField::composition(n-1));
+        const AdvectionField advf = ((n == 0) ? AdvectionField::temperature()
+                                     : AdvectionField::composition(n-1));
 
         const unsigned int base_element = advf.base_element(introspection);
 
         // get the temperature/composition support points
-        const std::vector<Point<dim> > support_points
+        const std::vector<Point<dim>> support_points
           = finite_element.base_element(base_element).get_unit_support_points();
         Assert (support_points.size() != 0,
                 ExcInternalError());
@@ -97,7 +97,7 @@ namespace aspect
              VectorFunctionFromScalarFunctionObject<dim, double>(
                [&](const Point<dim> &p) -> double
         {
-          return initial_temperature_manager.initial_temperature(p);
+          return initial_temperature_manager->initial_temperature(p);
         },
         introspection.component_indices.temperature,
         introspection.n_components)
@@ -105,7 +105,7 @@ namespace aspect
         VectorFunctionFromScalarFunctionObject<dim, double>(
           [&](const Point<dim> &p) -> double
         {
-          return initial_composition_manager.initial_composition(p, n-1);
+          return initial_composition_manager->initial_composition(p, n-1);
         },
         introspection.component_indices.compositional_fields[n-1],
         introspection.n_components));
@@ -117,11 +117,68 @@ namespace aspect
            :
            introspection.component_masks.compositional_fields[n-1]);
 
-        VectorTools::interpolate(*mapping,
-                                 dof_handler,
-                                 advf_init_function,
-                                 initial_solution,
-                                 advf_mask);
+        try
+          {
+            VectorTools::interpolate(*mapping,
+                                     dof_handler,
+                                     advf_init_function,
+                                     initial_solution,
+                                     advf_mask);
+          }
+        // initial conditions that throw exceptions usually do not result in
+        // anything good because they result in an unwinding of the stack
+        // and, if only one processor triggers an exception, the
+        // destruction of objects often causes a deadlock. thus, if
+        // an exception is generated, catch it, print an error message,
+        // and abort the program
+        catch (std::exception &exc)
+          {
+            const std::string field_name = (advf.is_temperature()
+                                            ?
+                                            "temperature"
+                                            :
+                                            introspection.name_for_compositional_index(n-1));
+
+            std::cerr << std::endl << std::endl
+                      << "----------------------------------------------------"
+                      << std::endl;
+            std::cerr << "Exception on MPI process <"
+                      << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
+                      << "> while setting the initial condition for field <"
+                      << field_name
+                      << ">: " << std::endl
+                      << exc.what() << std::endl
+                      << "Aborting!" << std::endl
+                      << "----------------------------------------------------"
+                      << std::endl;
+
+            // terminate the program!
+            MPI_Abort (MPI_COMM_WORLD, 1);
+          }
+        catch (...)
+          {
+            const std::string field_name = (advf.is_temperature()
+                                            ?
+                                            "temperature"
+                                            :
+                                            introspection.name_for_compositional_index(n-1));
+
+            std::cerr << std::endl << std::endl
+                      << "----------------------------------------------------"
+                      << std::endl;
+            std::cerr << "Exception on MPI process <"
+                      << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
+                      << "> while setting the initial condition for field <"
+                      << field_name
+                      << ">: " << std::endl;
+            std::cerr << "Unknown exception!" << std::endl
+                      << "Aborting!" << std::endl
+                      << "----------------------------------------------------"
+                      << std::endl;
+
+            // terminate the program!
+            MPI_Abort (MPI_COMM_WORLD, 1);
+          }
 
         if (parameters.normalized_fields.size()>0 && n==1)
           for (const auto &cell : dof_handler.active_cell_iterators())
@@ -136,8 +193,8 @@ namespace aspect
                     // must not exceed one, this should be checked
                     double sum = 0;
                     for (unsigned int m=0; m<parameters.normalized_fields.size(); ++m)
-                      sum += initial_composition_manager.initial_composition(fe_values.quadrature_point(i),
-                                                                             parameters.normalized_fields[m]);
+                      sum += initial_composition_manager->initial_composition(fe_values.quadrature_point(i),
+                                                                              parameters.normalized_fields[m]);
 
                     if (std::abs(sum) > 1.0+std::numeric_limits<double>::epsilon())
                       {
@@ -192,8 +249,9 @@ namespace aspect
   }
 
 
+
   template <int dim>
-  void Simulator<dim>::interpolate_particle_properties (const AdvectionField &advection_field)
+  void Simulator<dim>::interpolate_particle_properties (const std::vector<AdvectionField> &advection_fields)
   {
     TimerOutput::Scope timer (computing_timer, "Particles: Interpolate");
 
@@ -217,40 +275,87 @@ namespace aspect
     // need to write into it and we can not
     // write into vectors with ghost elements
 
-    const Postprocess::Particles<dim> &particle_postprocessor =
-      postprocess_manager.template get_matching_postprocessor<Postprocess::Particles<dim> >();
+    // For each particle manager store the pairs of corresponding advection field index (first) and particle property index (second)
+    std::vector<std::vector<std::pair<unsigned int, unsigned int>>> particle_property_indices;
+    // A property component mask indicating for each particle manager which particle properties need to be interpolated
+    std::vector<ComponentMask> property_mask;
 
-    const Particle::Interpolator::Interface<dim> *particle_interpolator = &particle_postprocessor.get_particle_world().get_interpolator();
-    const Particle::Property::Manager<dim> *particle_property_manager = &particle_postprocessor.get_particle_world().get_property_manager();
+    // Mark for each advection field if it has been found in any particle manager. We need to keep track of this to:
+    // - make sure all fields tracked by particles are found in at least one particle manager
+    // - make sure that we do not interpolate the same field twice from different particle managers
+    std::vector<bool> advection_field_has_been_found(advection_fields.size(),false);
 
-    unsigned int particle_property;
-
-    if (parameters.mapped_particle_properties.size() != 0)
+    for (unsigned int particle_manager = 0; particle_manager < particle_managers.size(); ++particle_manager)
       {
-        const std::pair<std::string,unsigned int> particle_property_and_component = parameters.mapped_particle_properties.find(advection_field.compositional_variable)->second;
+        const Particle::Property::Manager<dim> &particle_property_manager = particle_managers[particle_manager].get_property_manager();
 
-        particle_property = particle_property_manager->get_data_info().get_position_by_field_name(particle_property_and_component.first)
-                            + particle_property_and_component.second;
+        particle_property_indices.emplace_back();
+        property_mask.emplace_back(particle_property_manager.get_data_info().n_components(),false);
+
+        for (unsigned int advection_field=0; advection_field<advection_fields.size(); ++advection_field)
+          {
+            if (parameters.mapped_particle_properties.size() != 0)
+              {
+                const std::pair<std::string,unsigned int> particle_property_and_component = parameters.mapped_particle_properties.find(advection_fields[advection_field].compositional_variable)->second;
+
+                // Check if the required particle property exists in the current particle manager.
+                // If not: assume we find it in another world.
+                if (particle_property_manager.get_data_info().fieldname_exists(particle_property_and_component.first))
+                  {
+                    Assert (advection_field_has_been_found[advection_field] == false,
+                            ExcMessage("The field " + advection_fields[advection_field].name(introspection) + " is mapped to particle properties in more than one particle manager. This is not supported."));
+
+                    const unsigned int particle_property_index = particle_property_manager.get_data_info().get_position_by_field_name(particle_property_and_component.first)
+                                                                 + particle_property_and_component.second;
+
+                    advection_field_has_been_found[advection_field] = true;
+                    particle_property_indices[particle_manager].emplace_back(advection_field, particle_property_index);
+                    property_mask[particle_manager].set(particle_property_index,true);
+                  }
+              }
+            else
+              {
+                Assert(particle_managers.size() == 1,
+                       ExcMessage("Automatically mapping particle properties to compositional fields is only supported if there is exactly one set of particles. "
+                                  "Please specify the particle properties manually in the parameter file using the parameter 'Compositional Fields/Mapped particle properties'."));
+
+                const unsigned int particle_property_index = std::count(introspection.compositional_field_methods.begin(),
+                                                                        introspection.compositional_field_methods.begin() + advection_fields[advection_field].compositional_variable,
+                                                                        Parameters<dim>::AdvectionFieldMethod::particles);
+                AssertThrow(particle_property_index <= particle_property_manager.get_data_info().n_components(),
+                            ExcMessage("Can not automatically match particle properties to fields, because there are"
+                                       "more fields that are marked as particle advected than particle properties"));
+
+                advection_field_has_been_found[advection_field] = true;
+                particle_property_indices[particle_manager].emplace_back(advection_field,particle_property_index);
+                property_mask[particle_manager].set(particle_property_index,true);
+              }
+          }
       }
-    else
-      {
-        particle_property = std::count(introspection.compositional_field_methods.begin(),
-                                       introspection.compositional_field_methods.begin() + advection_field.compositional_variable,
-                                       Parameters<dim>::AdvectionFieldMethod::particles);
-        AssertThrow(particle_property <= particle_property_manager->get_data_info().n_components(),
-                    ExcMessage("Can not automatically match particle properties to fields, because there are"
-                               "more fields that are marked as particle advected than particle properties"));
-      }
+
+    for (unsigned int advection_field=0; advection_field<advection_fields.size(); ++advection_field)
+      Assert (advection_field_has_been_found[advection_field] == true,
+              ExcMessage("The field " + advection_fields[advection_field].name(introspection) + " is marked as advected by particles, but no particle property exists that is mapped to this field. "
+                         "Make sure that the particle property exists and is mapped to the correct field in the parameter file."));
 
     LinearAlgebra::BlockVector particle_solution;
 
     particle_solution.reinit(system_rhs, false);
 
-    const unsigned int base_element = advection_field.base_element(introspection);
+    const unsigned int base_element_index = advection_fields[0].base_element(introspection);
+
+    // We can only combine the interpolation of properties into fields
+    // that share the same base element. Otherwise the element support points
+    // are not guaranteed to be identical.
+    for (const auto &advection_field: advection_fields)
+      {
+        (void) advection_field;
+        Assert (advection_field.base_element(introspection) == base_element_index, ExcInternalError());
+      }
 
     // get the temperature/composition support points
-    const std::vector<Point<dim> > support_points
-      = finite_element.base_element(base_element).get_unit_support_points();
+    const std::vector<Point<dim>> support_points
+      = finite_element.base_element(base_element_index).get_unit_support_points();
     Assert (support_points.size() != 0,
             ExcInternalError());
 
@@ -265,52 +370,88 @@ namespace aspect
       if (cell->is_locally_owned())
         {
           fe_values.reinit (cell);
-          const std::vector<Point<dim> > quadrature_points = fe_values.get_quadrature_points();
+          const std::vector<Point<dim>> quadrature_points = fe_values.get_quadrature_points();
 
-          ComponentMask property_mask  (particle_property_manager->get_data_info().n_components(),false);
-          property_mask.set(particle_property,true);
-
-          const std::vector<std::vector<double> > particle_properties =
-            particle_interpolator->properties_at_points(particle_postprocessor.get_particle_world().get_particle_handler(),
-                                                        quadrature_points,
-                                                        property_mask,
-                                                        cell);
-
-          // go through the composition dofs and set their global values
-          // to the particle field interpolated at these points
-          cell->get_dof_indices (local_dof_indices);
-          for (unsigned int i=0; i<finite_element.base_element(base_element).dofs_per_cell; ++i)
+          std::vector<std::vector<double>> particle_properties;
+          for (unsigned int particle_manager = 0; particle_manager < particle_managers.size(); ++particle_manager)
             {
-              const unsigned int system_local_dof
-                = finite_element.component_to_system_index(advection_field.component_index(introspection),
-                                                           /*dof index within component=*/i);
+              try
+                {
+                  particle_properties =
+                    particle_managers[particle_manager].get_interpolator().properties_at_points(particle_managers[particle_manager].get_particle_handler(),
+                                                                                                quadrature_points,
+                                                                                                property_mask[particle_manager],
+                                                                                                cell);
+                }
+              // interpolators that throw exceptions usually do not result in
+              // anything good, because they result in an unwinding of the stack
+              // and, if only one processor triggers an exception, the
+              // destruction of objects often causes a deadlock or completely
+              // unrelated MPI error messages. Thus, if an exception is
+              // generated, catch it, print an error message, and abort the program.
+              catch (std::exception &exc)
+                {
+                  std::cerr << std::endl << std::endl
+                            << "----------------------------------------------------"
+                            << std::endl;
+                  std::cerr << "Exception on MPI process <"
+                            << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
+                            << "> while interpolating particle properties: "
+                            << std::endl
+                            << exc.what() << std::endl
+                            << "Aborting!" << std::endl
+                            << "----------------------------------------------------"
+                            << std::endl;
 
-              particle_solution(local_dof_indices[system_local_dof]) = particle_properties[i][particle_property];
+                  // terminate the program!
+                  MPI_Abort (MPI_COMM_WORLD, 1);
+                }
+
+              // go through the composition dofs and set their global values
+              // to the particle field interpolated at these points
+              cell->get_dof_indices (local_dof_indices);
+              const unsigned int n_dofs_per_cell = finite_element.base_element(base_element_index).dofs_per_cell;
+              for (const std::pair<unsigned int, unsigned int> &field_and_particle_property: particle_property_indices[particle_manager])
+                for (unsigned int i=0; i<n_dofs_per_cell; ++i)
+                  {
+                    const unsigned int system_local_dof
+                      = finite_element.component_to_system_index(advection_fields[field_and_particle_property.first].component_index(introspection),
+                                                                 /*dof index within component=*/i);
+
+                    particle_solution(local_dof_indices[system_local_dof]) = particle_properties[i][field_and_particle_property.second];
+                  }
             }
         }
 
     particle_solution.compress(VectorOperation::insert);
 
-    // we should not have written at all into any of the blocks with
-    // the exception of the current composition block
-    for (unsigned int b=0; b<particle_solution.n_blocks(); ++b)
-      if (b != advection_field.block_index(introspection))
+    // overwrite the relevant composition blocks only
+    std::vector<bool> particle_blocks (introspection.n_blocks,false);
+    for (const auto &advection_field: advection_fields)
+      {
+        const unsigned int blockidx = advection_field.block_index(introspection);
+        particle_blocks[blockidx] = true;
+        solution.block(blockidx) = particle_solution.block(blockidx);
+
+        // In the first timestep, and for iterative Advection schemes only
+        // in the first nonlinear iteration, initialize all solution vectors with the initial
+        // particle solution, identical to the end of the
+        // Simulator<dim>::set_initial_temperature_and_compositional_fields ()
+        // function.
+        if (timestep_number == 0 && nonlinear_iteration == 0)
+          {
+            old_solution.block(blockidx) = particle_solution.block(blockidx);
+            old_old_solution.block(blockidx) = particle_solution.block(blockidx);
+          }
+      }
+
+    // we should not have written at all into any of the blocks
+    // that are not interpolated from particles
+    for (unsigned int b=0; b<introspection.n_blocks; ++b)
+      if (particle_blocks[b] == false)
         Assert (particle_solution.block(b).l2_norm() == 0,
                 ExcInternalError());
 
-    // overwrite the relevant composition block only
-    const unsigned int blockidx = advection_field.block_index(introspection);
-    solution.block(blockidx) = particle_solution.block(blockidx);
-
-    // In the first timestep initialize all solution vectors with the initial
-    // particle solution, identical to the end of the
-    // Simulator<dim>::set_initial_temperature_and_compositional_fields ()
-    // function.
-    if (timestep_number == 0)
-      {
-        old_solution.block(blockidx) = particle_solution.block(blockidx);
-        old_old_solution.block(blockidx) = particle_solution.block(blockidx);
-      }
   }
 
 
@@ -352,15 +493,13 @@ namespace aspect
         // wants a function that represents all components of the
         // solution vector, so create such a function object
         // that is simply zero for all velocity components
-        auto lambda = [&](const Point<dim> &p) -> double
+        VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
+          [&](const Point<dim> &p) -> double
         {
           return adiabatic_conditions->pressure(p);
-        };
-
-        VectorFunctionFromScalarFunctionObject<dim> vector_function_object(
-          lambda,
-          pressure_comp,
-          introspection.n_components);
+        },
+        pressure_comp,
+        introspection.n_components);
 
         VectorTools::interpolate (*mapping, dof_handler,
                                   vector_function_object,
@@ -375,84 +514,29 @@ namespace aspect
       }
     else
       {
-        // implement the local projection for the discontinuous pressure
-        // element. this is only going to work if, indeed, the element
-        // is discontinuous
+        // Find the local projection for the discontinuous pressure
+        // element. This is only going to work if, indeed, the element
+        // is discontinuous.
         Assert (finite_element.base_element(introspection.base_elements.pressure).dofs_per_face == 0,
                 ExcNotImplemented());
 
         LinearAlgebra::BlockVector system_tmp;
         system_tmp.reinit (system_rhs);
 
-        QGauss<dim> quadrature(parameters.stokes_velocity_degree+1);
-        UpdateFlags update_flags = UpdateFlags(update_values   |
-                                               update_quadrature_points |
-                                               update_JxW_values);
-
-        FEValues<dim> fe_values (*mapping, finite_element, quadrature, update_flags);
-
-        const unsigned int
-        dofs_per_cell = fe_values.dofs_per_cell,
-        n_q_points    = fe_values.n_quadrature_points;
-
-        std::vector<types::global_dof_index> local_dof_indices (dofs_per_cell);
-        Vector<double> cell_vector (dofs_per_cell);
-        Vector<double> local_projection (dofs_per_cell);
-        FullMatrix<double> local_mass_matrix (dofs_per_cell, dofs_per_cell);
-
-        std::vector<double> rhs_values(n_q_points);
-
-        ScalarFunctionFromFunctionObject<dim>
-        adiabatic_pressure (
-          [&](const Point<dim> &p) -> double
+        const Quadrature<dim> &quadrature = introspection.quadratures.velocities;
+        Utilities::project_cellwise<dim,LinearAlgebra::BlockVector>(*mapping,
+                                                                    dof_handler,
+                                                                    introspection.component_indices.pressure,
+                                                                    quadrature,
+                                                                    [&](const typename DoFHandler<dim>::active_cell_iterator & /*cell*/,
+                                                                        const std::vector<Point<dim>> &q_points,
+                                                                        std::vector<double> &values) -> void
         {
-          return adiabatic_conditions->pressure(p);
-        });
-
-
-        for (const auto &cell : dof_handler.active_cell_iterators())
-          if (cell->is_locally_owned())
-            {
-              cell->get_dof_indices (local_dof_indices);
-              fe_values.reinit(cell);
-
-              adiabatic_pressure.value_list (fe_values.get_quadrature_points(),
-                                             rhs_values);
-
-              cell_vector = 0;
-              local_mass_matrix = 0;
-              for (unsigned int point=0; point<n_q_points; ++point)
-                for (unsigned int i=0; i<dofs_per_cell; ++i)
-                  {
-                    if (finite_element.system_to_component_index(i).first == dim)
-                      cell_vector(i)
-                      +=
-                        rhs_values[point] *
-                        fe_values[introspection.extractors.pressure].value(i,point) *
-                        fe_values.JxW(point);
-
-                    // populate the local matrix; create the pressure mass matrix
-                    // in the pressure pressure block and the identity matrix
-                    // for all other variables so that the whole thing remains
-                    // invertible
-                    for (unsigned int j=0; j<dofs_per_cell; ++j)
-                      if ((finite_element.system_to_component_index(i).first == introspection.component_indices.pressure)
-                          &&
-                          (finite_element.system_to_component_index(j).first == introspection.component_indices.pressure))
-                        local_mass_matrix(j,i) += (fe_values[introspection.extractors.pressure].value(i,point) *
-                                                   fe_values[introspection.extractors.pressure].value(j,point) *
-                                                   fe_values.JxW(point));
-                      else if (i == j)
-                        local_mass_matrix(i,j) = 1;
-                  }
-
-              // now invert the local mass matrix and multiply it with the rhs
-              local_mass_matrix.gauss_jordan();
-              local_mass_matrix.vmult (local_projection, cell_vector);
-
-              // then set the global solution vector to the values just computed
-              cell->set_dof_values (local_projection, system_tmp);
-            }
+          for (unsigned int i=0; i<values.size(); ++i)
+            values[i] = adiabatic_conditions->pressure(q_points[i]);
+          return;
+        },
+        system_tmp);
 
         old_solution.block(introspection.block_indices.pressure) = system_tmp.block(introspection.block_indices.pressure);
       }
@@ -475,8 +559,9 @@ namespace aspect
 #define INSTANTIATE(dim) \
   template void Simulator<dim>::set_initial_temperature_and_compositional_fields(); \
   template void Simulator<dim>::compute_initial_pressure_field(); \
-  template void Simulator<dim>::interpolate_particle_properties(const AdvectionField &);
-
+  template void Simulator<dim>::interpolate_particle_properties(const std::vector<AdvectionField> &advection_fields);
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

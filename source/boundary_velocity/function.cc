@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -44,7 +44,7 @@ namespace aspect
     {
       Tensor<1,dim> velocity;
 
-      Utilities::NaturalCoordinate<dim> point =
+      const Utilities::NaturalCoordinate<dim> point =
         this->get_geometry_model().cartesian_to_other_coordinates(position, coordinate_system);
 
       for (unsigned int d=0; d<dim; ++d)
@@ -53,12 +53,12 @@ namespace aspect
       if (use_spherical_unit_vectors)
         velocity = Utilities::Coordinates::spherical_to_cartesian_vector(velocity, position);
 
-      // Aspect always wants things in MKS system. however, as described
+      // ASPECT always wants things in MKS system. however, as described
       // in the documentation of this class, we interpret the formulas
       // given to this plugin as meters per year if the global flag
       // for using years instead of seconds is given. so if someone
       // write "5" in their parameter file and sets the flag, then this
-      // means "5 meters/year" and we need to convert it to the Aspect
+      // means "5 meters/year" and we need to convert it to the ASPECT
       // time system by dividing by the number of seconds per year
       // to get MKS units
       if (this->convert_output_to_years())
@@ -94,18 +94,17 @@ namespace aspect
                              "A selection that determines the assumed coordinate "
                              "system for the function variables. Allowed values "
                              "are `cartesian', `spherical', and `depth'. `spherical' coordinates "
-                             "are interpreted as r,phi or r,phi,theta in 2D/3D "
+                             "are interpreted as r,phi or r,phi,theta in 2d/3d "
                              "respectively with theta being the polar angle. `depth' "
                              "will create a function, in which only the first "
                              "parameter is non-zero, which is interpreted to "
                              "be the depth of the point.");
           prm.declare_entry ("Use spherical unit vectors", "false",
                              Patterns::Bool (),
-                             "Specify velocity as r, phi, and theta components "
-                             "instead of x, y, and z. Positive velocities point up, east, "
-                             "and north (in 3D) or out and clockwise (in 2D). "
-                             "This setting only makes sense for spherical geometries."
-                            );
+                             "Specify velocity as $r$, $\\phi$, and $\\theta$ components "
+                             "instead of $x$, $y$, and $z$. Positive velocities point up, east, "
+                             "and north (in 3d) or out and clockwise (in 2d). "
+                             "This setting only makes sense for spherical geometries.");
 
           Functions::ParsedFunction<dim>::declare_parameters (prm, dim);
         }
@@ -113,6 +112,7 @@ namespace aspect
       }
       prm.leave_subsection();
     }
+
 
 
     template <int dim>
@@ -164,7 +164,8 @@ namespace aspect
                                             "that is elaborated in the parameters in section "
                                             "``Boundary velocity model|Function''. The format of these "
                                             "functions follows the syntax understood by the "
-                                            "muparser library, see Section~\\ref{sec:muparser-format}."
+                                            "muparser library, see "
+                                            "{ref}\\`sec:run-aspect:parameters-overview:muparser-format\\`."
                                             "\n\n"
                                             "The formula you describe in the mentioned "
                                             "section is a semicolon separated list of velocities "

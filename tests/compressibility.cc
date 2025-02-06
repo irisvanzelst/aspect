@@ -1,3 +1,23 @@
+/*
+  Copyright (C) 2022 - 2023 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
 #include <aspect/material_model/simple.h>
 #include <aspect/simulator_access.h>
 
@@ -5,22 +25,20 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     template <int dim>
     class Compressibility : public MaterialModel::Simple<dim>
     {
       public:
 
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const;
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
         /**
           * Return true if the compressibility() function returns something that
           * is not zero.
           */
-        virtual bool
-        is_compressible () const;
+        bool
+        is_compressible () const override;
     };
 
   }
@@ -38,7 +56,7 @@ namespace aspect
              MaterialModel::MaterialModelOutputs<dim> &out) const
     {
       Simple<dim>::evaluate(in, out);
-      for (unsigned int i=0; i < in.position.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const double pressure = in.pressure[i];
           out.densities[i] = 1.0 + pressure;
@@ -82,9 +100,8 @@ namespace aspect
     class Compressibility : public Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
-        virtual
         std::pair<std::string,std::string>
-        execute (TableHandler &statistics);
+        execute (TableHandler &statistics) override;
     };
   }
 }
@@ -100,7 +117,7 @@ namespace aspect
   {
     template <int dim>
     std::pair<std::string,std::string>
-    Compressibility<dim>::execute (TableHandler &statistics)
+    Compressibility<dim>::execute (TableHandler &)
     {
       // create a quadrature formula based on the temperature element alone.
       // be defensive about determining that what we think is the temperature
@@ -115,8 +132,8 @@ namespace aspect
                                         update_gradients         | update_values |
                                         update_quadrature_points | update_JxW_values);
 
-      std::vector<std::vector<double> > composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
-      std::vector<Tensor<1,dim> > velocity_values(quadrature_formula.size());
+      std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
+      std::vector<Tensor<1,dim>> velocity_values(quadrature_formula.size());
 
       typename DoFHandler<dim>::active_cell_iterator
       cell = this->get_dof_handler().begin_active(),
@@ -124,6 +141,7 @@ namespace aspect
 
       MaterialModel::MaterialModelInputs<dim> in(fe_face_values.n_quadrature_points, this->n_compositional_fields());
       MaterialModel::MaterialModelOutputs<dim> out(fe_face_values.n_quadrature_points, this->n_compositional_fields());
+      in.requested_properties = MaterialModel::MaterialProperties::density;
 
       // compute the integral of the viscosity. since we're on a unit box,
       // this also is the average value

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,8 +32,6 @@ namespace aspect
 {
   namespace BoundaryTraction
   {
-    using namespace dealii;
-
     /**
      * A class that implements traction boundary conditions based on a
      * functional description provided in the input file.
@@ -98,6 +96,12 @@ namespace aspect
          * choices are depth, cartesian and spherical.
          */
         Utilities::Coordinates::CoordinateSystem coordinate_system;
+
+        /**
+         * Whether to specify traction in x, y, z components, or
+         * r, phi, theta components.
+         */
+        bool use_spherical_unit_vectors;
     };
   }
 }

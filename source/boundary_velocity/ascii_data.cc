@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,21 +31,24 @@ namespace aspect
   {
     template <int dim>
     AsciiData<dim>::AsciiData ()
-    {}
+      = default;
 
 
     template <int dim>
     void
     AsciiData<dim>::initialize ()
     {
-      for (const auto &p : this->get_boundary_velocity_manager().get_active_boundary_velocity_conditions())
+      unsigned int i=0;
+      for (const auto &plugin : this->get_boundary_velocity_manager().get_active_plugins())
         {
-          for (const auto &plugin : p.second)
-            if (plugin.get() == this)
-              boundary_ids.insert(p.first);
+          if (plugin.get() == this)
+            boundary_ids.insert(this->get_boundary_velocity_manager().get_active_plugin_boundary_indicators()[i]);
+
+          ++i;
         }
-      AssertThrow(*(boundary_ids.begin()) != numbers::invalid_boundary_id,
-                  ExcMessage("Did not find the boundary indicator for the prescribed data plugin."));
+
+      AssertThrow(boundary_ids.empty() == false,
+                  ExcMessage("Did not find the boundary indicator for the velocity ascii data plugin."));
 
       Utilities::AsciiDataBoundary<dim>::initialize(boundary_ids,
                                                     dim);
@@ -70,7 +73,7 @@ namespace aspect
                        const Point<dim> &position) const
     {
       Tensor<1,dim> velocity;
-      for (unsigned int i = 0; i < dim; i++)
+      for (unsigned int i = 0; i < dim; ++i)
         velocity[i] = Utilities::AsciiDataBoundary<dim>::get_data_component(*(boundary_ids.begin()),
                                                                             position,
                                                                             i);
@@ -96,7 +99,7 @@ namespace aspect
                              Patterns::Bool (),
                              "Specify velocity as r, phi, and theta components "
                              "instead of x, y, and z. Positive velocities point up, east, "
-                             "and north (in 3D) or out and clockwise (in 2D). "
+                             "and north (in 3d) or out and clockwise (in 2d). "
                              "This setting only makes sense for spherical geometries."
                             );
         }

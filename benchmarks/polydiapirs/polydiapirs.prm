@@ -1,7 +1,7 @@
 # This is the setup of a polydiapirs experiment, i.e.
-# multiwavelength gravity structures. 
+# multiwavelength gravity structures.
 # It consists of three layers of Newtonian fluids
-# set in motion by gravitational instability, as in 
+# set in motion by gravitational instability, as in
 # case II of Weinberg and Schmeling 1992.
 
 set Dimension                              = 2
@@ -9,11 +9,12 @@ set Start time                             = 0
 set End time                               = 250
 set Use years in output instead of seconds = false
 set CFL number                             = 1.
-set Maximum time step                      = 0.1 
+set Maximum time step                      = 0.1
 set Output directory                       = output_polydiapirs
 
 subsection Geometry model
   set Model name = box
+
   subsection Box
     set X extent  = 2.24
     set Y extent  = 1.0000
@@ -28,6 +29,7 @@ end
 
 subsection Material model
   set Model name = multicomponent
+
   subsection Multicomponent
     set Densities = 100, 90, 89
     set Viscosities = 100, 1, 1
@@ -38,6 +40,7 @@ end
 
 subsection Gravity model
   set Model name = vertical
+
   subsection Vertical
     set Magnitude = 9.81
   end
@@ -46,12 +49,9 @@ end
 ############### Parameters describing the temperature field
 # Note: The temperature plays no role in this model
 
-subsection Boundary temperature model
-  set List of model names = box
-end
-
 subsection Initial temperature model
   set Model name = function
+
   subsection Function
     set Function expression = 0
   end
@@ -67,6 +67,7 @@ end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
     set Variable names      = x,z
     set Function expression = if( (z< 0.25 + (rand()-0.5)/5000. && z>=0.125+(rand()-0.5)/5000.) ,1 , 0 ) ; if (z<0.125+(rand    ()-0.5)/5000., 1 , 0)
@@ -86,11 +87,14 @@ end
 
 subsection Postprocess
   set List of postprocessors = visualization, velocity statistics, composition statistics, material statistics, global statistics, Stokes residual
+
   subsection Visualization
-    set List of output variables = viscosity,density, strain rate
+    set List of output variables = material properties, strain rate
     set Output format                 = vtu
     set Time between graphical output = 5
+
+    subsection Material properties
+      set List of material properties = viscosity, density
+    end
   end
 end
-
-

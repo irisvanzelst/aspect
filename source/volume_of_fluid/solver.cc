@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2023 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -21,19 +21,8 @@
 #include <aspect/global.h>
 #include <aspect/volume_of_fluid/handler.h>
 
-#if DEAL_II_VERSION_GTE(9,1,0)
-#  include <deal.II/lac/affine_constraints.h>
-#else
-#  include <deal.II/lac/constraint_matrix.h>
-#endif
-
-#ifdef ASPECT_USE_PETSC
-#include <deal.II/lac/solver_cg.h>
-#else
+#include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/trilinos_solver.h>
-#endif
-
-#include <deal.II/lac/pointer_matrix.h>
 
 #include <deal.II/fe/fe_values.h>
 
@@ -52,18 +41,12 @@ namespace aspect
 
     SolverControl solver_control (1000, tolerance);
 
-#ifdef ASPECT_USE_PETSC
-    SolverCG<LinearAlgebra::Vector> solver(solver_control);
-    LinearAlgebra::PreconditionJacobi precondition;
-    precondition.initialize(sim.system_matrix.block(block_idx, block_idx));
-#else
     TrilinosWrappers::SolverCG solver(solver_control);
     TrilinosWrappers::PreconditionJacobi precondition;
     precondition.initialize(sim.system_matrix.block(block_idx, block_idx));
-#endif
 
     // Create distributed vector (we need all blocks here even though we only
-    // solve for the current block) because only have a ConstraintMatrix
+    // solve for the current block) because only have a AffineConstraints<double>
     // for the whole system, current_linearization_point contains our initial guess.
     LinearAlgebra::BlockVector distributed_solution (
       this->introspection().index_sets.system_partitioning,
@@ -86,13 +69,15 @@ namespace aspect
     catch (const std::exception &exc)
       {
         if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
-          AssertThrow (false,
-                       ExcMessage (std::string("The iterative advection solver "
-                                               "did not converge. It reported the following error:\n\n")
-                                   +
-                                   exc.what()))
-          else
-            throw QuietException();
+          {
+            AssertThrow (false,
+                         ExcMessage (std::string("The iterative advection solver "
+                                                 "did not converge. It reported the following error:\n\n")
+                                     +
+                                     exc.what()));
+          }
+        else
+          throw QuietException();
       }
 
     sim.current_constraints.distribute (distributed_solution);
@@ -116,4 +101,6 @@ namespace aspect
 
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

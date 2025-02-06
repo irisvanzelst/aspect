@@ -38,12 +38,12 @@
  */
 
 /**
- * @defgroup InitialTopographyModels Describing the properties of the initial topography of the domain
+ * @defgroup InitialTopographyModels Describing the initial topography of the domain
  *
  * A module for the definition of properties related to initial topography of
  * the geometry. The goal of this module is to return the elevation at a
  * certain point on the surface and store and manage all information related
- * to this porpose.
+ * to this purpose.
  */
 
 /**
@@ -74,6 +74,13 @@
  * on the right hand side of the temperature equation. This includes, in
  * particular, terms such as shear and adiabatic heating, phase changes,
  * and radiogenic sources.
+ */
+
+/**
+ * @defgroup MeshDeformation Describing how to deform the mesh
+ *
+ * A module for the definition of algorithms and methods to deform the
+ * mesh during the computation, e.g. due to surface processes.
  */
 
 /**
@@ -119,9 +126,9 @@
 
 
 /**
- * @defgroup AdiabaticConditions Adiabatic conditions
+ * @defgroup AdiabaticConditions Describing Adiabatic conditions
  *
- * A group for all things that have to do with adiabatic conditions.
+ * A group for all things that have to do with adiabatic reference profiles.
  *
  * @ingroup InitialConditions
  */
@@ -156,6 +163,15 @@
  */
 
 /**
+ * @defgroup BoundaryHeatFlux Describing heat flux boundary conditions
+ *
+ * A module for the definition of functions and classes that have to do with
+ * describing heat flux boundary values for the temperature field.
+ *
+ * @ingroup BoundaryConditions
+ */
+
+/**
  * @defgroup BoundaryCompositions Describing boundary conditions for compositional fields
  *
  * A module for the definition of functions and classes that have to do with
@@ -183,12 +199,12 @@
  */
 
 /**
- * @defgroup BoundaryFluidPressures Describing fluid pressure boundary conditions 
+ * @defgroup BoundaryFluidPressures Describing fluid pressure boundary conditions
  * for the fluid velocity field
  *
  * A module for the definition of functions and classes that have to do with
  * describing fluid pressure boundary values.
- * These classes are currenlty only used for computations involving two-phase
+ * These classes are currently only used for computations involving two-phase
  * flow (e.g. melt), since the fluid pressure is only computed for
  * coupled Stokes-darcy flow.
  *

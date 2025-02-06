@@ -5,16 +5,13 @@
 # changes to conserve mass.
 
 set Additional shared libraries = ../plugins/libcompressibility_formulations.so
-
 set Dimension = 2
-
 set End time                               = 2e8
 set Use years in output instead of seconds = true
 set Adiabatic surface temperature          = 1600
 set Nonlinear solver scheme                = iterated Advection and Stokes
 set Nonlinear solver tolerance             = 1e-12
 set Max nonlinear iterations               = 25
-
 set Output directory                       = output-vertical_pipe
 
 subsection Adiabatic conditions model
@@ -45,13 +42,12 @@ subsection Compositional fields
   set Number of fields = 1
   set Names of fields = density_field
   set Compositional field methods = prescribed field
+  set Types of fields             = density
 end
-
 
 subsection Initial composition model
   set Model name = adiabatic density
 end
-
 
 subsection Geometry model
   set Model name = box
@@ -63,19 +59,17 @@ subsection Geometry model
   end
 end
 
-
 subsection Gravity model
   set Model name = vertical
+
   subsection Vertical
     set Magnitude = 10.0
   end
 end
 
-
 subsection Heating model
   set List of model names = adiabatic heating, shear heating
 end
-
 
 ############### Boundary conditions
 # We only fix the temperature at the upper boundary, the other boundaries
@@ -90,7 +84,7 @@ subsection Boundary temperature model
 end
 
 # To guarantuee a steady downward flow, we fix the velocity
-# at the bottom, leave the top open, and set it to free slip on the sides. 
+# at the bottom, leave the top open, and set it to free slip on the sides.
 subsection Boundary velocity model
   set Prescribed velocity boundary indicators = bottom:function
   set Tangential velocity boundary indicators = left, right
@@ -105,7 +99,6 @@ subsection Initial temperature model
   set Model name = adiabatic
 end
 
-
 subsection Material model
   set Model name = compressibility formulations
 
@@ -114,16 +107,14 @@ subsection Material model
   end
 end
 
-
 # We use a global refinement of 0 to have a single cell in width. More cells
 # allow for instabilities at the open boundary that would influence the
 # accuracy with increasing resolution.
 subsection Mesh refinement
-  set Initial adaptive refinement        = 0 
+  set Initial adaptive refinement        = 0
   set Initial global refinement          = 0
   set Time steps between mesh refinement = 0
 end
-
 
 subsection Postprocess
   set List of postprocessors = visualization, velocity statistics, temperature statistics, mass flux statistics, material statistics
@@ -134,7 +125,7 @@ subsection Postprocess
 
     # We are only interested in the last timestep (when the system hast reached
     # a steady state). For following the development of the system or checking
-    # if the solution already reached steady state, this parameter can be set 
+    # if the solution already reached steady state, this parameter can be set
     # to a smaller value.
     set Time between graphical output = 1e7
     set List of output variables = nonadiabatic temperature, nonadiabatic pressure, heating, material properties, strain rate

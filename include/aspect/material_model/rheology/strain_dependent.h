@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -26,13 +26,12 @@
 #include <aspect/simulator_access.h>
 
 #include<deal.II/fe/component_mask.h>
+#include <deal.II/matrix_free/fe_point_evaluation.h>
 
 namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     namespace Rheology
     {
       /**
@@ -55,6 +54,20 @@ namespace aspect
         viscous_weakening_with_viscous_strain_only
       };
 
+      /**
+       * Enumeration for selecting which type of healing mechanism to use.
+       * For the case no healing, no strain healing occurs.
+       * Otherwise, the strain is healed (reduced) as a function of temperature,
+       * a user defined healing time scale and additional parameters.
+       * Future models could consider strain healing formulations that are a function
+       * of time, deformation rate, or other parameters.
+       */
+      enum HealingMechanism
+      {
+        no_healing,
+        temperature_dependent
+      };
+
       template <int dim>
       class StrainDependent : public ::aspect::SimulatorAccess<dim>
       {
@@ -74,14 +87,41 @@ namespace aspect
 
           /**
            * A function that computes by how much the rheologic parameters change
-           * if strain weakening is applied. Given a compositional field with
-           * the index j and a vector of all compositional fields, it returns
-           * reduction factors for the cohesion, friction angle and the prefactor
-           * of the viscous flow law(s) used in the computation for that composition.
+           * if strain weakening is applied. Given a vector @p composition of all
+           * fields, it returns reduction factors for the cohesion, friction angle
+           * and the prefactor of the viscous flow law(s) for the compositional
+           * field with index @p j. The reason all fields are passed is that
+           * the weakening factors can depend on the values of fields that track
+           * different measures of previously applied strain.
            */
+          std::array<double, 3>
+          compute_strain_weakening_factors(const std::vector<double> &composition,
+                                           const unsigned int j) const;
+
+          /**
+           * @deprecated: Deprecated version of the function of the same
+           * name described above.
+           */
+          DEAL_II_DEPRECATED
           std::array<double, 3>
           compute_strain_weakening_factors(const unsigned int j,
                                            const std::vector<double> &composition) const;
+
+          /**
+           * A function that alters the viscous weakening factor based on the
+           * temperature field.
+           */
+          std::array<double, 3>
+          apply_temperature_dependence_to_strain_weakening_factors(const std::array<double, 3> &weakening_factors,
+                                                                   const double temperature,
+                                                                   const unsigned int j) const;
+
+          /**
+           * A function that computes the strain healing (reduction in accumulated strain)
+           */
+          double
+          calculate_strain_healing (const MaterialModel::MaterialModelInputs<dim> &in,
+                                    const unsigned int j) const;
 
           /**
            * A function that computes by how much the cohesion and internal friction
@@ -100,6 +140,11 @@ namespace aspect
           double
           calculate_viscous_weakening (const double strain_ii,
                                        const unsigned int j) const;
+
+          /**
+           * Whether to use the temperature-activated viscous strain weakening.
+           */
+          bool use_temperature_activated_strain_softening;
 
           /**
            * A function that fills the reaction terms for the finite strain tensor in
@@ -131,9 +176,17 @@ namespace aspect
           WeakeningMechanism
           get_weakening_mechanism () const;
 
+          /**
+           * A function that returns the selected type of strain healing mechanism.
+           */
+          HealingMechanism
+          get_healing_mechanism () const;
+
         private:
 
           WeakeningMechanism weakening_mechanism;
+
+          HealingMechanism healing_mechanism;
 
           /**
            * The start of the strain interval (plastic or total strain)
@@ -178,10 +231,42 @@ namespace aspect
            */
           std::vector<double> viscous_strain_weakening_factors;
 
+          /**
+           * The four temperatures that parameterize the temperature-activated strain softening.
+           * These can be different for each compositional field.
+           * ------            -------- 1
+           *       \          /
+           *        \        /
+           *         \______/ _ _ _ _ _ viscous_weakening_factor[2]
+           *
+           * ----------------------------> T
+           *     T0  T1   T2  T3
+           */
+          std::vector<double> viscous_strain_weakening_T0;
+          std::vector<double> viscous_strain_weakening_T1;
+          std::vector<double> viscous_strain_weakening_T2;
+          std::vector<double> viscous_strain_weakening_T3;
+
+          /**
+           * The healing rate used in the temperature dependent strain healing model.
+           */
+          double strain_healing_temperature_dependent_recovery_rate;
+
+          /**
+           * A prefactor of viscosity used in the strain healing calculation.
+           */
+          double strain_healing_temperature_dependent_prefactor;
+
+          /**
+           * We cache the evaluators that are necessary to evaluate the velocity
+           * gradients and compositions.
+           * By caching the evaluator, we can avoid recreating them
+           * every time we need it.
+           */
+          mutable std::unique_ptr<FEPointEvaluation<dim, dim>> evaluator;
+          mutable std::vector<std::unique_ptr<FEPointEvaluation<1, dim>>> composition_evaluators;
       };
     }
   }
 }
 #endif
-
-

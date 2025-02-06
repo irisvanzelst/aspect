@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -46,10 +46,9 @@ namespace aspect
         /**
          * Generate a coarse mesh for the geometry described by this class.
          * Makes perturbs the top boundary of the box with a function
-         * of the form z' = amplitude * cos(order * x )
+         * of the form z' = amplitude * std::cos(order * x )
          */
-        virtual
-        void create_coarse_mesh (parallel::distributed::Triangulation<dim> &coarse_grid) const;
+        void create_coarse_mesh (parallel::distributed::Triangulation<dim> &coarse_grid) const override;
 
         /**
          * Declare the parameters this class takes through input files.
@@ -62,25 +61,22 @@ namespace aspect
          * Read the parameters this class declares from the parameter
          * file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
         /**
          * Give the depth of a point.
          */
-        virtual
-        double depth( const Point<dim> &position) const;
+        double depth( const Point<dim> &position) const override;
 
         /**
          * Give the maximal depth of a point.
          */
-        virtual
-        double maximal_depth() const;
+        double maximal_depth() const override;
 
       private:
 
-        unsigned int order;  //Order of the perturbation
+        double order;  //Order of the perturbation
         double amplitude;  //amplitude of the perturbation
 
     };

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,8 +30,6 @@ namespace aspect
 {
   namespace GravityModel
   {
-    using namespace dealii;
-
     /**
      * A class that implements a gravity description based on
      * an AsciiData input file.
@@ -85,7 +83,7 @@ namespace aspect
         /**
          * Object containing the data profile.
          */
-        std::unique_ptr<aspect::Utilities::AsciiDataLookup<1> > profile;
+        std::unique_ptr<aspect::Utilities::StructuredDataLookup<1>> profile;
 
         /**
          * The column index of the gravity column in the data file.

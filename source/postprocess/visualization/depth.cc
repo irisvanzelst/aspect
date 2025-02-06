@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,7 +35,8 @@ namespace aspect
       Depth ()
         :
         DataPostprocessorScalar<dim> ("depth",
-                                      update_quadrature_points)
+                                      update_quadrature_points),
+        Interface<dim>("m")
       {}
 
 
@@ -44,7 +45,7 @@ namespace aspect
       void
       Depth<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         const unsigned int n_quadrature_points = input_data.solution_values.size();
         Assert (computed_quantities.size() == n_quadrature_points,    ExcInternalError());
@@ -70,7 +71,23 @@ namespace aspect
     {
       ASPECT_REGISTER_VISUALIZATION_POSTPROCESSOR(Depth,
                                                   "depth",
-                                                  "A visualization output postprocessor that outputs the depth for all points inside the domain, as determined by the geometry model.")
+                                                  "A visualization output postprocessor that outputs "
+                                                  "the depth for all points inside the domain, as "
+                                                  "determined by the geometry model."
+                                                  "\n\n"
+                                                  "It is worth comparing this visualization postprocessor with the "
+                                                  "one called ``surface elevation''. The current one is used to visualize a volume "
+                                                  "variable, whereas the latter only outputs information on "
+                                                  "the surface. Moreover ``depth'' is based on a member function of "
+                                                  "the geometry models that is documented as never returning a "
+                                                  "number less than zero -- in other words, it returns the depth "
+                                                  "of an evaluation point with regard to a reference surface that "
+                                                  "defines a zero depth, but for points that lie above this "
+                                                  "reference surface, it returns zero. As a consequence, it cannot "
+                                                  "be used to visualize positive elevations, whereas the the one "
+                                                  "called ``surface elevation'' can."
+                                                  "\n\n"
+                                                  "Physical units: \\si{\\meter}.")
     }
   }
 }

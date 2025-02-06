@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,14 +17,18 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_feature_types_object_h
-#define _world_feature_types_object_h
+#ifndef WORLD_BUILDER_TYPES_OBJECT_H
+#define WORLD_BUILDER_TYPES_OBJECT_H
 
-#include <world_builder/types/interface.h>
+#include <vector>
+
+#include "world_builder/types/interface.h"
 
 
 namespace WorldBuilder
 {
+  class Parameters;
+
   namespace Types
   {
     /**
@@ -37,36 +41,31 @@ namespace WorldBuilder
     * by index, and a list holds the values strictly ordered, only accessible
     * an iterator. An other difference it that lists have a name.
      */
-    class Object : public Interface
+    class Object final: public Interface
     {
       public:
         /**
          * Constructor for the declaration
          */
-        Object(const std::vector<std::string> required = std::vector<std::string>(),
+        Object(std::vector<std::string> required = std::vector<std::string>(),
                const bool additional_properties = false);
+
+        /**
+         * Copy constructor
+         */
+        Object(Object const &other);
 
         /**
          * Destructor
          */
-        ~Object();
-
-
-        /**
-         * Clone. The caller will be responsible for the liftime of this
-         * object, return a unique pointer. This clone can only be used
-         * when inner_type.size() == 0.
-         */
-        virtual
-        std::unique_ptr<Interface>   clone() const;
+        ~Object() final;
 
         /**
          * Todo
          */
-        virtual
         void write_schema(Parameters &prm,
                           const std::string &name,
-                          const std::string &documentation) const;
+                          const std::string &documentation) const override final;
 
 
         /**
@@ -75,9 +74,14 @@ namespace WorldBuilder
         std::vector<std::string> required;
         bool additional_properties;
 
+      protected:
+        Object *clone_impl() const override final
+        {
+          return new Object(*this);
+        };
 
     };
-  }
-}
+  } // namespace Types
+} // namespace WorldBuilder
 
 #endif

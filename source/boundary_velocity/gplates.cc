@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,8 +25,6 @@
 
 #include <deal.II/base/utilities.h>
 #include <deal.II/base/table.h>
-#include <fstream>
-#include <iostream>
 
 #include <boost/property_tree/xml_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
@@ -42,63 +40,16 @@ namespace aspect
       GPlatesLookup<dim>::GPlatesLookup(const Tensor<1,2> &surface_point_one,
                                         const Tensor<1,2> &surface_point_two)
       {
-        // get the Cartesian coordinates of the points the 2D model will lie in
-        // this computation is done also for 3D since it is not expensive and the
+        // get the Cartesian coordinates of the points the 2d model will lie in
+        // this computation is done also for 3d since it is not expensive and the
         // template dim is currently not used here. Could be changed.
         const Tensor<1,3> point_one = cartesian_surface_coordinates(convert_tensor<2,3>(surface_point_one));
         const Tensor<1,3> point_two = cartesian_surface_coordinates(convert_tensor<2,3>(surface_point_two));
 
-        // Set up the normal vector of an unrotated 2D spherical shell
-        // that by default lies in the x-y plane.
-        const double normal[3] = {0.0,0.0,1.0};
-        const Tensor<1,3> unrotated_normal_vector (normal);
-
-        // Compute the normal vector of the plane that contains
-        // the origin and the two user-specified points
-        Tensor<1,3> rotated_normal_vector = cross_product_3d(point_one,point_two);
-
-        rotated_normal_vector /= rotated_normal_vector.norm();
-
-        if ((rotated_normal_vector - unrotated_normal_vector).norm() > 1e-3)
-          {
-            // Calculate the crossing line of the two normals,
-            // which will be the rotation axis to transform the one
-            // normal into the other
-            Tensor<1,3> rotation_axis = cross_product_3d(unrotated_normal_vector,rotated_normal_vector);
-            rotation_axis /= rotation_axis.norm();
-
-            // Calculate the rotation angle from the inner product rule
-            const double rotation_angle = std::acos(rotated_normal_vector*unrotated_normal_vector);
-
-            rotation_matrix = rotation_matrix_from_axis(rotation_axis,rotation_angle);
-
-            // Now apply the rotation that will project point_one onto the known point
-            // (0,1,0).
-            const Tensor<1,3> rotated_point_one = transpose(rotation_matrix) * point_one;
-
-            const double point_one_coords[3] = {0.0,1.0,0.0};
-            const Tensor<1,3> final_point_one (point_one_coords);
-
-            const double second_rotation_angle = std::acos(rotated_point_one*final_point_one);
-            Tensor<1,3> second_rotation_axis = cross_product_3d(final_point_one,rotated_point_one);
-            second_rotation_axis /= second_rotation_axis.norm();
-
-            const Tensor<2,3> second_rotation_matrix = rotation_matrix_from_axis(second_rotation_axis,second_rotation_angle);
-
-            // The final rotation used for the model will be the combined
-            // rotation of the two operation above. This is achieved by a
-            // matrix multiplication of the rotation matrices.
-            // This concatenation of rotations is the reason for using a
-            // rotation matrix instead of a combined rotation_axis + angle
-            rotation_matrix = rotation_matrix * second_rotation_matrix;
-          }
-        else
-          {
-            rotation_matrix[0][0] = 1.0;
-            rotation_matrix[1][1] = 1.0;
-            rotation_matrix[2][2] = 1.0;
-          }
+        rotation_matrix = Utilities::compute_rotation_matrix_for_slice(point_one, point_two);
       }
+
+
 
       template <int dim>
       std::string
@@ -128,10 +79,10 @@ namespace aspect
                    << "   Input point 2 normalized cartesian coordinates: " << point_two  << std::endl
                    << "   Input point 2 rotated model coordinates: " << transpose(rotation_matrix) * point_two << std::endl
                    << std::endl <<  std::setprecision(2)
-                   << "   Model will be rotated by " << -rotation_angle * 180.0 / numbers::PI
+                   << "   Model will be rotated by " << -rotation_angle *constants::radians_to_degree
                    << " degrees around axis " << rotation_axis << std::endl
-                   << "   The ParaView rotation angles are: " << angles[0] << " " << angles [1] << " " << angles[2] << std::endl
-                   << "   The inverse ParaView rotation angles are: " << back_angles[0] << " " << back_angles [1] << " " << back_angles[2]
+                   << "   The ParaView rotation angles are: " << angles[0] << ' ' << angles [1] << ' ' << angles[2] << std::endl
+                   << "   The inverse ParaView rotation angles are: " << back_angles[0] << ' ' << back_angles [1] << ' ' << back_angles[2]
 
                    << std::endl;
           }
@@ -139,10 +90,12 @@ namespace aspect
         return output.str();
       }
 
+
+
       template <int dim>
       void
       GPlatesLookup<dim>::load_file(const std::string &filename,
-                                    const MPI_Comm &comm)
+                                    const MPI_Comm comm)
       {
         // Read data from disk and distribute among processes
         std::istringstream filecontent(
@@ -202,7 +155,7 @@ namespace aspect
             velocity_values[0][idx_theta][idx_phi]= spherical_velocities[0] * cmyr_si;
             velocity_values[1][idx_theta][idx_phi]= spherical_velocities[1] * cmyr_si;
 
-            i++;
+            ++i;
           }
 
         // Pad the longitude data with values for phi == 2*pi (== 0),
@@ -229,17 +182,19 @@ namespace aspect
         grid_extent[1].first = 0;
         grid_extent[1].second = 2 * numbers::PI;
 
-        for (unsigned int i = 0; i < 2; i++)
+        for (unsigned int i = 0; i < 2; ++i)
           {
             velocities[i]
-              = std_cxx14::make_unique<Functions::InterpolatedUniformGridData<2>> (grid_extent,
-                                                                                   table_intervals,
-                                                                                   velocity_values[i]);
+              = std::make_unique<Functions::InterpolatedUniformGridData<2>> (grid_extent,
+                                                                              table_intervals,
+                                                                              velocity_values[i]);
           }
 
         AssertThrow(i == n_points,
                     ExcMessage (std::string("Number of read in points does not match number of points in file. File corrupted?")));
       }
+
+
 
       template <int dim>
       Tensor<1,dim>
@@ -299,6 +254,8 @@ namespace aspect
         return output_boundary_velocity;
       }
 
+
+
       template <int dim>
       Tensor<1,dim>
       GPlatesLookup<dim>::cartesian_velocity_at_surface_point(const std::array<double,3> &spherical_point) const
@@ -309,14 +266,14 @@ namespace aspect
         // Main work, interpolate velocity at this point
         Tensor<1,2> interpolated_velocity;
 
-        for (unsigned int i = 0; i < 2; i++)
+        for (unsigned int i = 0; i < 2; ++i)
           interpolated_velocity[i] = velocities[i]->value(lookup_coordinates);
 
         // Transform interpolated_velocity in cartesian coordinates
         const Tensor<1,3> interpolated_velocity_in_cart = sphere_to_cart_velocity(interpolated_velocity,spherical_point);
 
-        // Convert_tensor conveniently also handles the projection to the 2D plane by
-        // omitting the z-component of velocity (since the 2D model lies in the x-y plane).
+        // Convert_tensor conveniently also handles the projection to the 2d plane by
+        // omitting the z-component of velocity (since the 2d model lies in the x-y plane).
         const Tensor<1,dim> output_boundary_velocity = (dim == 2)
                                                        ?
                                                        convert_tensor<3,dim>(transpose(rotation_matrix) * interpolated_velocity_in_cart)
@@ -325,6 +282,8 @@ namespace aspect
 
         return output_boundary_velocity;
       }
+
+
 
       template <int dim>
       Tensor<1,3>
@@ -337,6 +296,8 @@ namespace aspect
         ccoord[2] = std::cos(sposition[0]); // Z
         return ccoord;
       }
+
+
 
       template <int dim>
       Tensor<1,3>
@@ -353,23 +314,7 @@ namespace aspect
         return velocity;
       }
 
-      template <int dim>
-      Tensor<2,3>
-      GPlatesLookup<dim>::rotation_matrix_from_axis (const Tensor<1,3> &rotation_axis,
-                                                     const double rotation_angle) const
-      {
-        Tensor<2,3> rotation_matrix;
-        rotation_matrix[0][0] = (1-std::cos(rotation_angle)) * rotation_axis[0]*rotation_axis[0] + std::cos(rotation_angle);
-        rotation_matrix[0][1] = (1-std::cos(rotation_angle)) * rotation_axis[0]*rotation_axis[1] - rotation_axis[2] * std::sin(rotation_angle);
-        rotation_matrix[0][2] = (1-std::cos(rotation_angle)) * rotation_axis[0]*rotation_axis[2] + rotation_axis[1] * std::sin(rotation_angle);
-        rotation_matrix[1][0] = (1-std::cos(rotation_angle)) * rotation_axis[1]*rotation_axis[0] + rotation_axis[2] * std::sin(rotation_angle);
-        rotation_matrix[1][1] = (1-std::cos(rotation_angle)) * rotation_axis[1]*rotation_axis[1] + std::cos(rotation_angle);
-        rotation_matrix[1][2] = (1-std::cos(rotation_angle)) * rotation_axis[1]*rotation_axis[2] - rotation_axis[0] * std::sin(rotation_angle);
-        rotation_matrix[2][0] = (1-std::cos(rotation_angle)) * rotation_axis[2]*rotation_axis[0] - rotation_axis[1] * std::sin(rotation_angle);
-        rotation_matrix[2][1] = (1-std::cos(rotation_angle)) * rotation_axis[2]*rotation_axis[1] + rotation_axis[0] * std::sin(rotation_angle);
-        rotation_matrix[2][2] = (1-std::cos(rotation_angle)) * rotation_axis[2]*rotation_axis[2] + std::cos(rotation_angle);
-        return rotation_matrix;
-      }
+
 
       template <int dim>
       double
@@ -393,6 +338,8 @@ namespace aspect
 
         return rotation_angle;
       }
+
+
 
       template <int dim>
       std::array<double,3>
@@ -432,7 +379,7 @@ namespace aspect
         const double y3 = rotation_matrix[1][1];
         const double z3 = rotation_matrix[1][2];
 
-        double d1 = sqrt(x2*x2 + z2*z2);
+        double d1 = std::sqrt(x2*x2 + z2*z2);
 
         double cosTheta, sinTheta;
         if (d1 < std::numeric_limits<double>::min())
@@ -447,10 +394,10 @@ namespace aspect
           }
 
         double theta = atan2(sinTheta, cosTheta);
-        orientation[1] = - theta * 180 / numbers::PI;
+        orientation[1] = - theta * constants::radians_to_degree;
 
         // now rotate about x axis
-        double d = sqrt(x2*x2 + y2*y2 + z2*z2);
+        double d = std::sqrt(x2*x2 + y2*y2 + z2*z2);
 
         double sinPhi, cosPhi;
         if (d < std::numeric_limits<double>::min())
@@ -470,12 +417,12 @@ namespace aspect
           }
 
         double phi = atan2(sinPhi, cosPhi);
-        orientation[0] = phi * 180 / numbers::PI;
+        orientation[0] = phi * constants::radians_to_degree;
 
         // finally, rotate about z
         double x3p = x3*cosTheta - z3*sinTheta;
         double y3p = - sinPhi*sinTheta*x3 + cosPhi*y3 - sinPhi*cosTheta*z3;
-        double d2 = sqrt(x3p*x3p + y3p*y3p);
+        double d2 = std::sqrt(x3p*x3p + y3p*y3p);
 
         double cosAlpha, sinAlpha;
         if (d2 < std::numeric_limits<double>::min())
@@ -490,9 +437,11 @@ namespace aspect
           }
 
         double alpha = atan2(sinAlpha, cosAlpha);
-        orientation[2] = alpha * 180 / numbers::PI;
+        orientation[2] = alpha * constants::radians_to_degree;
         return orientation;
       }
+
+
 
       template <int dim>
       template <int in, int out>
@@ -500,12 +449,13 @@ namespace aspect
       GPlatesLookup<dim>::convert_tensor (const Tensor<1,in> &old_tensor) const
       {
         Tensor<1,out> new_tensor;
-        for (unsigned int i = 0; i < out; i++)
+        for (unsigned int i = 0; i < out; ++i)
           if (i < in) new_tensor[i] = old_tensor[i];
           else new_tensor[i] = 0.0;
 
         return new_tensor;
       }
+
 
 
       template <int dim>
@@ -518,7 +468,7 @@ namespace aspect
 
         const int gplates_1_3_version[3] = {1,6,322};
 
-        for (unsigned int i = 0; i < int_versions.size(); i++)
+        for (unsigned int i = 0; i < int_versions.size(); ++i)
           {
             if (int_versions[i] > gplates_1_3_version[i])
               return true;
@@ -529,6 +479,8 @@ namespace aspect
         return false;
       }
     }
+
+
 
     template <int dim>
     GPlates<dim>::GPlates ()
@@ -548,6 +500,7 @@ namespace aspect
     {}
 
 
+
     template <int dim>
     void
     GPlates<dim>::initialize ()
@@ -562,7 +515,7 @@ namespace aspect
 
       if (dim == 2)
         Assert (pointone != pointtwo,
-                ExcMessage ("To define a plane for the 2D model the two assigned points "
+                ExcMessage ("To define a plane for the 2d model the two assigned points "
                             "may not be equal."));
 
       AssertThrow (this->get_geometry_model().natural_coordinate_system() == Utilities::Coordinates::spherical,
@@ -570,8 +523,8 @@ namespace aspect
                                "preferred coordinate system of the geometry model is spherical "
                                "(e.g. spherical shell, chunk, sphere)."));
 
-      lookup = std_cxx14::make_unique<internal::GPlatesLookup<dim>>(pointone, pointtwo);
-      old_lookup = std_cxx14::make_unique<internal::GPlatesLookup<dim>>(pointone, pointtwo);
+      lookup = std::make_unique<internal::GPlatesLookup<dim>>(pointone, pointtwo);
+      old_lookup = std::make_unique<internal::GPlatesLookup<dim>>(pointone, pointtwo);
 
       // display the GPlates module information at model start.
       this->get_pcout() << lookup->screen_output(pointone, pointtwo);
@@ -587,10 +540,10 @@ namespace aspect
         (current_file_number + 1);
 
       this->get_pcout() << std::endl << "   Loading GPlates data boundary file "
-                        << create_filename (current_file_number) << "." << std::endl << std::endl;
+                        << create_filename (current_file_number) << '.' << std::endl << std::endl;
 
       const std::string filename (create_filename (current_file_number));
-      if (Utilities::fexists(filename))
+      if (Utilities::fexists(filename, this->get_mpi_communicator()))
         lookup->load_file(filename,this->get_mpi_communicator());
       else
         AssertThrow(false,
@@ -612,8 +565,8 @@ namespace aspect
         {
           const std::string filename (create_filename (next_file_number));
           this->get_pcout() << std::endl << "   Loading GPlates data boundary file "
-                            << filename << "." << std::endl << std::endl;
-          if (Utilities::fexists(filename))
+                            << filename << '.' << std::endl << std::endl;
+          if (Utilities::fexists(filename, this->get_mpi_communicator()))
             {
               lookup.swap(old_lookup);
               lookup->load_file(filename,this->get_mpi_communicator());
@@ -622,6 +575,7 @@ namespace aspect
             end_time_dependence ();
         }
     }
+
 
 
     template <int dim>
@@ -635,6 +589,7 @@ namespace aspect
       std::string str_filename (buffer.data());
       return str_filename;
     }
+
 
 
     template <int dim>
@@ -687,6 +642,8 @@ namespace aspect
         }
     }
 
+
+
     template <int dim>
     void
     GPlates<dim>::update_data (const bool load_both_files)
@@ -698,8 +655,8 @@ namespace aspect
         {
           const std::string filename (create_filename (current_file_number));
           this->get_pcout() << std::endl << "   Loading GPlates data boundary file "
-                            << filename << "." << std::endl << std::endl;
-          if (Utilities::fexists(filename))
+                            << filename << '.' << std::endl << std::endl;
+          if (Utilities::fexists(filename, this->get_mpi_communicator()))
             {
               lookup.swap(old_lookup);
               lookup->load_file(filename,this->get_mpi_communicator());
@@ -719,8 +676,8 @@ namespace aspect
 
       const std::string filename (create_filename (next_file_number));
       this->get_pcout() << std::endl << "   Loading GPlates data boundary file "
-                        << filename << "." << std::endl << std::endl;
-      if (Utilities::fexists(filename))
+                        << filename << '.' << std::endl << std::endl;
+      if (Utilities::fexists(filename, this->get_mpi_communicator()))
         {
           lookup.swap(old_lookup);
           lookup->load_file(filename,this->get_mpi_communicator());
@@ -731,6 +688,8 @@ namespace aspect
         end_time_dependence ();
     }
 
+
+
     template <int dim>
     void
     GPlates<dim>::end_time_dependence ()
@@ -740,10 +699,12 @@ namespace aspect
       time_dependent = false;
       // Give warning if first processor
       this->get_pcout() << std::endl
-                        << "   Loading new velocity file did not succeed." << std::endl
+                        << "   Loading new gplates velocity file did not succeed." << std::endl
                         << "   Assuming constant boundary conditions for rest of model run."
                         << std::endl << std::endl;
     }
+
+
 
     template <int dim>
     Tensor<1,dim>
@@ -764,18 +725,19 @@ namespace aspect
 
       if ((this->get_time() - first_data_file_model_time >= 0.0) && (this->get_geometry_model().depth(position) <= lithosphere_thickness + magic_number))
         {
-          const Tensor<1,dim> data = lookup->surface_velocity(position);
+          const Tensor<1,dim> data = velocity_scaling_factor * lookup->surface_velocity(position);
 
           if (!time_dependent)
             return data;
 
-          const Tensor<1,dim> old_data = old_lookup->surface_velocity(position);
+          const Tensor<1,dim> old_data = velocity_scaling_factor * old_lookup->surface_velocity(position);
 
           return time_weight * data + (1 - time_weight) * old_data;
         }
       else
         return Tensor<1,dim>();
     }
+
 
 
     template <int dim>
@@ -801,8 +763,8 @@ namespace aspect
                              "The file name of the material data. Provide file in format: "
                              "(Velocity file name).\\%d.gpml where \\%d is any sprintf integer "
                              "qualifier, specifying the format of the current file number.");
-          prm.declare_entry ("First data file model time", "0",
-                             Patterns::Double (0),
+          prm.declare_entry ("First data file model time", "0.",
+                             Patterns::Double (0.),
                              "Time from which on the velocity file with number 'First velocity "
                              "file number' is used as boundary condition. Previous to this "
                              "time, a no-slip boundary condition is assumed. Depending on the setting "
@@ -820,12 +782,12 @@ namespace aspect
                              "'First velocity file number' and decrease the file number during "
                              "the model run.");
           prm.declare_entry ("Data file time step", "1e6",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Time step between following velocity files. "
                              "Depending on the setting of the global 'Use years in output instead of seconds' flag "
                              "in the input file, this number is either interpreted as seconds or as years. "
                              "The default is one million, i.e., either one million seconds or one million years.");
-          prm.declare_entry ("Scale factor", "1",
+          prm.declare_entry ("Scale factor", "1.",
                              Patterns::Double (),
                              "Scalar factor, which is applied to the boundary velocity. "
                              "You might want to use this to scale the velocities to a "
@@ -833,12 +795,14 @@ namespace aspect
                              "plate reconstruction.");
           prm.declare_entry ("Point one", "1.570796,0.0",
                              Patterns::Anything (),
-                             "Point that determines the plane in which a 2D model lies in. Has to be in the format `a,b' where a and b are theta (polar angle)  and phi in radians.");
+                             "Point that determines the plane in which a 2d model lies in. Has to be in the format `a,b' where a and b are theta (polar angle) and "
+                             "phi in radians. This value is not utilized in 3d geometries, and can therefore be set to the default or any user-defined quantity.");
           prm.declare_entry ("Point two", "1.570796,1.570796",
                              Patterns::Anything (),
-                             "Point that determines the plane in which a 2D model lies in. Has to be in the format `a,b' where a and b are theta (polar angle)  and phi in radians.");
-          prm.declare_entry ("Lithosphere thickness", "100000",
-                             Patterns::Double (0),
+                             "Point that determines the plane in which a 2d model lies in. Has to be in the format `a,b' where a and b are theta (polar angle) and "
+                             "phi in radians. This value is not utilized in 3d geometries, and can therefore be set to the default or any user-defined quantity.");
+          prm.declare_entry ("Lithosphere thickness", "100000.",
+                             Patterns::Double (0.),
                              "Determines the depth of the lithosphere, so that the GPlates velocities can be applied at the sides of the model "
                              "as well as at the surface.");
         }
@@ -846,6 +810,7 @@ namespace aspect
       }
       prm.leave_subsection();
     }
+
 
 
     template <int dim>
@@ -863,7 +828,7 @@ namespace aspect
           first_data_file_model_time = prm.get_double ("First data file model time");
           first_data_file_number     = prm.get_integer("First data file number");
           decreasing_file_order      = prm.get_bool   ("Decreasing file order");
-          scale_factor               = prm.get_double ("Scale factor");
+          velocity_scaling_factor    = prm.get_double ("Scale factor");
           point1                     = prm.get        ("Point one");
           point2                     = prm.get        ("Point two");
           lithosphere_thickness      = prm.get_double ("Lithosphere thickness");
@@ -886,6 +851,16 @@ namespace aspect
 {
   namespace BoundaryVelocity
   {
+    namespace internal
+    {
+#define INSTANTIATE(dim) \
+  template class GPlatesLookup<dim>;
+
+      ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
+    }
+
     ASPECT_REGISTER_BOUNDARY_VELOCITY_MODEL(GPlates,
                                             "gplates",
                                             "Implementation of a model in which the boundary "

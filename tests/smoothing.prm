@@ -1,19 +1,16 @@
 # Smoothing
 # Here we prescribe a circular Stokes flow and test if EV with smoothing works while it rotates
 
-# set CFL number = 0.1 
+# set CFL number = 0.1
 set Dimension                              = 2
-
 set Use years in output instead of seconds = false
 set End time                               = .5
 set Output directory                       = output
+set Nonlinear solver scheme                = single Advection, no Stokes
 
-
-
-subsection Prescribed Stokes solution  
+subsection Prescribed Stokes solution
   set Model name = circle
 end
-set Nonlinear solver scheme                = single Advection, no Stokes
 
 subsection Discretization
   set Temperature polynomial degree = 2
@@ -22,8 +19,6 @@ subsection Discretization
     set Use artificial viscosity smoothing = true
   end
 end
-
-
 
 subsection Geometry model
   set Model name = box
@@ -36,20 +31,19 @@ subsection Geometry model
   end
 end
 
-
 subsection Initial temperature model
   set Model name = function
 
   subsection Function
     set Variable names      = x,y
-    set Function constants  = 
+    set Function constants  =
     set Function expression =  if((sqrt((x-0)^2+(y-0.5)^2)<0.3)&(abs(x)>=0.05|y>=0.7),1,if(sqrt((x-0)^2+(y+0.5)^2)<0.3,1-sqrt((x-0)^2+(y+0.5)^2)/0.3,if(sqrt((x+0.5)^2+(y+0)^2)<0.3,1.0/4.0*(1+cos(pi*min(sqrt((x+0.5)^2+(y+0)^2)/0.3,1))),0)))
   end
 end
 
-
 subsection Boundary temperature model
   set List of model names = box
+  set Fixed temperature boundary indicators   = top, bottom, left, right
 
   subsection Box
     set Bottom temperature = 0
@@ -59,16 +53,6 @@ subsection Boundary temperature model
   end
 end
 
-
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
-subsection Boundary temperature model
-  set Fixed temperature boundary indicators   = top, bottom, left, right
-end
-
-
 subsection Gravity model
   set Model name = vertical
 
@@ -77,9 +61,8 @@ subsection Gravity model
   end
 end
 
-
 subsection Material model
-  set Model name = simple # default:
+  set Model name = simple
 
   subsection Simple model
     set Reference density             = 1
@@ -87,17 +70,15 @@ subsection Material model
     set Reference temperature         = 0
     set Thermal conductivity          = 1e-5
     set Thermal expansion coefficient = 0
-    set Viscosity                     = 0
+    set Viscosity                     = 1
   end
 end
-
 
 subsection Mesh refinement
   set Initial global refinement                = 3
   set Initial adaptive refinement              = 0
   set Time steps between mesh refinement       = 0
 end
-
 
 subsection Postprocess
   set List of postprocessors = velocity statistics, temperature statistics, heat flux statistics, visualization

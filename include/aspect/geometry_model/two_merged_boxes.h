@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,22 +22,20 @@
 #ifndef _aspect_geometry_model_two_merged_boxes_h
 #define _aspect_geometry_model_two_merged_boxes_h
 
-#include <aspect/geometry_model/box.h>
-
+#include <aspect/geometry_model/interface.h>
+#include <aspect/simulator_access.h>
 
 namespace aspect
 {
   namespace GeometryModel
   {
-    using namespace dealii;
-
     /**
      * A class that describes a box geometry of certain width, height, and
      * depth (in 3d) and adds two (four in 3D) additional boundary indicators
      * for the lithospheric part of the vertical boundaries.
      */
     template <int dim>
-    class TwoMergedBoxes : public Box<dim>
+    class TwoMergedBoxes : public Interface<dim>, public SimulatorAccess<dim>
     {
       public:
 
@@ -50,13 +48,13 @@ namespace aspect
          * Return a point that denotes the size of the box in each dimension
          * of the domain.
          */
-        Point<dim> get_extents () const override;
+        Point<dim> get_extents () const;
 
         /**
          * Return a point that denotes the lower left corner of the box
          * domain.
          */
-        Point<dim> get_origin () const override;
+        Point<dim> get_origin () const;
 
         /**
          * Return the typical length scale one would expect of features in
@@ -80,6 +78,12 @@ namespace aspect
          * that also matches these definitions.
          */
         double depth(const Point<dim> &position) const override;
+
+        /**
+         * Return the height of the given position relative to
+         * the initial box height.
+         */
+        double height_above_reference_surface(const Point<dim> &position) const override;
 
         /**
          * @copydoc Interface<dim>::representative_point()
@@ -126,8 +130,19 @@ namespace aspect
          * Return the set of periodic boundaries as described in the input
          * file.
          */
-        std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >
+        std::set<std::pair<std::pair<types::boundary_id, types::boundary_id>, unsigned int>>
         get_periodic_boundary_pairs () const override;
+
+        /**
+         * @copydoc Interface::adjust_positions_for_periodicity
+         *
+         * Apply a translation to all points outside of the domain
+         * to account for periodicity.
+         */
+        void
+        adjust_positions_for_periodicity (Point<dim> &position,
+                                          const ArrayView<Point<dim>> &connected_positions = {},
+                                          const ArrayView<Tensor<1, dim>> &connected_velocities = {}) const override;
 
         /**
          * @copydoc Interface::has_curved_elements()
@@ -147,7 +162,7 @@ namespace aspect
 
         /**
          * Returns what the natural coordinate system for this geometry model is,
-         * which for two merged boxex is Cartesian.
+         * which for two merged boxes is Cartesian.
          */
         aspect::Utilities::Coordinates::CoordinateSystem natural_coordinate_system() const override;
 
@@ -179,6 +194,15 @@ namespace aspect
         parse_parameters (ParameterHandler &prm) override;
 
       private:
+        /**
+         * Whether to make the grid by gluing together two boxes, or just
+         * use one chunk to make the grid. Using two grids glued together
+         * is a safer option, since it forces the boundary conditions
+         * to be always applied to the same depth, but one unified grid allows
+         * for a more flexible usage of the adaptive refinement.
+         */
+        bool use_merged_grids;
+
         /**
          * Extent of the whole model domain in x-, y-, and z-direction (in 3d).
          */
@@ -213,12 +237,12 @@ namespace aspect
         /**
          * The number of cells in each coordinate direction for the lower box.
          */
-        unsigned int lower_repetitions[dim];
+        std::array<unsigned int, dim> lower_repetitions;
 
         /**
          * The number of cells in each coordinate direction for the upper box.
          */
-        unsigned int upper_repetitions[dim];
+        std::array<unsigned int, dim> upper_repetitions;
 
         /**
          * The height where the lithospheric part of the vertical boundary begins
@@ -229,10 +253,8 @@ namespace aspect
         /**
          * Bind boundary indicators to child cells after each mesh refinement round.
          */
-        virtual
         void
         set_boundary_indicators (parallel::distributed::Triangulation<dim> &triangulation) const;
-
     };
   }
 }

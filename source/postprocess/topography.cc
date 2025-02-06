@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -51,8 +51,10 @@ namespace aspect
 
       const types::boundary_id relevant_boundary = this->get_geometry_model().translate_symbolic_boundary_name_to_id ("top");
 
-      // Get a quadrature rule that exists only on the corners
-      QTrapez<dim-1> face_corners;
+      // Define a quadrature rule that has points only on the vertices of
+      // a face, so that we can evaluate the solution at the surface
+      // nodes.
+      const QTrapezoid<dim-1> face_corners;
       FEFaceValues<dim> face_vals (this->get_mapping(), this->get_fe(), face_corners, update_quadrature_points);
 
       // have a stream into which we write the data. the text stream is then
@@ -60,14 +62,22 @@ namespace aspect
       std::ostringstream output_stats;
       std::ostringstream output_file;
 
+      // On processor 0, write the file header
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+        {
+          output_file << "# "
+                      << ((dim==2)? "x y" : "x y z")
+                      << " topography" << std::endl;
+        }
+
       // Choose stupidly large values for initialization
-      double local_max_height = -std::numeric_limits<double>::max();
+      double local_max_height = std::numeric_limits<double>::lowest();
       double local_min_height = std::numeric_limits<double>::max();
 
       // loop over all of the surface cells and save the elevation to stored_value
       for (const auto &cell : this->get_dof_handler().active_cell_iterators())
         if (cell->is_locally_owned() && cell->at_boundary())
-          for (unsigned int face_no = 0; face_no < GeometryInfo<dim>::faces_per_cell; ++face_no)
+          for (const unsigned int face_no : cell->face_indices())
             if (cell->face(face_no)->at_boundary())
               {
                 if ( cell->face(face_no)->boundary_id() != relevant_boundary)
@@ -100,10 +110,10 @@ namespace aspect
       const char *columns[] = { "Minimum topography (m)",
                                 "Maximum topography (m)"
                               };
-      for (unsigned int i=0; i<sizeof(columns)/sizeof(columns[0]); ++i)
+      for (auto &column : columns)
         {
-          statistics.set_precision (columns[i], 8);
-          statistics.set_scientific (columns[i], true);
+          statistics.set_precision (column, 8);
+          statistics.set_scientific (column, true);
         }
 
       output_stats.precision(4);
@@ -132,55 +142,9 @@ namespace aspect
       if (this->get_parameters().run_postprocessors_on_nonlinear_iterations)
         filename.append("." + Utilities::int_to_string (this->get_nonlinear_iteration(), 4));
 
-      const unsigned int max_data_length = Utilities::MPI::max (output_file.str().size()+1,
-                                                                this->get_mpi_communicator());
-
-      const unsigned int mpi_tag = 777;
-
-      // on processor 0, collect all of the data the individual processors send
-      // and concatenate them into one file
-      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
-        {
-          std::ofstream file (filename.c_str());
-
-          file << "# "
-               << ((dim==2)? "x y" : "x y z")
-               << " topography" << std::endl;
-
-          // first write out the data we have created locally
-          file << output_file.str();
-
-          std::string tmp;
-          tmp.resize (max_data_length, '\0');
-
-          // then loop through all of the other processors and collect
-          // data, then write it to the file
-          for (unsigned int p=1; p<Utilities::MPI::n_mpi_processes(this->get_mpi_communicator()); ++p)
-            {
-              MPI_Status status;
-              // get the data. note that MPI says that an MPI_Recv may receive
-              // less data than the length specified here. since we have already
-              // determined the maximal message length, we use this feature here
-              // rather than trying to find out the exact message length with
-              // a call to MPI_Probe.
-              MPI_Recv (&tmp[0], max_data_length, MPI_CHAR, p, mpi_tag,
-                        this->get_mpi_communicator(), &status);
-
-              // output the string. note that 'tmp' has length max_data_length,
-              // but we only wrote a certain piece of it in the MPI_Recv, ended
-              // by a \0 character. write only this part by outputting it as a
-              // C string object, rather than as a std::string
-              file << tmp.c_str();
-            }
-        }
-      else
-        // on other processors, send the data to processor zero. include the \0
-        // character at the end of the string
-        {
-          output_file << "\0";
-          MPI_Send (&output_file.str()[0], output_file.str().size()+1, MPI_CHAR, 0, mpi_tag,
-                    this->get_mpi_communicator());
-        }
+      Utilities::collect_and_write_file_content(filename,
+                                                output_file.str(),
+                                                this->get_mpi_communicator());
 
       // if output_interval is positive, then update the last supposed output
       // time
@@ -209,12 +173,12 @@ namespace aspect
         prm.enter_subsection("Topography");
         {
           prm.declare_entry ("Output to file", "false",
-                             Patterns::List(Patterns::Bool()),
+                             Patterns::Bool(),
                              "Whether or not to write topography to a text file named named "
                              "'topography.NNNNN' in the output directory");
 
           prm.declare_entry ("Time between text output", "0.",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The time interval between each generation of "
                              "text output files. A value of zero indicates "
                              "that output should be generated in each time step. "
@@ -270,6 +234,17 @@ namespace aspect
                                   "where NNNNN is the number of the time step.\n"
                                   "The file format then consists of lines with Euclidean coordinates "
                                   "followed by the corresponding topography value."
-                                  "Topography is printed/written in meters.")
+                                  "Topography is printed/written in meters."
+                                  "\n\n"
+                                  "It is worth comparing this postprocessor with the "
+                                  "visualization postprocessor called ``surface elevation''. The latter is "
+                                  "used to *visualize* the surface elevation in graphical form, by "
+                                  "outputting it into the same files that the solution and other "
+                                  "postprocessed variables are written, to then be used for "
+                                  "visualization using programs such as VisIt or Paraview. In "
+                                  "contrast, the current postprocessor generates the same *kind* "
+                                  "of information, but instead writes it as a point cloud that "
+                                  "can then more easily be processed using tools other "
+                                  "than visualization programs.")
   }
 }

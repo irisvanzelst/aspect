@@ -22,6 +22,7 @@ set Pressure normalization                 = volume
 
 subsection Geometry model
   set Model name = box
+
   subsection Box
     set X extent = 1
     set Y extent = 1
@@ -54,10 +55,6 @@ end
 # As above, there is no need to set anything for the
 # temperature boundary conditions.
 
-subsection Boundary temperature model
-  set List of model names = box
-end
-
 subsection Initial temperature model
   set Model name = function
 
@@ -66,12 +63,11 @@ subsection Initial temperature model
   end
 end
 
-
 ############### Parameters describing the discretization
 # The following parameters describe how often we want to refine
 # the mesh globally and adaptively, what fraction of cells should
 # be refined in each adaptive refinement step, and what refinement
-# indicator to use when refining the mesh adaptively. 
+# indicator to use when refining the mesh adaptively.
 
 subsection Mesh refinement
   set Initial adaptive refinement        = 0
@@ -82,12 +78,17 @@ end
 
 ############### Parameters describing what to do with the solution
 # The final section allows us to choose which postprocessors to
-# run at the end of each time step. 
+# run at the end of each time step.
 
 subsection Postprocess
   set List of postprocessors = visualization, velocity statistics, DoneaHuertaPostprocessor
+
   subsection Visualization
-    set List of output variables = density, viscosity, strain rate, gravity
+    set List of output variables = material properties, strain rate, gravity
+
+    subsection Material properties
+      set List of material properties = density, viscosity
+    end
   end
 end
 
@@ -95,6 +96,7 @@ subsection Solver parameters
   subsection Stokes solver parameters
     set Linear solver tolerance = 1e-12
     set Number of cheap Stokes solver steps = 0
-#    set Use direct solver for Stokes system             = true
+
+    #    set Use direct solver for Stokes system             = true
   end
 end

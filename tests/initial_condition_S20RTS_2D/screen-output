@@ -2,10 +2,9 @@
 Number of active cells: 48 (on 2 levels)
 Number of degrees of freedom: 792 (480+72+240)
 
-*** Timestep 0:  t=0 seconds
+*** Timestep 0:  t=0 seconds, dt=0 seconds
    Solving temperature system... 0 iterations.
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 21+0 iterations.
+   Solving Stokes system (GMG)... 16+0 iterations.
 
    Postprocessing:
      Writing graphical output: output-initial_condition_S20RTS_2D/solution/solution-00000
@@ -14,7 +13,4 @@ Number of degrees of freedom: 792 (480+72+240)
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 

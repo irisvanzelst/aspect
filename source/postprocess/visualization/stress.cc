@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,14 +30,25 @@ namespace aspect
     namespace VisualizationPostprocessors
     {
       template <int dim>
+      Stress<dim>::
+      Stress ()
+        :
+        DataPostprocessorTensor<dim> ("stress",
+                                      update_values | update_gradients | update_quadrature_points),
+        Interface<dim>("Pa")
+      {}
+
+
+
+      template <int dim>
       void
       Stress<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         const unsigned int n_quadrature_points = input_data.solution_values.size();
         Assert (computed_quantities.size() == n_quadrature_points,    ExcInternalError());
-        Assert ((computed_quantities[0].size() == SymmetricTensor<2,dim>::n_independent_components),
+        Assert ((computed_quantities[0].size() == Tensor<2,dim>::n_independent_components),
                 ExcInternalError());
         Assert (input_data.solution_values[0].size() == this->introspection().n_components,   ExcInternalError());
         Assert (input_data.solution_gradients[0].size() == this->introspection().n_components,  ExcInternalError());
@@ -47,79 +58,63 @@ namespace aspect
         MaterialModel::MaterialModelOutputs<dim> out(n_quadrature_points,
                                                      this->n_compositional_fields());
 
+        // We do not need to compute anything but the viscosity
+        in.requested_properties = MaterialModel::MaterialProperties::viscosity;
+
         // Compute the viscosity...
         this->get_material_model().evaluate(in, out);
 
         // ...and use it to compute the stresses
         for (unsigned int q=0; q<n_quadrature_points; ++q)
           {
-            const SymmetricTensor<2,dim> strain_rate = in.strain_rate[q];
-            const SymmetricTensor<2,dim> compressible_strain_rate
-              = (this->get_material_model().is_compressible()
-                 ?
-                 strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>()
-                 :
-                 strain_rate);
+            // Compressive stress is negative by the sign convention
+            // used by the engineering community, and as input and used
+            // internally by ASPECT.
+            // Here, we change the sign of the stress to match the
+            // sign convention used by the geoscience community.
+            SymmetricTensor<2,dim> stress = in.pressure[q] * unit_symmetric_tensor<dim>();
 
-            const double eta = out.viscosities[q];
+            // If elasticity is enabled, the deviatoric stress is stored
+            // in compositional fields, otherwise the deviatoric stress
+            // can be obtained from the viscosity and strain rate.
+            if (this->get_parameters().enable_elasticity)
+              {
+                stress[0][0] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xx")];
+                stress[1][1] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_yy")];
+                stress[0][1] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xy")];
 
-            const SymmetricTensor<2,dim> stress = 2*eta*compressible_strain_rate +
-                                                  in.pressure[q] * unit_symmetric_tensor<dim>();
-            for (unsigned int i=0; i<SymmetricTensor<2,dim>::n_independent_components; ++i)
-              computed_quantities[q](i) = stress[stress.unrolled_to_component_indices(i)];
+                if (dim == 3)
+                  {
+                    stress[2][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_zz")];
+                    stress[0][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_xz")];
+                    stress[1][2] -= in.composition[q][this->introspection().compositional_index_for_name("ve_stress_yz")];
+                  }
+              }
+            else
+              {
+                const SymmetricTensor<2,dim> strain_rate = in.strain_rate[q];
+                const SymmetricTensor<2,dim> deviatoric_strain_rate
+                  = (this->get_material_model().is_compressible()
+                     ?
+                     strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>()
+                     :
+                     strain_rate);
+
+                const double eta = out.viscosities[q];
+                stress -= 2. * eta * deviatoric_strain_rate;
+              }
+
+            for (unsigned int d=0; d<dim; ++d)
+              for (unsigned int e=0; e<dim; ++e)
+                computed_quantities[q][Tensor<2,dim>::component_to_unrolled_index(TableIndices<2>(d,e))]
+                  = stress[d][e];
           }
+
+        // average the values if requested
+        const auto &viz = this->get_postprocess_manager().template get_matching_active_plugin<Postprocess::Visualization<dim>>();
+        if (!viz.output_pointwise_stress_and_strain())
+          average_quantities(computed_quantities);
       }
-
-
-      template <int dim>
-      std::vector<std::string>
-      Stress<dim>::get_names () const
-      {
-        std::vector<std::string> names;
-        switch (dim)
-          {
-            case 2:
-              names.emplace_back("stress_xx");
-              names.emplace_back("stress_yy");
-              names.emplace_back("stress_xy");
-              break;
-
-            case 3:
-              names.emplace_back("stress_xx");
-              names.emplace_back("stress_yy");
-              names.emplace_back("stress_zz");
-              names.emplace_back("stress_xy");
-              names.emplace_back("stress_xz");
-              names.emplace_back("stress_yz");
-              break;
-
-            default:
-              Assert (false, ExcNotImplemented());
-          }
-
-        return names;
-      }
-
-
-      template <int dim>
-      std::vector<DataComponentInterpretation::DataComponentInterpretation>
-      Stress<dim>::get_data_component_interpretation () const
-      {
-        return
-          std::vector<DataComponentInterpretation::DataComponentInterpretation>
-          (SymmetricTensor<2,dim>::n_independent_components,
-           DataComponentInterpretation::component_is_scalar);
-      }
-
-
-
-      template <int dim>
-      UpdateFlags
-      Stress<dim>::get_needed_update_flags () const
-      {
-        return update_gradients | update_values | update_quadrature_points;
-      }
-
     }
   }
 }
@@ -137,11 +132,29 @@ namespace aspect
                                                   "A visualization output object that generates output "
                                                   "for the 3 (in 2d) or 6 (in 3d) components of the stress "
                                                   "tensor, i.e., for the components of the tensor "
-                                                  "$2\\eta\\varepsilon(\\mathbf u)+pI$ "
+                                                  "$-2\\eta\\varepsilon(\\mathbf u)+pI$ "
                                                   "in the incompressible case and "
-                                                  "$2\\eta\\left[\\varepsilon(\\mathbf u)-"
+                                                  "$-2\\eta\\left[\\varepsilon(\\mathbf u)-"
                                                   "\\tfrac 13(\\textrm{tr}\\;\\varepsilon(\\mathbf u))\\mathbf I\\right]+pI$ "
-                                                  "in the compressible case.")
+                                                  "in the compressible case. If elasticity is used, the "
+                                                  "elastic contribution is being accounted for. "
+                                                  "Note that the convention of positive "
+                                                  "compressive stress is followed."
+                                                  "\n\n"
+                                                  "This postprocessor outputs the quantity computed herein as "
+                                                  "a tensor, i.e., programs such as VisIt or Pararview can "
+                                                  "visualize it as tensors represented by ellipses, not just "
+                                                  "as individual fields. That said, you can also visualize "
+                                                  "individual tensor components, by noting that the "
+                                                  "components that are written to the output file correspond to "
+                                                  "the tensor components $t_{xx}, t_{xy}, t_{yx}, t_{yy}$ (in 2d) "
+                                                  "or  $t_{xx}, t_{xy}, t_{xz}, t_{yx}, t_{yy}, t_{yz}, t_{zx}, t_{zy}, "
+                                                  "t_{zz}$ (in 3d) of a tensor $t$ in a Cartesian coordinate system. "
+                                                  "Even though the tensor we output is symmetric, the output contains "
+                                                  "all components of the tensor because that is what the file format "
+                                                  "requires."
+                                                  "\n\n"
+                                                  "Physical units: \\si{\\pascal}.")
     }
   }
 }

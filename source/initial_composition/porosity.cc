@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2017 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2017 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,6 +31,23 @@ namespace aspect
   namespace InitialComposition
   {
     template <int dim>
+    void
+    Porosity<dim>::initialize()
+    {
+      // Make sure we keep track of the initial temperature manager and
+      // that it continues to live beyond the time when the simulator
+      // class releases its pointer to it.
+      initial_temperature_manager = this->get_initial_temperature_manager_pointer();
+
+      // Make sure we keep track of the initial composition manager and
+      // that it continues to live beyond the time when the simulator
+      // class releases its pointer to it.
+      initial_composition_manager = this->get_initial_composition_manager_pointer();
+    }
+
+
+
+    template <int dim>
     double
     Porosity<dim>::
     initial_composition (const Point<dim> &position,
@@ -41,8 +58,7 @@ namespace aspect
                              "compositional field called `porosity' to initialize. Please add a "
                              "compositional field with this name."));
 
-      AssertThrow(Plugins::plugin_type_matches
-                  <const MaterialModel::MeltFractionModel<dim>>(this->get_material_model()),
+      AssertThrow(MaterialModel::MeltFractionModel<dim>::is_melt_fraction_model(this->get_material_model()),
                   ExcMessage("The used material model is not derived from the 'MeltFractionModel' class, "
                              "and therefore does not support computing equilibrium melt fractions. "
                              "This is incompatible with the `porosity' "
@@ -54,7 +70,7 @@ namespace aspect
           MaterialModel::MaterialModelInputs<dim> in(1, this->n_compositional_fields());
 
           in.position[0] = position;
-          in.temperature[0] = this->get_initial_temperature_manager().initial_temperature(position);
+          in.temperature[0] = initial_temperature_manager->initial_temperature(position);
           in.pressure[0] = this->get_adiabatic_conditions().pressure(position);
           in.pressure_gradient[0] = 0.0;
           in.velocity[0] = 0.0;
@@ -63,7 +79,7 @@ namespace aspect
           // infinite recursion
           for (unsigned int i = 0; i < this->n_compositional_fields(); ++i)
             if (i != porosity_index)
-              in.composition[0][i] = this->get_initial_composition_manager().initial_composition(position,i);
+              in.composition[0][i] = initial_composition_manager->initial_composition(position,i);
             else
               in.composition[0][i] = 0.0;
 
@@ -71,8 +87,9 @@ namespace aspect
 
           std::vector<double> melt_fraction(1);
 
-          Plugins::get_plugin_as_type<const MaterialModel::MeltFractionModel<dim>>
-                                                                                (this->get_material_model()).melt_fractions(in,melt_fraction);
+          MaterialModel::MeltFractionModel<dim>::as_melt_fraction_model(this->get_material_model())
+          .melt_fractions(in, melt_fraction);
+
           return melt_fraction[0];
         }
       return 0.0;

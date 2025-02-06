@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,6 +25,7 @@
 #include <aspect/global.h>
 
 #include <array>
+#include <random>
 #include <deal.II/base/point.h>
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/table_indices.h>
@@ -33,6 +34,7 @@
 #include <deal.II/fe/component_mask.h>
 
 #include <aspect/coordinate_systems.h>
+#include <aspect/structured_data.h>
 
 
 
@@ -51,8 +53,22 @@ namespace aspect
    */
   namespace Utilities
   {
-    using namespace dealii;
+    /**
+    * Because many places in ASPECT assume that all functions in the namespace
+    * <code>dealii::Utilities</code> are available without qualification as
+    * <code>Utilities::function</code>, just as all the function in the
+    * namespace <code>aspect::Utilities</code>, we make sure all these functions
+    * are available inside <code>aspect::Utilities</code>. This is maybe not
+    * the cleanest solution, but it is most compatible with a lot of existing
+    * code, and also allows to migrate ASPECT functions into deal.II when
+    * useful without introducing incompatibilities.
+    *
+    * We need to do this in every header that introduces something into the
+    * namespace <code>aspect::Utilities</code>, because it needs to happen
+    * no matter which header files of ASPECT are included.
+    */
     using namespace dealii::Utilities;
+
 
     /**
      * Given an array @p values, consider three cases:
@@ -72,6 +88,154 @@ namespace aspect
     possibly_extend_from_1_to_N (const std::vector<T> &values,
                                  const unsigned int N,
                                  const std::string &id_text);
+
+    /**
+     * A namespace that contains options and functions able to parse
+     * a map of double values from a string representation of the form
+     * "key1 : value1, key2 : value2, etc". The parsing and output
+     * is controlled by the Options struct and the parse_map_to_double_array()
+     * function.
+     */
+    namespace MapParsing
+    {
+      /**
+       * A struct that bundles all the available options for
+       * parse_map_to_double_array().
+       */
+      struct Options
+      {
+        /**
+         * A list of valid key names that are allowed
+         * to appear in the map. If this list is empty
+         * it is assumed to be equal to the list of
+         * required keys. If this list is longer than
+         * list_of_required_keys, every key that is
+         * allowed but not required will be ignored when
+         * parsing the map.
+         */
+        std::vector<std::string> list_of_allowed_keys;
+
+        /**
+         * A list of valid key names that are required
+         * to appear in the map. Only these keys will be
+         * parsed into the map structure and the order of
+         * these keys determines the order of entries
+         * in the output vector.
+         */
+        std::vector<std::string> list_of_required_keys;
+
+        /**
+         * A name that identifies the type of input property (e.g. 'density', 'viscosity')
+         * that is being parsed by this function. This name is used in generating
+         * error messages if the map does not conform to the expected format.
+         */
+        std::string property_name;
+
+        /**
+         * If true, allow multiple values
+         * for each key. If false only allow a single value per key. In either
+         * case each key is only allowed to appear once. Multiple values
+         * for a key are delimited by a "|" character, as in
+         * "key1: value1|value2|value3, key2: value1|value2".
+         */
+        bool allow_multiple_values_per_key;
+
+        /*
+         * Whether to allow for some keys in list_of_required_keys to be
+         * not set to any values, i.e. they do not appear at all.
+         * This also allows a completely empty map.
+         */
+        bool allow_missing_keys;
+
+        /**
+         * Whether to store the number of values
+         * per key in n_values_per_key while creating
+         * the map. This vector can be later accessed
+         * and used (for example) to check that subsequent calls to
+         * parse other input parameters have the same
+         * structure.
+         */
+        bool store_values_per_key;
+
+        /**
+         * Whether to check the number of values
+         * per key in the map against values stored
+         * in n_values_per_key. This allows to
+         * check that subsequent calls to
+         * parse other input parameters have the same
+         * structure.
+         */
+        bool check_values_per_key;
+
+        /**
+         * A vector of unsigned
+         * integers that is used by store_values_per_key and
+         * check_values_per_key to either store the current map
+         * structure or check the map structure against an existing
+         * map. This parameter is only used if either of these
+         * two parameters are set to true
+         */
+        std::vector<unsigned int> n_values_per_key;
+
+        /**
+         * Delete the default constructor, because we want to ensure that
+         * at least the required options are always set.
+         */
+        Options() = delete;
+
+        /**
+         * A constructor for options that only sets the required
+         * parameters and leaves all other parameters at their default values.
+         * By default the @p list_of_required_keys will be used as both
+         * the list of allowed and list of required keys. In other words
+         * exactly these keys and no other keys are allowed to appear
+         * in the input and all of the keys have to be specified and will
+         * be included in the output. For a documentation of the parameters
+         * see the documentation of the member variables of this class.
+         */
+        Options(const std::vector<std::string> &list_of_required_keys,
+                const std::string &property_name)
+          :
+          list_of_allowed_keys(list_of_required_keys),
+          list_of_required_keys(list_of_required_keys),
+          property_name(property_name),
+          allow_multiple_values_per_key(false),
+          allow_missing_keys(false),
+          store_values_per_key(false),
+          check_values_per_key(false),
+          n_values_per_key()
+        {}
+      };
+
+      /**
+       * This function takes a string argument that is interpreted as a map
+       * of the form "key1 : value1, key2 : value2, etc", and then parses
+       * it to return a vector of these values. The parsing and output
+       * is controlled by @p options, which provides control over which keys
+       * (and how many) are allowed and required, whether multiple values
+       * per keys are allowed, whether the structure of the map is recorded
+       * while parsing, or checked against an existing structure and some other
+       * options. See the documentation of MapParsing::Options for available
+       * settings.
+       *
+       * @param[in] input_string The string representation of the map
+       *   to be parsed.
+       * @param[in] options An object of type MapParsing::Options() that contains
+       *   the parsing options that are considered by this function. See the
+       *   documentation of Options() for the available settings.
+       *
+       * @return A vector of values that are parsed from the @p input_string according
+       *   to the provided @p options and is sorted according to the member variable
+       *   list_of_required_keys inside @p options.
+       *   If multiple values per key are allowed, the vector contains first all
+       *   values for key 1, then all values for key 2 and so forth. Using the
+       *   n_values_per_key vector inside @p options allows the caller to
+       *   associate entries in the returned vector with specific keys.
+       */
+      std::vector<double>
+      parse_map_to_double_array(const std::string &input_string,
+                                Options &options);
+    }
 
     /**
      * This function takes a string argument that is interpreted as a map
@@ -141,14 +305,19 @@ namespace aspect
      *   values for key 1, then all values for key 2 and so forth. Using the
      *   @p n_values_per_key vector allows the caller to associate entries in the
      *   returned vector with specific keys.
+     *
+     * @deprecated: This function is deprecated in favor of the more general
+     *   Utilities::MapParsing::parse_map_to_double_array() function. Please
+     *   use the other function instead.
      */
+    DEAL_II_DEPRECATED
     std::vector<double>
     parse_map_to_double_array (const std::string &key_value_map,
                                const std::vector<std::string> &list_of_keys,
                                const bool expects_background_field,
                                const std::string &property_name,
                                const bool allow_multiple_values_per_key = false,
-                               std::shared_ptr<std::vector<unsigned int> > n_values_per_key = nullptr,
+                               const std::unique_ptr<std::vector<unsigned int>> &n_values_per_key = nullptr,
                                const bool allow_missing_keys = false);
 
     /**
@@ -187,20 +356,6 @@ namespace aspect
     std::vector<std::string>
     expand_dimensional_variable_names (const std::vector<std::string> &var_declarations);
 
-
-#if !DEAL_II_VERSION_GTE(9,2,0)
-    /**
-     * Split the set of DoFs (typically locally owned or relevant) in @p whole_set into blocks
-     * given by the @p dofs_per_block structure.
-     *
-     * The numbers of dofs per block need to add up to the size of the index space described
-     * by @p whole_set.
-     */
-    void split_by_block (const std::vector<types::global_dof_index> &dofs_per_block,
-                         const IndexSet &whole_set,
-                         std::vector<IndexSet> &partitioned);
-#endif
-
     /**
      * Returns an IndexSet that contains all locally active DoFs that belong to
      * the given component_mask.
@@ -211,6 +366,31 @@ namespace aspect
     IndexSet extract_locally_active_dofs_with_component(const DoFHandler<dim> &dof_handler,
                                                         const ComponentMask &component_mask);
 
+    /**
+     * This function retrieves the unit support points (in the unit cell) for the current element.
+     * The DGP element used when 'set Use locally conservative discretization = true' does not
+     * have support points. If these elements are in use, a fictitious support point at the cell
+     * center is returned for each shape function that corresponds to the pressure variable,
+     * whereas the support points for the velocity are correct. The fictitious points don't matter
+     * because we only use this function when interpolating the velocity variable, and ignore the
+     * evaluation at the pressure support points.
+     */
+    template <int dim>
+    std::vector<Point<dim>> get_unit_support_points(const SimulatorAccess<dim> &simulator_access);
+
+
+
+    /**
+     * Given a point @p point, find out if any of the MPI
+     * processes own the cell in which this point lies. If
+     * not, the point lies outside the @p triangulation.
+     */
+    template <int dim>
+    bool
+    point_is_in_triangulation(const Mapping<dim> &mapping,
+                              const parallel::distributed::Triangulation<dim> &triangulation,
+                              const Point<dim> &point,
+                              const MPI_Comm mpi_communicator);
 
 
     namespace Coordinates
@@ -223,17 +403,21 @@ namespace aspect
        */
       template <int dim>
       std::array<double,dim>
-      WGS84_coordinates(const Point<dim> &position);
+      WGS84_coordinates(const dealii::Point<dim> &position);
 
       /**
-       * Returns spherical coordinates of a Cartesian point. The returned array
-       * is filled with radius, phi and theta (polar angle). If the dimension is
-       * set to 2 theta is omitted. Phi is always normalized to [0,2*pi].
-       *
+       * Returns spherical coordinates of a Cartesian point. If `dim==3`, then
+       * the returned array contains the three values radius, phi, and theta
+       * (polar angle). In other words, the two angles correspond to longitude
+       * and *colatitude* (instead of latitude). If `dim==2`, then theta is omitted.
+       * The longitude Phi is always considered in the interval $[0,2\pi]$. Note
+       * that that implies that input files that use spherical coordinates also
+       * have to provide data using this convention, rather than providing their
+       * data from $-\pi$ (=180 degrees west) to $+\pi$ (=180 degrees east).
        */
       template <int dim>
       std::array<double,dim>
-      cartesian_to_spherical_coordinates(const Point<dim> &position);
+      cartesian_to_spherical_coordinates(const dealii::Point<dim> &position);
 
       /**
        * Return the Cartesian point of a spherical position defined by radius,
@@ -241,7 +425,7 @@ namespace aspect
        * omitted.
        */
       template <int dim>
-      Point<dim>
+      dealii::Point<dim>
       spherical_to_cartesian_coordinates(const std::array<double,dim> &scoord);
 
       /**
@@ -252,7 +436,7 @@ namespace aspect
       template <int dim>
       Tensor<1,dim>
       spherical_to_cartesian_vector(const Tensor<1,dim> &spherical_vector,
-                                    const Point<dim> &position);
+                                    const dealii::Point<dim> &position);
 
 
       /**
@@ -262,7 +446,7 @@ namespace aspect
        */
       template <int dim>
       std::array<double,3>
-      cartesian_to_ellipsoidal_coordinates(const Point<3> &position,
+      cartesian_to_ellipsoidal_coordinates(const dealii::Point<3> &position,
                                            const double semi_major_axis_a,
                                            const double eccentricity);
 
@@ -271,7 +455,7 @@ namespace aspect
        * theta and radius.
        */
       template <int dim>
-      Point<3>
+      dealii::Point<3>
       ellipsoidal_to_cartesian_coordinates(const std::array<double,3> &phi_theta_d,
                                            const double semi_major_axis_a,
                                            const double eccentricity);
@@ -293,7 +477,7 @@ namespace aspect
      */
     template <int dim>
     bool
-    polygon_contains_point(const std::vector<Point<2> > &point_list,
+    polygon_contains_point(const std::vector<Point<2>> &point_list,
                            const dealii::Point<2> &point);
 
     /**
@@ -303,7 +487,7 @@ namespace aspect
      */
     template <int dim>
     double
-    signed_distance_to_polygon(const std::vector<Point<2> > &point_list,
+    signed_distance_to_polygon(const std::vector<Point<2>> &point_list,
                                const dealii::Point<2> &point);
 
 
@@ -314,7 +498,7 @@ namespace aspect
      * points is calculated.
      */
     double
-    distance_to_line(const std::array<dealii::Point<2>,2 > &point_list,
+    distance_to_line(const std::array<dealii::Point<2>,2> &point_list,
                      const dealii::Point<2> &point);
 
     /**
@@ -327,6 +511,24 @@ namespace aspect
     template <int dim>
     std::array<Tensor<1,dim>,dim-1>
     orthogonal_vectors (const Tensor<1,dim> &v);
+
+    /**
+     * A function that returns the corresponding euler angles for a
+     * rotation described by rotation axis and angle.
+     */
+    Tensor<2,3>
+    rotation_matrix_from_axis (const Tensor<1,3> &rotation_axis,
+                               const double rotation_angle);
+
+    /**
+     * Compute the 3d rotation matrix that describes the rotation of a
+     * plane defined by the two points @p point_one and @p point_two
+     * onto the x-y-plane in a way that the vector from the origin to
+     * point_one points into the (0,1,0) direction after the rotation.
+     */
+    Tensor<2,3>
+    compute_rotation_matrix_for_slice (const Tensor<1,3> &point_one,
+                                       const Tensor<1,3> &point_two);
 
     /**
      * A function for evaluating real spherical harmonics. It takes the degree (l)
@@ -390,23 +592,79 @@ namespace aspect
     /**
      * Checks whether a file named @p filename exists and is readable.
      *
+     * Note: This function performs file access on all MPI ranks that
+     * call it. Only use this function if
+     * the file access is performed on all MPI ranks
+     * and on a reasonably fast file system.
+     *
+     * @return True if the file exists and is readable on all MPI ranks
+     * that call this function.
      * @param filename File to check existence
      */
     bool fexists(const std::string &filename);
 
     /**
+     * Check whether a file named @p filename exists and is readable
+     * on MPI rank 0. Then, broadcast the result to all MPI ranks.
+     *
+     * Note that in contrast to the other fexists() function, this function
+     * only checks for the existence of the file on a single process.
+     * This is useful to avoid overloading the file system and is sufficient
+     * if the subsequent file access is also only performed on MPI rank 0.
+     *
+     * @return True if the file exists and is readable on MPI rank 0.
+     * @param filename File to check existence
+     * @param comm MPI communicator to use.
+     */
+    bool fexists(const std::string &filename,
+                 const MPI_Comm comm);
+
+    /**
+     * Checks to see if the user is trying to use data from a url.
+     *
+     * @param filename File to check
+     */
+    bool filename_is_url(const std::string &filename);
+
+    /**
      * Reads the content of the ascii file @p filename on process 0 and
      * distributes the content by MPI_Bcast to all processes. The function
-     * returns the content of the file on all processes.
+     * returns the content of the file on all processes. The purpose of this
+     * function is to reduce parallel file access to a single file access on
+     * process 0.
      *
-     * @param [in] filename The name of the ascii file to load.
+     * @param [in] filename The name of the ascii file to load. If the
+     *  file name ends in `.gz`, then the function assumes that the file
+     *  has been compressed using gzip; it then reads and uncompresses the file
+     *  before distributing it. If the file name is a URL (starting with either
+     *  `http://`, `https://`, or `file://`), and if ASPECT has been configured
+     *  with libDAP, then the file is read from that location via libDAP
+     *  and the returned string is an ASCII data representation of what was
+     *  obtained this way.
      * @param [in] comm The MPI communicator in which the content is
      * distributed.
      * @return A string which contains the data in @p filename.
      */
     std::string
     read_and_distribute_file_content(const std::string &filename,
-                                     const MPI_Comm &comm);
+                                     const MPI_Comm comm);
+
+    /**
+     * Collect the content of @p file_content using MPI_Gather to process 0.
+     * Then write the content to the file @p filename on process 0.
+     * The purpose of this function is to reduce parallel file access to
+     * process 0. Note that this function assumes that the content from
+     * all processes fits into the memory of process 0.
+     *
+     * @param [in] filename The name of the file to write.
+     * @param [in] file_content The content that should be written to file.
+     * @param [in] comm The MPI communicator from which the content is
+     * collected.
+     */
+    void
+    collect_and_write_file_content(const std::string &filename,
+                                   const std::string &file_content,
+                                   const MPI_Comm comm);
 
     /**
      * Creates a path as if created by the shell command "mkdir -p", therefore
@@ -435,8 +693,8 @@ namespace aspect
      * to true.
      */
     void create_directory(const std::string &pathname,
-                          const MPI_Comm &comm,
-                          bool silent);
+                          const MPI_Comm comm,
+                          const bool silent);
 
     /**
      * A namespace defining the cubic spline interpolation that can be used
@@ -493,50 +751,9 @@ namespace aspect
      */
     inline
     void
-    extract_composition_values_at_q_point (const std::vector<std::vector<double> > &composition_values,
+    extract_composition_values_at_q_point (const std::vector<std::vector<double>> &composition_values,
                                            const unsigned int q,
-                                           std::vector<double> &composition_values_at_q_point)
-    {
-      Assert(q<composition_values.size(), ExcInternalError());
-      Assert(composition_values_at_q_point.size() > 0,
-             ExcInternalError());
-
-      for (unsigned int k=0; k < composition_values_at_q_point.size(); ++k)
-        {
-          Assert(composition_values[k].size() == composition_values_at_q_point.size(),
-                 ExcInternalError());
-          composition_values_at_q_point[k] = composition_values[k][q];
-        }
-    }
-
-    template <typename T>
-    inline
-    std::vector<T>
-    possibly_extend_from_1_to_N (const std::vector<T> &values,
-                                 const unsigned int N,
-                                 const std::string &id_text)
-    {
-      if (values.size() == 1)
-        {
-          return std::vector<T> (N, values[0]);
-        }
-      else if (values.size() == N)
-        {
-          return values;
-        }
-      else
-        {
-          // Non-specified behavior
-          AssertThrow(false,
-                      ExcMessage("Length of " + id_text + " list must be " +
-                                 "either one or " + Utilities::to_string(N) +
-                                 ". Currently it is " + Utilities::to_string(values.size()) + "."));
-        }
-
-      // This should never happen, but return an empty vector so the compiler
-      // will be happy
-      return std::vector<T> ();
-    }
+                                           std::vector<double> &composition_values_at_q_point);
 
     /**
      * Replace the string <tt>\$ASPECT_SOURCE_DIR</tt> in @p location by the current
@@ -552,596 +769,35 @@ namespace aspect
     std::string parenthesize_if_nonempty (const std::string &s);
 
     /**
+     * Given a string @p s, convert it to a boolean value.
+     */
+    bool
+    string_to_bool(const std::string &s);
+
+    /**
+     * Given a vector of strings @p s, convert it to a vector of boolean values.
+     */
+    std::vector<bool>
+    string_to_bool(const std::vector<std::string> &s);
+
+    /**
+     * Given a string @p s, convert it to an unsigned int.
+     */
+    unsigned int
+    string_to_unsigned_int(const std::string &s);
+
+    /**
+     * Given a vector of strings @p s, convert it to a vector of unsigned int values.
+     */
+    std::vector<unsigned int>
+    string_to_unsigned_int(const std::vector<std::string> &s);
+
+    /**
      * Returns if a vector of strings @p strings only contains unique
      * entries.
      */
     bool has_unique_entries (const std::vector<std::string> &strings);
 
-    /**
-     * AsciiDataLookup reads in files containing input data in ascii format.
-     * Note the required format of the input data: The first lines may contain
-     * any number of comments if they begin with '#', but one of these lines
-     * needs to contain the number of grid points in each dimension as for
-     * example '# POINTS: 3 3'. The comments can optionally be followed by a
-     * single line, which does not start with '#', containing the names of
-     * the data columns.
-     * The order of the following data columns has to be
-     * 'coordinates data' with @p dim coordinate columns and @p components
-     * data columns. Note that the data in the input files need to be sorted
-     * in a specific order: the first coordinate needs to ascend first,
-     * followed by the second and so on in order to assign the correct data to
-     * the prescribed coordinates. The coordinates do not need to be
-     * equidistant.
-     */
-    template <int dim>
-    class AsciiDataLookup
-    {
-      public:
-        /**
-         * Constructor that explicitly prescribes the number of data columns
-         * in the data file. If a list of data components is provided in the
-         * data file it is checked that the length of this list is consistent
-         * with this number of components. This constructor is mostly provided
-         * for backwards compatibility. Not prescribing the number of components
-         * and instead reading them from the input file allows for more
-         * flexible files.
-         */
-        AsciiDataLookup(const unsigned int components,
-                        const double scale_factor);
-
-        /**
-         * This constructor relies on the list of column names at the beginning
-         * of the model file to determine the number of data components,
-         * therefore when using this constructor it is necessary to provide
-         * this list in the first uncommented line of the data file.
-         */
-        explicit AsciiDataLookup(const double scale_factor);
-
-        /**
-         * Loads a data text file. Throws an exception if the file does not
-         * exist, if the data file format is incorrect or if the file grid
-         * changes over model runtime.
-         */
-        void
-        load_file(const std::string &filename,
-                  const MPI_Comm &communicator);
-
-        /**
-         * Returns the computed data (velocity, temperature, etc. - according
-         * to the used plugin) in Cartesian coordinates.
-         *
-         * @param position The current position to compute the data (velocity,
-         * temperature, etc.)
-         * @param component The index (starting at 0) of the data column to be
-         * returned. The index is therefore less than the number of data
-         * columns in the data file (or specified in the constructor).
-         */
-        double
-        get_data(const Point<dim> &position,
-                 const unsigned int component) const;
-
-        /**
-         * Returns the gradient of the function based on the bilinear
-         * interpolation of the data (velocity, temperature, etc. - according
-         * to the used plugin) in Cartesian coordinates.
-         *
-         * @param position The current position to compute the data (velocity,
-         * temperature, etc.)
-         * @param component The index of the data column to be returned.
-         */
-        Tensor<1,dim>
-        get_gradients(const Point<dim> &position,
-                      const unsigned int component);
-
-        /**
-         * Returns a vector that contains the names of all data columns in the
-         * order of their appearance in the data file (and their order in the
-         * memory data table). Returns an empty vector if no names are provided
-         * or the file is not read in yet.
-         */
-        std::vector<std::string>
-        get_column_names() const;
-
-        /**
-         * Returns whether the stored coordinates are equidistant. If
-         * coordinates are equidistant the lookup is more efficient. Returns
-         * false if no coordinates are loaded at the moment.
-         */
-        bool
-        has_equidistant_coordinates() const;
-
-        /**
-         * Returns the column index of a column with the given name
-         * @p column_name. Throws an exception if no such
-         * column exists or no names were provided in the file.
-         */
-        unsigned int
-        get_column_index_from_name(const std::string &column_name) const;
-
-        /**
-         * Returns a string that contains the name of the column with index
-         * @p column_index. Throws an exception if no such
-         * column exists or no name was provided in the file.
-         */
-        std::string
-        get_column_name_from_index(const unsigned int column_index) const;
-
-        /**
-         * Return the maximum value of the component values.
-         */
-        double get_maximum_component_value(const unsigned int component) const;
-
-      private:
-        /**
-         * The number of data components read in (=columns in the data file).
-         */
-        unsigned int components;
-
-        /**
-         * The names of the data components in the columns of the read file.
-         * Does not contain any strings if none are provided in the first
-         * uncommented line of the file.
-         */
-        std::vector<std::string> data_component_names;
-
-        /**
-         * Interpolation functions to access the data.
-         * Either InterpolatedUniformGridData or InterpolatedTensorProductGridData;
-         * the type is determined from the grid specified in the data file.
-         */
-        std::vector<std::unique_ptr<Function<dim>>> data;
-
-        /**
-         * The coordinate values in each direction as specified in the data file.
-         */
-        std::array<std::vector<double>,dim> coordinate_values;
-
-        /**
-         * The maximum value of each component
-         */
-        std::vector<double> maximum_component_value;
-
-        /**
-         * The min and max of the coordinates in the data file.
-         */
-        std::array<std::pair<double,double>,dim> grid_extent;
-
-        /**
-         * Number of points in the data grid as specified in the data file.
-         */
-        TableIndices<dim> table_points;
-
-        /**
-         * Scales the data boundary condition by a scalar factor. Can be used
-         * to transform the unit of the data.
-         */
-        const double scale_factor;
-
-        /**
-         * Stores whether the coordinate values are equidistant or not,
-         * this determines the type of data function stored.
-         */
-        bool coordinate_values_are_equidistant;
-
-        /**
-         * Computes the table indices of each entry in the input data file.
-         * The index depends on dim, grid_dim and the number of components.
-         */
-        TableIndices<dim>
-        compute_table_indices(const unsigned int i) const;
-
-    };
-
-    /**
-     * AsciDataBase is a generic plugin used for declaring and reading the
-     * parameters from the parameter file.
-     */
-    template <int dim>
-    class AsciiDataBase
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataBase();
-
-        /**
-         * Declare the parameters all derived classes take from input files.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler  &prm,
-                            const std::string &default_directory,
-                            const std::string &default_filename,
-                            const std::string &subsection_name = "Ascii data model");
-
-        /**
-         * Read the parameters from the parameter file.
-         */
-        void
-        parse_parameters (ParameterHandler &prm,
-                          const std::string &subsection_name = "Ascii data model");
-
-        /**
-         * Directory in which the data files are present.
-         */
-        std::string data_directory;
-
-        /**
-         * Filename of data file. The file names can contain the specifiers %s
-         * and/or %c (in this order), meaning the name of the boundary and the
-         * number of the data file time step.
-         */
-        std::string data_file_name;
-
-        /**
-         * Scale the data by a scalar factor. Can be used to transform the
-         * unit of the data (if they are not specified in SI units (m/s or
-         * m/yr depending on the "Use years in output instead of seconds"
-         * parameter).
-         */
-        double scale_factor;
-    };
-
-    /**
-     * A base class that implements boundary conditions determined from a
-     * AsciiData input file.
-     */
-    template <int dim>
-    class AsciiDataBoundary : public Utilities::AsciiDataBase<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataBoundary();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program. Checks preconditions.
-         */
-        virtual
-        void
-        initialize (const std::set<types::boundary_id> &boundary_ids,
-                    const unsigned int components);
-
-        /**
-         * A function that is called at the beginning of each time step. For
-         * the current plugin, this function loads the next data files if
-         * necessary and outputs a warning if the end of the set of data files
-         * is reached.
-         */
-        void
-        update();
-
-        /**
-         * Returns the data component at the given position.
-         */
-        double
-        get_data_component (const types::boundary_id             boundary_indicator,
-                            const Point<dim>                    &position,
-                            const unsigned int                   component) const;
-
-        /**
-         * Returns the maximum value of the given data component.
-         */
-        double
-        get_maximum_component_value (const types::boundary_id boundary_indicator,
-                                     const unsigned int       component) const;
-
-        /**
-         * Return the gradients of the parameters from the parameter file.
-         */
-        Tensor<1,dim-1>
-        vector_gradient(const types::boundary_id boundary_indicator,
-                        const Point<dim>        &p,
-                        const unsigned int       component) const;
-
-        /**
-         * Declare the parameters all derived classes take from input files.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler  &prm,
-                            const std::string &default_directory,
-                            const std::string &default_filename,
-                            const std::string &subsection_name = "Ascii data model");
-
-        /**
-         * Read the parameters from the parameter file.
-         */
-        void
-        parse_parameters (ParameterHandler &prm,
-                          const std::string &subsection_name = "Ascii data model");
-
-      protected:
-
-        /**
-         * Determines which of the dimensions of the position is used to find
-         * the data point in the data grid. E.g. the left boundary of a box
-         * model extents in the y and z direction (position[1] and
-         * position[2]), therefore the function would return [1,2] for dim==3
-         * or [1] for dim==2. We are lucky that these indices are identical
-         * for the box and the spherical shell (if we use spherical
-         * coordinates for the spherical shell), therefore we do not need to
-         * distinguish between them. For the initial condition this function
-         * is trivial, because the position in the data grid is the same as
-         * the actual position (the function returns [0,1,2] or [0,1]), but
-         * for the boundary conditions it matters.
-         */
-        std::array<unsigned int,dim-1>
-        get_boundary_dimensions (const types::boundary_id boundary_id) const;
-
-        /**
-         * A variable that stores the currently used data file of a series. It
-         * gets updated if necessary by update().
-         */
-        int current_file_number;
-
-        /**
-         * Time from which on the data file with number 'First data file
-         * number' is used as boundary condition. Previous to this time, 0 is
-         * returned for every field. Depending on the setting of the global
-         * 'Use years in output instead of seconds' flag in the input file,
-         * this number is either interpreted as seconds or as years."
-         */
-        double first_data_file_model_time;
-
-        /**
-         * Number of the first data file to be loaded when the model time is
-         * larger than 'First data file model time'.
-         */
-        int first_data_file_number;
-
-        /**
-         * In some cases the boundary files are not numbered in increasing but
-         * in decreasing order (e.g. 'Ma BP'). If this flag is set to 'True'
-         * the plugin will first load the file with the number 'First data
-         * file number' and decrease the file number during the model run.
-         */
-        bool decreasing_file_order;
-
-        /**
-         * Time in model units (depends on other model inputs) between two
-         * data files.
-         */
-        double data_file_time_step;
-
-        /**
-         * Weight between data file n and n+1 while the current time is
-         * between the two values t(n) and t(n+1).
-         */
-        double time_weight;
-
-        /**
-         * State whether we have time_dependent boundary conditions. Switched
-         * off after finding no more data files to suppress attempts to read
-         * in new files.
-         */
-        bool time_dependent;
-
-        /**
-         * Map between the boundary id and an object that reads and processes
-         * data we get from text files.
-         */
-        std::map<types::boundary_id,
-            std::unique_ptr<aspect::Utilities::AsciiDataLookup<dim-1> > > lookups;
-
-        /**
-         * Map between the boundary id and the old data objects.
-         */
-        std::map<types::boundary_id,
-            std::unique_ptr<aspect::Utilities::AsciiDataLookup<dim-1> > > old_lookups;
-
-        /**
-         * Handles the update of the data in lookup.
-         */
-        void
-        update_data (const types::boundary_id boundary_id,
-                     const bool reload_both_files);
-
-        /**
-         * Handles settings and user notification in case the time-dependent
-         * part of the boundary condition is over.
-         */
-        void
-        end_time_dependence ();
-
-        /**
-         * Create a filename out of the name template.
-         */
-        std::string
-        create_filename (const int filenumber,
-                         const types::boundary_id boundary_id) const;
-    };
-
-
-
-    /**
-     * A base class that implements initial conditions determined from a
-     * AsciiData input file.
-     */
-    template <int dim>
-    class AsciiDataInitial : public Utilities::AsciiDataBase<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataInitial();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program. Checks preconditions.
-         */
-        virtual
-        void
-        initialize (const unsigned int components);
-
-
-        /**
-         * Returns the data component at the given position.
-         */
-        double
-        get_data_component (const Point<dim>                    &position,
-                            const unsigned int                   component) const;
-
-      protected:
-        /**
-         * Pointer to an object that reads and processes data we get from text
-         * files.
-         */
-        std::unique_ptr<aspect::Utilities::AsciiDataLookup<dim> > lookup;
-    };
-
-
-    /**
-     * A base class that implements conditions determined from a
-     * layered AsciiData input file.
-     */
-    template <int dim>
-    class AsciiDataLayered : public Utilities::AsciiDataBase<dim>, public SimulatorAccess<dim>
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataLayered();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program. Checks preconditions.
-         */
-        virtual
-        void
-        initialize (const unsigned int components);
-
-
-        /**
-         * Returns the data component at the given position.
-         */
-        double
-        get_data_component (const Point<dim> &position,
-                            const unsigned int component) const;
-
-
-        /**
-         * Declare the parameters all derived classes take from input files.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler  &prm,
-                            const std::string &default_directory,
-                            const std::string &default_filename,
-                            const std::string &subsection_name = "Ascii data model");
-
-        /**
-         * Read the parameters from the parameter file.
-         */
-        void
-        parse_parameters (ParameterHandler &prm,
-                          const std::string &subsection_name = "Ascii data model");
-
-      protected:
-        /**
-         * Pointer to an object that reads and processes data we get from text
-         * files.
-         */
-        std::vector<std::unique_ptr<aspect::Utilities::AsciiDataLookup<dim-1> >> lookups;
-
-      private:
-
-        /**
-         * Directory in which the data files are present.
-         */
-        std::string data_directory;
-
-        /**
-         * Filenames of data files.
-         */
-        std::vector<std::string> data_file_names;
-
-        /**
-         * Number of layer boundaries in the model.
-         */
-        unsigned int number_of_layer_boundaries;
-
-        /**
-         * Interpolation scheme for profile averaging.
-         */
-        std::string interpolation_scheme;
-
-
-    };
-
-
-    /**
-     * A base class that reads in a data profile and provides its values.
-     */
-    template <int dim>
-    class AsciiDataProfile : public Utilities::AsciiDataBase<dim>
-    {
-      public:
-        /**
-         * Constructor
-         */
-        AsciiDataProfile();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program. Checks preconditions.
-         */
-        virtual
-        void
-        initialize (const MPI_Comm &communicator);
-
-
-        /**
-         * Returns the data component at the given position.
-         */
-        double
-        get_data_component (const Point<1>                      &position,
-                            const unsigned int                   component) const;
-
-        /**
-         * Returns a vector that contains the names of all data columns in the
-         * order of their appearance in the data file (and their order in the
-         * memory data table). Returns an empty vector if no names are provided
-         * or the file is not read in yet.
-         */
-        std::vector<std::string>
-        get_column_names() const;
-
-        /**
-         * Returns the column index of a column with the given name
-         * @p column_name. Throws an exception if no such
-         * column exists or no names were provided in the file.
-         */
-        unsigned int
-        get_column_index_from_name(const std::string &column_name) const;
-
-        /**
-         * Returns the column index of a column with the given name
-         * @p column_name. Returns an invalid unsigned int if no such
-         * column exists or no names were provided in the file.
-         */
-        unsigned int
-        maybe_get_column_index_from_name(const std::string &column_name) const;
-
-        /**
-         * Returns a string that contains the name of the column with index
-         * @p column_index. Returns an empty string if no such
-         * column exists or no name was provided in the file.
-         */
-        std::string
-        get_column_name_from_index(const unsigned int column_index) const;
-      protected:
-        /**
-         * Pointer to an object that reads and processes data we get from text
-         * files.
-         */
-        std::unique_ptr<aspect::Utilities::AsciiDataLookup<1> > lookup;
-    };
 
 
     /**
@@ -1207,17 +863,30 @@ namespace aspect
      *
      * The goal of this function is to find a factor $\alpha$ so that
      * $2\eta(\varepsilon(\mathbf u)) I \otimes I +  \alpha\left[a \otimes b + b \otimes a\right]$ remains a
-     * positive definite matrix. Here, $a=\varepsilon(\mathbf u)$ is the @p strain_rate
+     * positive definite rank-4 tensor (i.e., a positive definite operator mapping
+     * rank-2 tensors to rank-2 tensors). By definition, the whole operator
+     * is symmetric. In the definition above, $a=\varepsilon(\mathbf u)$ is the @p strain_rate
      * and $b=\frac{\partial\eta(\varepsilon(\mathbf u),p)}{\partial \varepsilon}$ is the derivative of the viscosity
      * with respect to the strain rate and is given by @p dviscosities_dstrain_rate. Since the viscosity $\eta$
      * must be positive, there is always a value of $\alpha$ (possibly small) so that the result is a positive
-     * definite matrix. In the best case, we want to choose $\alpha=1$ because that corresponds to the full Newton step,
+     * definite operator. In the best case, we want to choose $\alpha=1$ because that corresponds to the full Newton step,
      * and so the function never returns anything larger than one.
      *
-     * The factor is defined by:
-     * $\frac{2\eta(\varepsilon(\mathbf u))}{\left[1-\frac{b:a}{\|a\| \|b\|} \right]^2\|a\|\|b\|}$. Alpha is
-     * reset to a maximum of one, and if it is smaller then one, a safety_factor scales the alpha to make
-     * sure that the 1-alpha won't get to close to zero.
+     * One can do some algebra to determine what the optimal factor is. We did
+     * this in the Newton paper (Fraters et al., Geophysical Journal
+     * International, 2019) where we derived a factor of
+     * $\frac{2\eta(\varepsilon(\mathbf u))}{\left[1-\frac{b:a}{\|a\| \|b\|} \right]^2\|a\|\|b\|}$,
+     * which we reset to a maximum of one, and if it is smaller then one,
+     * a safety_factor scales the value to make sure that 1-alpha won't get to
+     * close to zero. However, as later pointed out by Yimin Jin, the computation
+     * is wrong, see https://github.com/geodynamics/aspect/issues/5555. Instead,
+     * the function now computes the factor as
+     * $(2 \eta) / (a:b + b:a)$, again capped at a maximal value of 1,
+     * and using a safety factor from below.
+     *
+     * In practice, $a$ and $b$ are almost always parallel to each other,
+     * and $a:b + b:a = 2a:b$, in which case one can drop the factor
+     * of $2$ everywhere in the computations.
      */
     template <int dim>
     double compute_spd_factor(const double eta,
@@ -1309,9 +978,9 @@ namespace aspect
     template <int dim>
     SymmetricTensor<2,dim> nth_basis_for_symmetric_tensors (const unsigned int k);
 
-    /*
-    * A class that represents a point in a chosen coordinate system.
-    */
+    /**
+     * A class that represents a point in a chosen coordinate system.
+     */
     template <int dim>
     class NaturalCoordinate
     {
@@ -1336,6 +1005,12 @@ namespace aspect
         std::array<double,dim> &get_coordinates();
 
         /**
+         * Returns the coordinates in the given coordinate system, which may
+         * not be Cartesian.
+         */
+        const std::array<double,dim> &get_coordinates() const;
+
+        /**
          * The coordinate that represents the 'surface' directions in the
          * chosen coordinate system.
          */
@@ -1349,7 +1024,7 @@ namespace aspect
 
       private:
         /**
-         * An enum which stores the the coordinate system of this natural
+         * An enum which stores the coordinate system of this natural
          * point
          */
         Utilities::Coordinates::CoordinateSystem coordinate_system;
@@ -1359,7 +1034,382 @@ namespace aspect
          */
         std::array<double,dim> coordinates;
     };
+
+
+    /**
+     * Compute the cellwise projection of component @p component_index of @p function to the finite element space
+     * described by @p dof_handler.
+     *
+     * @param[in] mapping The mapping object to use.
+     * @param[in] dof_handler The DoFHandler the describes the finite element space to
+     * project into and that corresponds to @p vec_result.
+     * @param[in] component_index The component index of the @p dof_handler for which
+     * the projection is being performed. This component should be described by
+     * a DG finite element.
+     * @param[in] quadrature  The quadrature formula to use to evaluate @p function on each cell.
+     * @param[in] function The function to project into the finite element space.
+     * This function should store the value of the function at the points described
+     * by the 2nd argument into the 3rd argument as an std::vector<double>
+     * of size quadrature.size().
+     * @param[out] vec_result The output vector where the projected function will be
+     * stored in.
+     */
+    template <int dim, typename VectorType>
+    void
+    project_cellwise(const Mapping<dim>                                        &mapping,
+                     const DoFHandler<dim>                                     &dof_handler,
+                     const unsigned int                                         component_index,
+                     const Quadrature<dim>                                     &quadrature,
+                     const std::function<void(
+                       const typename DoFHandler<dim>::active_cell_iterator &,
+                       const std::vector<Point<dim>> &,
+                       std::vector<double> &)>                                 &function,
+                     VectorType                                                &vec_result);
+
+    /**
+     * Throw an exception that a linear solver failed with some helpful information for the user.
+     * This function is needed because we have multiple solvers that all require similar treatment
+     * and we would like to keep the output consistent. If the optional parameter
+     * @p output_filename is given, the solver history is additionally written to this file.
+     *
+     * @p solver_name A name that identifies the solver and appears in the error message.
+     * @p function_name The name of the function that used the solver (to identify where in the code
+     *   a solver failed).
+     * @p solver_controls One or more solver controls that describe the history of the solver(s)
+     *   that failed. The reason the function takes multiple controls is we sometimes use
+     *   multi-stage solvers, e.g. we try a cheap solver first, and use an expensive solver if the
+     *   cheap solver fails.
+     * @p exc The exception that was thrown by the solver when it failed, containing additional
+     *   information about what happened.
+     * @p mpi_communicator The MPI Communicator of the problem.
+     * @p output_filename An optional file name into which (if present) the solver history will
+     *   be written.
+     *
+     * @note This function never returns normally. It always exits via an exception, either
+     *   of type ExcMessage (on rank 0 of the parallel computation) or QuietException (on all
+     *   other ranks).
+     */
+    void throw_linear_solver_failure_exception(const std::string &solver_name,
+                                               const std::string &function_name,
+                                               const std::vector<SolverControl> &solver_controls,
+                                               const std::exception &exc,
+                                               const MPI_Comm mpi_communicator,
+                                               const std::string &output_filename = "");
+
+    /**
+     * Conversion object where one can provide a function that returns
+     * a tensor for the velocity at a given point and it returns something
+     * that matches the dealii::Function interface with a number of output
+     * components equal to the number of components of the finite element
+     * in use.
+     */
+    template <int dim>
+    class VectorFunctionFromVelocityFunctionObject : public Function<dim>
+    {
+      public:
+        /**
+         * Given a function object that takes a Point and returns a Tensor<1,dim>,
+         * convert this into an object that matches the Function@<dim@>
+         * interface.
+         *
+         * @param n_components total number of components of the finite element system.
+         * @param function_object The function that will form one component
+         *     of the resulting Function object.
+         */
+        VectorFunctionFromVelocityFunctionObject (const unsigned int n_components,
+                                                  const std::function<Tensor<1,dim> (const Point<dim> &)> &function_object);
+
+        /**
+         * Return the value of the
+         * function at the given
+         * point. Returns the value the
+         * function given to the constructor
+         * produces for this point.
+         */
+        double value (const Point<dim>   &p,
+                      const unsigned int  component = 0) const override;
+
+        /**
+         * Return all components of a
+         * vector-valued function at a
+         * given point.
+         *
+         * <tt>values</tt> shall have the right
+         * size beforehand,
+         * i.e. #n_components.
+         */
+        void vector_value (const Point<dim>   &p,
+                           Vector<double>     &values) const override;
+
+      private:
+        /**
+         * The function object which we call when this class's value() or
+         * value_list() functions are called.
+         */
+        const std::function<Tensor<1,dim> (const Point<dim> &)> function_object;
+    };
+
+    /**
+     * Create and return a permutation vector which can be used by the
+     * apply_permutation() function to put the vector in sorted order.
+     *
+     * @param vector vector to sort
+     */
+    template <typename T>
+    inline
+    std::vector<std::size_t>
+    compute_sorting_permutation(const std::vector<T> &vector);
+
+    /**
+     * Applies a permutation vector to another vector and return the resulting vector.
+     *
+     * @param vector vector to sort
+     * @param permutation_vector The permutation vector used to sort the input vector.
+     * @return The permuted input vector.
+     */
+    template <typename T>
+    inline
+    std::vector<T>
+    apply_permutation(
+      const std::vector<T> &vector,
+      const std::vector<std::size_t> &permutation_vector);
+
+    /**
+     * Get volume weighted rotation matrices, using random draws to convert
+     * to a discrete number of orientations, weighted by volume.
+     * The input is a vector of volume fractions and a vector of rotation matrices.
+     * The vectors need to have the same length.
+     *
+     * @param volume_fractions a vector of doubles representing the volume fraction of each grain
+     * @param rotation_matrices a vector of 2nd order 3D tensors representing the rotation matrix of each grain
+     * @param n_output_matrices The number of rotation matrices which are output by this function. This can be
+     * different from the number of entries in the volume fraction and rotation matrices vectors.
+     * @param random_number_generator a reference to a mt19937 random number generator.
+     */
+    std::vector<Tensor<2,3>>
+    rotation_matrices_random_draw_volume_weighting(const std::vector<double> &volume_fractions,
+                                                   const std::vector<Tensor<2,3>> &rotation_matrices,
+                                                   const unsigned int n_output_matrices,
+                                                   std::mt19937 &random_number_generator);
+
+    /**
+     * Wraps angle between 0 and 360 degrees.
+     */
+    double wrap_angle(const double angle);
+
+    /**
+     * Compute Z-X-Z Euler angles (https://en.wikipedia.org/wiki/Euler_angles) from rotation matrix.
+     * The Z-X-Z indicates the order of axis rotations to generate the Euler angles.
+     */
+    std::array<double,3> zxz_euler_angles_from_rotation_matrix(const Tensor<2,3> &rotation_matrix);
+
+    /**
+     * Compute rotation matrix from Z-X-Z Euler angles (https://en.wikipedia.org/wiki/Euler_angles)
+     * The Z-X-Z indicates the order of axis axis rotations to generate the Euler angles.
+     */
+    Tensor<2,3> zxz_euler_angles_to_rotation_matrix(const double phi1,
+                                                    const double theta,
+                                                    const double phi2);
+
   }
 }
+
+
+// inline implementations:
+#ifndef DOXYGEN
+namespace aspect
+{
+  namespace Utilities
+  {
+
+    template <typename T>
+    inline
+    std::vector<T>
+    possibly_extend_from_1_to_N (const std::vector<T> &values,
+                                 const unsigned int N,
+                                 const std::string &id_text)
+    {
+      if (values.size() == 1)
+        {
+          return std::vector<T> (N, values[0]);
+        }
+      else if (values.size() == N)
+        {
+          return values;
+        }
+      else
+        {
+          // Non-specified behavior
+          AssertThrow(false,
+                      ExcMessage("Length of " + id_text + " list must be " +
+                                 "either one or " + Utilities::to_string(N) +
+                                 ". Currently it is " + Utilities::to_string(values.size()) + "."));
+        }
+
+      // This should never happen, but return an empty vector so the compiler
+      // will be happy
+      return std::vector<T> ();
+    }
+
+    inline
+    void
+    extract_composition_values_at_q_point (const std::vector<std::vector<double>> &composition_values,
+                                           const unsigned int q,
+                                           std::vector<double> &composition_values_at_q_point)
+    {
+      Assert(q<composition_values.size(), ExcInternalError());
+      Assert(composition_values_at_q_point.size() > 0,
+             ExcInternalError());
+
+      for (unsigned int k=0; k < composition_values_at_q_point.size(); ++k)
+        {
+          Assert(composition_values[k].size() == composition_values_at_q_point.size(),
+                 ExcInternalError());
+          composition_values_at_q_point[k] = composition_values[k][q];
+        }
+    }
+
+    template <typename T>
+    inline
+    std::vector<std::size_t>
+    compute_sorting_permutation(const std::vector<T> &vector)
+    {
+      std::vector<std::size_t> p(vector.size());
+      std::iota(p.begin(), p.end(), 0);
+      std::sort(p.begin(), p.end(),
+                [&](std::size_t i, std::size_t j)
+      {
+        return vector[i] < vector[j];
+      });
+      return p;
+    }
+
+    template <typename T>
+    inline
+    std::vector<T>
+    apply_permutation(
+      const std::vector<T> &vector,
+      const std::vector<std::size_t> &permutation_vector)
+    {
+      std::vector<T> sorted_vec(vector.size());
+      std::transform(permutation_vector.begin(), permutation_vector.end(), sorted_vec.begin(),
+                     [&](std::size_t i)
+      {
+        return vector[i];
+      });
+      return sorted_vec;
+    }
+
+    /**
+     * Contains utility functions related to tensors.
+     */
+    namespace Tensors
+    {
+      /**
+       * Convert a series of doubles to a SymmetricTensor of the same size.
+       * The input is expected to be ordered according to the
+       * SymmetricTensor::unrolled_to_component_indices() function.
+       */
+      template <int dim, class Iterator>
+      inline
+      SymmetricTensor<2,dim>
+      to_symmetric_tensor(const Iterator begin,
+                          const Iterator end)
+      {
+        AssertDimension(std::distance(begin, end), (SymmetricTensor<2,dim>::n_independent_components));
+        (void) end;
+
+        SymmetricTensor<2,dim> output;
+
+        Iterator next = begin;
+        for (unsigned int i=0; i < SymmetricTensor<2,dim>::n_independent_components; ++i, ++next)
+          output[SymmetricTensor<2,dim>::unrolled_to_component_indices(i)] = *next;
+
+        return output;
+      }
+
+      /**
+       * Unroll a SymmetricTensor into a series of doubles. The output is ordered
+       * according to the SymmetricTensor::unrolled_to_component_indices() function.
+       */
+      template <int dim, class Iterator>
+      inline
+      void
+      unroll_symmetric_tensor_into_array(const SymmetricTensor<2,dim> &tensor,
+                                         const Iterator begin,
+                                         const Iterator end)
+      {
+        AssertDimension(std::distance(begin, end), (SymmetricTensor<2,dim>::n_independent_components));
+        (void) end;
+
+        Iterator next = begin;
+        for (unsigned int i=0; i < SymmetricTensor<2,dim>::n_independent_components; ++i, ++next)
+          *next = tensor[SymmetricTensor<2,dim>::unrolled_to_component_indices(i)];
+      }
+
+      /**
+       * Rotate a 3D 4th order tensor representing the full stiffnexx matrix using a 3D 2nd order rotation tensor
+       */
+      SymmetricTensor<4,3>
+      rotate_full_stiffness_tensor(const Tensor<2,3> &rotation_tensor, const SymmetricTensor<4,3> &input_tensor);
+
+      /**
+       * Rotate a 6x6 voigt stiffness matrix using a 2nd order Voigt stiffness tensor.
+       * See https://en.wikipedia.org/wiki/Voigt_notation for more info on the Voigt notation.
+       */
+      SymmetricTensor<2,6>
+      rotate_voigt_stiffness_matrix(const Tensor<2,3> &rotation_tensor, const SymmetricTensor<2,6> &input_tensor);
+
+      /**
+       * Transform a 4th order full stiffness tensor into a 6x6 Voigt stiffness matrix.
+       * See https://en.wikipedia.org/wiki/Voigt_notation for more info on the Voigt notation.
+       */
+      SymmetricTensor<2,6>
+      to_voigt_stiffness_matrix(const SymmetricTensor<4,3> &input_tensor);
+
+      /**
+       * Transform a 6x6 Voigt stiffness matrix into a 4th order full stiffness tensor.
+       * See https://en.wikipedia.org/wiki/Voigt_notation for more info on the Voigt notation.
+       */
+      SymmetricTensor<4,3>
+      to_full_stiffness_tensor(const SymmetricTensor<2,6> &input_tensor);
+
+      /**
+       * Form a 21D voigt stiffness vector from a 6x6 Voigt stiffness matrix.
+       * See https://en.wikipedia.org/wiki/Voigt_notation for more info on the Voigt notation.
+       */
+      Tensor<1,21>
+      to_voigt_stiffness_vector(const SymmetricTensor<2,6> &input_tensor);
+
+      /**
+       * Form a 21D voigt stiffness vector from a 6x6 Voigt stiffness matrix.
+       * See https://en.wikipedia.org/wiki/Voigt_notation for more info on the Voigt notation.
+       */
+      SymmetricTensor<2,6>
+      to_voigt_stiffness_matrix(const Tensor<1,21> &input_tensor);
+
+      /**
+       * Transform a 4th order full stiffness tensor into a 21D Voigt stiffness vector.
+       * See https://en.wikipedia.org/wiki/Voigt_notation for more info on the Voigt notation.
+       */
+      Tensor<1,21>
+      to_voigt_stiffness_vector(const SymmetricTensor<4,3> &input);
+
+
+      /**
+       * Return the Levi-Civita tensor, also called a permutation or "totally antisymmetric" tensor.
+       * See https://en.wikipedia.org/wiki/Levi-Civita_symbol for a definition.
+       */
+      template <int dim>
+      const Tensor<dim,dim> &levi_civita();
+
+      // Declare the existence of a specialization:
+      template <>
+      const Tensor<3,3> &levi_civita<3>();
+    }
+
+  }
+}
+#endif
 
 #endif

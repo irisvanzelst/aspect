@@ -1,42 +1,44 @@
 
-Loading shared library <./libmaterial_model_dependencies_tangurnis.so>
+Loading shared library <./libmaterial_model_dependencies_tangurnis.debug.so>
 
 Number of active cells: 16 (on 3 levels)
 Number of degrees of freedom: 268 (162+25+81)
 
-*** Timestep 0:  t=0 seconds
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 9+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 1: 1
+*** Timestep 0:  t=0 seconds, dt=0 seconds
+   Solving Stokes system (GMG)... 7+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 1: 1
 
-   Solving Stokes system... 7+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 2: 20.4416
+   Solving Stokes system (GMG)... 6+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 2: 10.2208
 
-   Solving Stokes system... 7+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 3: 10.31
+   Solving Stokes system (GMG)... 5+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 3: 5.15498
 
-   Solving Stokes system... 7+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 4: 5.34104
+   Solving Stokes system (GMG)... 5+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 4: 2.67052
 
-   Solving Stokes system... 7+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 5: 2.84276
+   Solving Stokes system (GMG)... 5+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 5: 1.42138
 
-   Solving Stokes system... 6+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 6: 1.55029
+   Solving Stokes system (GMG)... 5+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 6: 0.775144
 
-   Solving Stokes system... 6+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 7: 0.862476
+   Solving Stokes system (GMG)... 5+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 7: 0.431241
 
-   Solving Stokes system... 6+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 8: 0.487235
+   Solving Stokes system (GMG)... 4+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 8: 0.243622
 
-   Solving Stokes system... 6+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 9: 0.278377
+   Solving Stokes system (GMG)... 4+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 9: 0.139193
 
-   Solving Stokes system... 6+0 iterations.
-      Relative  nonlinear residual (Stokes system) after nonlinear iteration 10: 0.160346
+   Solving Stokes system (GMG)... 4+0 iterations.
+      Relative nonlinear residual (Stokes system) after nonlinear iteration 10: 0.0801765
 
 
+WARNING: The nonlinear solver in the current timestep failed to converge.
+Acting according to the parameter 'Nonlinear solver failure strategy'...
+Continuing to the next timestep even though solution is not fully converged.
    Postprocessing:
 viscosity depends on
 density depends on
@@ -48,7 +50,6 @@ model is compressible
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 
+
+WARNING: During this computation 1 nonlinear solver failures occurred!

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,7 +25,6 @@
 #include <aspect/global.h>
 #include <aspect/parameters.h>
 #include <aspect/introspection.h>
-#include <aspect/particle/world.h>
 
 #include <deal.II/base/table_handler.h>
 #include <deal.II/base/timer.h>
@@ -34,12 +33,7 @@
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/fe/fe.h>
 #include <deal.II/fe/mapping_q.h>
-
-#if !DEAL_II_VERSION_GTE(9,1,0)
-#  include <deal.II/lac/constraint_matrix.h>
-#else
-#  include <deal.II/lac/affine_constraints.h>
-#endif
+#include <deal.II/lac/affine_constraints.h>
 
 namespace WorldBuilder
 {
@@ -48,12 +42,11 @@ namespace WorldBuilder
 
 namespace aspect
 {
-  using namespace dealii;
-
   // forward declarations:
   template <int dim> class Simulator;
   template <int dim> struct SimulatorSignals;
   template <int dim> class LateralAveraging;
+  template <int dim> struct RotationProperties;
 
   namespace GravityModel
   {
@@ -95,6 +88,7 @@ namespace aspect
 
   namespace BoundaryTraction
   {
+    template <int dim> class Manager;
     template <int dim> class Interface;
   }
 
@@ -140,10 +134,16 @@ namespace aspect
 
   template <int dim> class NewtonHandler;
 
+  template <int dim> class StokesMatrixFreeHandler;
 
   namespace Particle
   {
-    template <int dim> class World;
+    template <int dim> class Manager;
+  }
+
+  namespace TimeStepping
+  {
+    template <int dim> class Manager;
   }
 
   /**
@@ -189,8 +189,7 @@ namespace aspect
        * Destructor. Does nothing but is virtual so that derived classes
        * destructors are also virtual.
        */
-      virtual
-      ~SimulatorAccess ();
+      virtual ~SimulatorAccess () = default;
 
       /**
        * Initialize this class for a given simulator. This function is marked
@@ -284,6 +283,14 @@ namespace aspect
        */
       unsigned int
       get_timestep_number () const;
+
+      /**
+       * Return a reference to the manager of the time stepping strategies.
+       * This can then be used, for example, to check whether a checkpoint needs to
+       * be made upon termination.
+       */
+      const TimeStepping::Manager<dim> &
+      get_timestepping_manager() const;
 
       /**
        * Return the current nonlinear iteration number of a time step.
@@ -381,6 +388,12 @@ namespace aspect
        */
       unsigned int
       n_compositional_fields () const;
+
+      /**
+       * Return the simulation end time in seconds.
+       */
+      double
+      get_end_time () const;
 
       /**
        * Compute the error indicators in the same way they are normally used
@@ -495,9 +508,9 @@ namespace aspect
       get_dof_handler () const;
 
       /**
-       * Return a reference to the finite element that the DoFHandler that is
-       * used to discretize the variables at the current time step is built
-       * on. This is the finite element for the entire, couple problem, i.e.,
+       * Return a reference to the finite element that is
+       * used to discretize the variables at the current time step.
+       * This is the finite element for the entire, coupled problem, i.e.,
        * it contains sub-elements for velocity, pressure, temperature and all
        * other variables in this problem (e.g., compositional variables, if
        * used in this simulation).
@@ -529,17 +542,6 @@ namespace aspect
        */
       const MaterialModel::Interface<dim> &
       get_material_model () const;
-
-      /**
-       * This function simply calls Simulator<dim>::compute_material_model_input_values()
-       * with the given arguments.
-       */
-      void
-      compute_material_model_input_values (const LinearAlgebra::BlockVector                            &input_solution,
-                                           const FEValuesBase<dim,dim>                                 &input_finite_element_values,
-                                           const typename DoFHandler<dim>::active_cell_iterator        &cell,
-                                           const bool                                                   compute_strainrate,
-                                           MaterialModel::MaterialModelInputs<dim> &material_model_inputs) const;
 
       /**
        * Return a pointer to the gravity model description.
@@ -578,16 +580,6 @@ namespace aspect
       bool has_boundary_temperature () const;
 
       /**
-       * Return a reference to the object that describes the temperature
-       * boundary values.
-       *
-       * @deprecated: Use get_boundary_temperature_manager() instead.
-       */
-      DEAL_II_DEPRECATED
-      const BoundaryTemperature::Interface<dim> &
-      get_boundary_temperature () const;
-
-      /**
        * Return an reference to the manager of the boundary temperature models.
        * This can then, for example, be used to get the names of the initial temperature
        * models used in a computation, or to compute the initial temperature
@@ -613,16 +605,6 @@ namespace aspect
       bool has_boundary_composition () const;
 
       /**
-       * Return a reference to the object that describes the composition
-       * boundary values.
-       *
-       * @deprecated: Use get_boundary_composition_manager() instead.
-       */
-      DEAL_II_DEPRECATED
-      const BoundaryComposition::Interface<dim> &
-      get_boundary_composition () const;
-
-      /**
        * Return an reference to the manager of the boundary composition models.
        * This can then, for example, be used to get the names of the boundary composition
        * models used in a computation, or to compute the boundary composition
@@ -632,43 +614,101 @@ namespace aspect
       get_boundary_composition_manager () const;
 
       /**
-       * Return a reference to the object that describes traction
-       * boundary conditions.
+       * Return an reference to the manager of the boundary traction models.
+       * This can then, for example, be used to get the names of the boundary traction
+       * models used in a computation, or to compute the boundary traction
+       * for a given position.
        */
-      const std::map<types::boundary_id,std::unique_ptr<BoundaryTraction::Interface<dim> > > &
-      get_boundary_traction () const;
-
-      /**
-       * Return a pointer to the object that describes the temperature initial
-       * values.
-       *
-       * @deprecated Use <code> get_initial_temperature_manager </code> instead.
-       */
-      DEAL_II_DEPRECATED
-      const InitialTemperature::Interface<dim> &
-      get_initial_temperature () const;
+      const BoundaryTraction::Manager<dim> &
+      get_boundary_traction_manager () const;
 
       /**
        * Return a reference to the manager of the initial temperature models.
        * This can then, for example, be used to get the names of the initial temperature
        * models used in a computation, or to compute the initial temperature
        * for a given position.
+       *
+       * While the Simulator class creates a shared pointer to an initial
+       * temperature manager before the first time step, it releases
+       * the pointer once it no longer needs access to the initial
+       * compositions. As a consequence, you can only call this function
+       * during the first time step.
+       *
+       * If the Simulator's shared pointer were the only
+       * one that points to the initial temperature manager object, that
+       * would also destroy the object pointed to. However, plugin classes
+       * can have member variables that are *also* shared pointers to
+       * these manager objects, and if you initialize such a shared
+       * pointer from the result of this function -- typically in the
+       * `initialize()` function of a plugin class -- then the Simulator
+       * giving up its shared pointer does not actually destroy the
+       * manager object but extends its lifetime until the last plugin
+       * that has a pointer to it is destroyed itself. As a consequence,
+       * if you need access to the initial temperature in a plugin, you
+       * will need to keep a shared pointer to it around for as long
+       * as you need it.
+       */
+      std::shared_ptr<const InitialTemperature::Manager<dim>>
+      get_initial_temperature_manager_pointer () const;
+
+      /**
+       * Return a reference to the manager of the initial temperature model.
+       * This can then, for example, be used to get the names of the initial temperature
+       * models used in a computation.
+       *
+       * While the Simulator class creates a shared pointer to an initial
+       * temperature manager before the first time step, it releases
+       * the pointer once it no longer needs access to the initial
+       * temperature. As a consequence, you can only call this function
+       * during the first time step. If a plugin needs access to the initial
+       * temperature at a later time, it has to store its own shared
+       * pointer to that object, and that is what can be achieved using
+       * the get_initial_temperature_manager_pointer() function above.
        */
       const InitialTemperature::Manager<dim> &
       get_initial_temperature_manager () const;
 
       /**
-       * Return a pointer to the object that describes the composition initial
-       * values.
-       */
-      DEAL_II_DEPRECATED
-      const InitialComposition::Interface<dim> &
-      get_initial_composition () const;
-
-      /**
        * Return a pointer to the manager of the initial composition model.
        * This can then, for example, be used to get the names of the initial composition
        * models used in a computation.
+       *
+       * While the Simulator class creates a shared pointer to an initial
+       * composition manager before the first time step, it releases
+       * the pointer once it no longer needs access to the initial
+       * compositions. As a consequence, you can only call this function
+       * during the first time step.
+       *
+       * If the Simulator's shared pointer were the only
+       * one that points to the initial composition manager object, that
+       * would also destroy the object pointed to. However, plugin classes
+       * can have member variables that are *also* shared pointers to
+       * these manager objects, and if you initialize such a shared
+       * pointer from the result of this function -- typically in the
+       * `initialize()` function of a plugin class -- then the Simulator
+       * giving up its shared pointer does not actually destroy the
+       * manager object but extends its lifetime until the last plugin
+       * that has a pointer to it is destroyed itself. As a consequence,
+       * if you need access to the initial compositions in a plugin, you
+       * will need to keep a shared pointer to it around for as long
+       * as you need it.
+       */
+      std::shared_ptr<const InitialComposition::Manager<dim>>
+      get_initial_composition_manager_pointer () const;
+
+      /**
+       * Return a reference to the manager of the initial composition model.
+       * This can then, for example, be used to get the names of the initial composition
+       * models used in a computation.
+       *
+       * While the Simulator class creates a shared pointer to an initial
+       * composition manager before the first time step, it releases
+       * the pointer once it no longer needs access to the initial
+       * compositions. As a consequence, you can only call this function
+       * during the first time step. If a plugin needs access to the initial
+       * composition at a later time, it has to store its own shared
+       * pointer to that object, and that is what can be achieved using
+       * the get_initial_composition_manager_pointer() function above.
        */
       const InitialComposition::Manager<dim> &
       get_initial_composition_manager () const;
@@ -747,6 +787,7 @@ namespace aspect
        */
       const NewtonHandler<dim> &
       get_newton_handler () const;
+
 #ifdef ASPECT_WITH_WORLD_BUILDER
       /**
        * Return a reference to the world builder that controls the setup of
@@ -754,9 +795,30 @@ namespace aspect
        *
        * This call will only succeed if ASPECT was configured to use
        * the WorldBuilder.
+       *
+       * While the Simulator class creates a shared pointer to a
+       * WorldBuilder object before the first time step, it releases
+       * the pointer once it no longer needs access to the initial
+       * conditions. As a consequence, you can only call this function
+       * during the first time step. If a plugin needs access to the object
+       * so returned at a later time, it has to store its own shared
+       * pointer to that object, and that is what can be achieved using
+       * the get_world_builder_pointer() function below.
        */
       const WorldBuilder::World &
       get_world_builder () const;
+
+      /**
+       * This function is to get_world_builder() what
+       * get_initial_temperature_manager_pointer() is to
+       * the get_initial_temperature_manager() function: It returns a
+       * shared pointer so that objects that still need access to the
+       * WorldBuilder object after the Simulator class has released
+       * it, can extend the lifetime of the object pointed to by
+       * keeping a shared pointer to it.
+       */
+      std::shared_ptr<const WorldBuilder::World>
+      get_world_builder_pointer () const;
 #endif
       /**
        * Return a reference to the mesh deformation handler. This function will
@@ -777,7 +839,7 @@ namespace aspect
        * Return a pointer to the object that describes the DoF
        * constraints for the time step we are currently solving.
        */
-      const ConstraintMatrix &
+      const AffineConstraints<double> &
       get_current_constraints () const;
 
       /**
@@ -843,7 +905,7 @@ namespace aspect
        */
       static
       void
-      get_composition_values_at_q_point (const std::vector<std::vector<double> > &composition_values,
+      get_composition_values_at_q_point (const std::vector<std::vector<double>> &composition_values,
                                          const unsigned int                      q,
                                          std::vector<double>                    &composition_values_at_q_point);
 
@@ -860,25 +922,6 @@ namespace aspect
        */
       TableHandler &get_statistics_object() const;
 
-
-      /**
-       * This function can be used to find out whether the list of
-       * postprocessors that are run at the end of each time step
-       * contains an object of the given template type. If so, the function
-       * returns a pointer to the postprocessor object of this type. If
-       * no postprocessor of this type has been selected in the input
-       * file (or, has been required by another postprocessor using the
-       * Postprocess::Interface::required_other_postprocessors()
-       * mechanism), then the function returns a nullptr.
-       *
-       * @deprecated Use get_postprocess_manager().has_matching_postprocessor()
-       * and get_postprocess_manager().get_matching_postprocessor() instead.
-       */
-      template <typename PostprocessorType>
-      DEAL_II_DEPRECATED
-      PostprocessorType *
-      find_postprocessor () const;
-
       /**
        * Return a reference to the melt handler.
        */
@@ -886,20 +929,54 @@ namespace aspect
       get_postprocess_manager () const;
 
       /**
-       * Returns a const reference to the particle world, in case anyone
-       * wants to query something about particles.
+       * Returns the number of active particle managers.
        */
-      const Particle::World<dim> &
-      get_particle_world() const;
+      unsigned int
+      n_particle_managers() const;
 
       /**
-       * Returns a reference to the particle world, in case anyone wants to
-       * change something within the particle world. Use with care, usually
-       * you want to only let the functions within the particle subsystem
-       * change member variables of the particle world.
+       * Returns a const reference to a single particle manager given the
+       * index.
        */
-      Particle::World<dim> &
-      get_particle_world();
+      const Particle::Manager<dim> &
+      get_particle_manager(const unsigned int particle_manager_index) const;
+
+      /**
+       * Returns a reference to a single particle manager, in case anyone wants to
+       * change something within the particle manager. Use with care, usually
+       * you want to only let the functions within the particle subsystem
+       * change member variables of the particle manager.
+       */
+      Particle::Manager<dim> &
+      get_particle_manager(const unsigned int particle_manager_index);
+
+      /**
+       * Return true if using the block GMG Stokes solver.
+       */
+      bool is_stokes_matrix_free();
+
+      /**
+       * Return a reference to the StokesMatrixFreeHandler that controls the
+       * matrix-free Stokes solver.
+       */
+      const StokesMatrixFreeHandler<dim> &
+      get_stokes_matrix_free () const;
+
+      /**
+       * Compute the angular momentum and other rotation properties
+       * of the velocities in the given solution vector.
+       *
+       * @param use_constant_density determines whether to use a constant
+       * density (which corresponds to computing a net rotation instead of net
+       * angular momentum).
+       * @param solution Solution vector to compute the properties for.
+       * @param limit_to_top_faces allows to only compute the net angular momentum
+       * (or net rotation) of the top surface.
+       */
+      RotationProperties<dim>
+      compute_net_angular_momentum(const bool use_constant_density,
+                                   const LinearAlgebra::BlockVector &solution,
+                                   const bool limit_to_top_faces = false) const;
 
       /** @} */
 
@@ -909,18 +986,6 @@ namespace aspect
        */
       const Simulator<dim> *simulator;
   };
-
-  template <int dim>
-  template <typename PostprocessorType>
-  inline
-  PostprocessorType *
-  SimulatorAccess<dim>::find_postprocessor () const
-  {
-    if (get_postprocess_manager().template has_matching_postprocessor<PostprocessorType>())
-      return &get_postprocess_manager().template get_matching_postprocessor<PostprocessorType>();
-
-    return nullptr;
-  }
 }
 
 

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,8 +17,8 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _aspect_world_builder_coordinate_sytems_h
-#define _aspect_world_builder_coordinate_sytems_h
+#ifndef WORLD_BUILDER_COORDINATE_SYSTEM_H
+#define WORLD_BUILDER_COORDINATE_SYSTEM_H
 
 namespace WorldBuilder
 {
@@ -58,10 +58,11 @@ namespace WorldBuilder
   {
     angle_at_starting_point_with_surface,
     angle_at_begin_segment_with_surface,
+    angle_at_begin_segment_applied_to_end_segment_with_surface,
     continuous_angle_with_surface,
     none
   };
-}
+} // namespace WorldBuilder
 
 #endif
 

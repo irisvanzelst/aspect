@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,44 +33,15 @@ namespace aspect
   namespace AdiabaticConditions
   {
     template <int dim>
-    Interface<dim>::~Interface ()
-    {}
-
-    template <int dim>
-    void
-    Interface<dim>::
-    initialize ()
-    {}
-
-    template <int dim>
-    void
-    Interface<dim>::
-    update ()
-    {}
-
-    template <int dim>
-    void
-    Interface<dim>::
-    declare_parameters (dealii::ParameterHandler &)
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::parse_parameters (dealii::ParameterHandler &)
-    {}
-
-
-    template <int dim>
     void Interface<dim>::get_adiabatic_temperature_profile(std::vector<double> &values) const
     {
       const unsigned int num_slices = values.size();
       const double max_depth = this->get_geometry_model().maximal_depth();
-      double depth = 0.0;
+      AssertThrow(num_slices > 1, ExcInternalError());
 
-      for (unsigned int n = 0 ; n < num_slices; n++)
+      for (unsigned int n = 0 ; n < num_slices; ++n)
         {
-          depth = n * max_depth / (num_slices-1);
+          const double depth = n * max_depth / (num_slices-1);
           const Point<dim> p = this->get_geometry_model().representative_point(depth);
           values[n] = temperature(p);
         }
@@ -82,11 +53,11 @@ namespace aspect
     {
       const unsigned int num_slices = values.size();
       const double max_depth = this->get_geometry_model().maximal_depth();
-      double depth = 0.0;
+      AssertThrow(num_slices > 1, ExcInternalError());
 
-      for (unsigned int n = 0 ; n < num_slices; n++)
+      for (unsigned int n = 0 ; n < num_slices; ++n)
         {
-          depth = n * max_depth / (num_slices-1);
+          const double depth = n * max_depth / (num_slices-1);
           const Point<dim> p = this->get_geometry_model().representative_point(depth);
           values[n] = pressure(p);
         }
@@ -97,11 +68,11 @@ namespace aspect
     {
       const unsigned int num_slices = values.size();
       const double max_depth = this->get_geometry_model().maximal_depth();
-      double depth = 0.0;
+      AssertThrow(num_slices > 1, ExcInternalError());
 
-      for (unsigned int n = 0 ; n < num_slices; n++)
+      for (unsigned int n = 0 ; n < num_slices; ++n)
         {
-          depth = n * max_depth / (num_slices-1);
+          const double depth = n * max_depth / (num_slices-1);
           const Point<dim> p = this->get_geometry_model().representative_point(depth);
           values[n] = density(p);
         }
@@ -112,11 +83,11 @@ namespace aspect
     {
       const unsigned int num_slices = values.size();
       const double max_depth = this->get_geometry_model().maximal_depth();
-      double depth = 0.0;
+      AssertThrow(num_slices > 1, ExcInternalError());
 
-      for (unsigned int n = 0 ; n < num_slices; n++)
+      for (unsigned int n = 0 ; n < num_slices; ++n)
         {
-          depth = n * max_depth / (num_slices-1);
+          const double depth = n * max_depth / (num_slices-1);
           const Point<dim> p = this->get_geometry_model().representative_point(depth);
           values[n] = density_derivative(p);
         }
@@ -129,10 +100,10 @@ namespace aspect
     namespace
     {
       std::tuple
-      <void *,
-      void *,
-      aspect::internal::Plugins::PluginList<Interface<2> >,
-      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::PluginList<Interface<2>>,
+      aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -142,7 +113,7 @@ namespace aspect
     register_adiabatic_conditions (const std::string &name,
                                    const std::string &description,
                                    void (*declare_parameters_function) (ParameterHandler &),
-                                   Interface<dim> *(*factory_function) ())
+                                   std::unique_ptr<Interface<dim>> (*factory_function) ())
     {
       std::get<dim>(registered_plugins).register_plugin (name,
                                                          description,
@@ -152,7 +123,7 @@ namespace aspect
 
 
     template <int dim>
-    Interface<dim> *
+    std::unique_ptr<Interface<dim>>
     create_adiabatic_conditions (ParameterHandler &prm)
     {
       std::string model_name;
@@ -162,8 +133,8 @@ namespace aspect
       }
       prm.leave_subsection ();
 
-      Interface<dim> *plugin = std::get<dim>(registered_plugins).create_plugin (model_name,
-                                                                                "Adiabatic Conditions model::Model name");
+      std::unique_ptr<Interface<dim>>plugin = std::get<dim>(registered_plugins).create_plugin (model_name,
+                                               "Adiabatic Conditions model::Model name");
 
       return plugin;
 
@@ -212,11 +183,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<AdiabaticConditions::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<AdiabaticConditions::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<AdiabaticConditions::Interface<2>>::PluginInfo> *
+      internal::Plugins::PluginList<AdiabaticConditions::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<AdiabaticConditions::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<AdiabaticConditions::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<AdiabaticConditions::Interface<3>>::PluginInfo> *
+      internal::Plugins::PluginList<AdiabaticConditions::Interface<3>>::plugins = nullptr;
     }
   }
 
@@ -230,7 +201,7 @@ namespace aspect
   register_adiabatic_conditions<dim> (const std::string &, \
                                       const std::string &, \
                                       void ( *) (ParameterHandler &), \
-                                      Interface<dim> *( *) ()); \
+                                      std::unique_ptr<Interface<dim>>( *) ()); \
   \
   template  \
   void \
@@ -241,9 +212,11 @@ namespace aspect
   write_plugin_graph<dim> (std::ostream &); \
   \
   template \
-  Interface<dim> * \
+  std::unique_ptr<Interface<dim>> \
   create_adiabatic_conditions<dim> (ParameterHandler &prm);
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,8 +25,6 @@
 #include <aspect/simulator_access.h>
 #include <aspect/initial_composition/interface.h>
 #include <aspect/material_model/interface.h>
-#include <fstream>
-#include <iostream>
 #include <array>
 
 #include <boost/lexical_cast.hpp>
@@ -51,7 +49,7 @@ namespace aspect
 
         SphericalHarmonicsLookup::
         SphericalHarmonicsLookup(const std::string &filename,
-                                 const MPI_Comm &comm)
+                                 const MPI_Comm comm)
         {
           std::string temp;
           // Read data from disk and distribute among processes
@@ -121,7 +119,7 @@ namespace aspect
         // lib/libS20/splhsetup.f which is part of the plotting package downloadable at
         // http://www.earth.lsa.umich.edu/~jritsema/research.html
         SplineDepthsLookup::SplineDepthsLookup(const std::string &filename,
-                                               const MPI_Comm &comm)
+                                               const MPI_Comm comm)
         {
           std::string temp;
           // Read data from disk and distribute among processes
@@ -160,11 +158,11 @@ namespace aspect
     S40RTSPerturbation<dim>::initialize()
     {
       spherical_harmonics_lookup
-        = std_cxx14::make_unique<internal::S40RTS::SphericalHarmonicsLookup>(data_directory+harmonics_coeffs_file_name,
-                                                                             this->get_mpi_communicator());
-      spline_depths_lookup
-        = std_cxx14::make_unique<internal::S40RTS::SplineDepthsLookup>(data_directory+spline_depth_file_name,
+        = std::make_unique<internal::S40RTS::SphericalHarmonicsLookup>(data_directory+harmonics_coeffs_file_name,
                                                                        this->get_mpi_communicator());
+      spline_depths_lookup
+        = std::make_unique<internal::S40RTS::SplineDepthsLookup>(data_directory+spline_depth_file_name,
+                                                                 this->get_mpi_communicator());
 
       if (vs_to_density_method == file)
         {
@@ -180,31 +178,34 @@ namespace aspect
     S40RTSPerturbation<dim>::
     get_Vs (const Point<dim> &position) const
     {
-      // get the degree from the input file (20 or 40)
-      unsigned int max_degree = spherical_harmonics_lookup->maxdegree();
+      // get the max degree from the input data file (20 or 40)
+      const unsigned int max_degree_data_file = spherical_harmonics_lookup->maxdegree();
 
-      // lower the maximum order if needed
-      if (lower_max_order)
+      // set the max degree used for the calculation to the max degree from the input data file as default
+      unsigned int max_degree_to_use = max_degree_data_file;
+
+      // lower the maximum degree of the calculation if needed
+      if (lower_max_degree)
         {
-          AssertThrow(max_order <= max_degree, ExcMessage("Specifying a maximum order higher than the order of spherical harmonic data is not allowed"));
-          max_degree = max_order;
+          AssertThrow(specified_max_degree <= max_degree_data_file, ExcMessage("Specifying a maximum degree higher than the degree of spherical harmonic data is not allowed"));
+          max_degree_to_use = specified_max_degree;
         }
 
       // This tomography model is parameterized by 21 layers
       const unsigned int num_spline_knots = 21;
 
       // get the spherical harmonics coefficients
-      const std::vector<double> a_lm = spherical_harmonics_lookup->cos_coeffs();
-      const std::vector<double> b_lm = spherical_harmonics_lookup->sin_coeffs();
+      const std::vector<double> &a_lm = spherical_harmonics_lookup->cos_coeffs();
+      const std::vector<double> &b_lm = spherical_harmonics_lookup->sin_coeffs();
 
       // get spline knots and rescale them from [-1 1] to [CMB Moho]
-      const std::vector<double> r = spline_depths_lookup->spline_depths();
+      const std::vector<double> &r = spline_depths_lookup->spline_depths();
       const double rmoho = 6346e3;
       const double rcmb = 3480e3;
-      std::vector<double> depth_values(num_spline_knots,0);
+      std::vector<double> depth_values(num_spline_knots, 0);
 
       for (unsigned int i = 0; i<num_spline_knots; ++i)
-        depth_values[i] = rcmb+(rmoho-rcmb)*0.5*(r[i]+1);
+        depth_values[i] = rcmb+(rmoho-rcmb)*0.5*(r[i]+1.);
 
       // convert coordinates from [x,y,z] to [r, phi, theta]
       std::array<double,dim> scoord = aspect::Utilities::Coordinates::cartesian_to_spherical_coordinates(position);
@@ -214,10 +215,10 @@ namespace aspect
       // NOTE: there is apparently a factor of sqrt(2) difference
       // between the standard orthonormalized spherical harmonics
       // and those used for S40RTS (see PR # 966)
-      std::vector<std::vector<double> > cosine_components(max_degree+1,std::vector<double>(max_degree+1,0.0));
-      std::vector<std::vector<double> > sine_components(max_degree+1,std::vector<double>(max_degree+1,0.0));
+      std::vector<std::vector<double>> cosine_components(max_degree_to_use+1, std::vector<double>(max_degree_to_use+1, 0.0));
+      std::vector<std::vector<double>> sine_components(max_degree_to_use+1, std::vector<double>(max_degree_to_use+1, 0.0));
 
-      for (unsigned int degree_l = 0; degree_l < max_degree+1; ++degree_l)
+      for (unsigned int degree_l = 0; degree_l < max_degree_to_use+1; ++degree_l)
         {
           for (unsigned int order_m = 0; order_m < degree_l+1; ++order_m)
             {
@@ -232,13 +233,13 @@ namespace aspect
         }
 
       // iterate over all degrees and orders at each depth and sum them all up.
-      std::vector<double> spline_values(num_spline_knots,0);
+      std::vector<double> spline_values(num_spline_knots, 0.);
       double prefact;
       unsigned int ind = 0;
 
       for (unsigned int depth_interp = 0; depth_interp < num_spline_knots; ++depth_interp)
         {
-          for (unsigned int degree_l = 0; degree_l < max_degree+1; ++degree_l)
+          for (unsigned int degree_l = 0; degree_l < max_degree_to_use+1; ++degree_l)
             {
               for (unsigned int order_m = 0; order_m < degree_l+1; ++order_m)
                 {
@@ -250,8 +251,9 @@ namespace aspect
                                1.);
                   else if (order_m != 0)
                     // this removes the sqrt(2) factor difference in normalization (see PR # 966)
-                    prefact = 1./sqrt(2.);
-                  else prefact = 1.0;
+                    prefact = 1./std::sqrt(2.);
+                  else
+                    prefact = 1.0;
 
                   spline_values[depth_interp] += prefact * (a_lm[ind] * cosine_components[degree_l][order_m]
                                                             + b_lm[ind] * sine_components[degree_l][order_m]);
@@ -259,6 +261,11 @@ namespace aspect
                   ++ind;
                 }
             }
+          // Skip the higher degree spherical harminic coefficients per layer if a lower max degree is used.
+          // The formula below will calculate the total number of the spherical harmonic coefficients from
+          // the degree at max_degree_to_use+1 to the degree at max_degree_data_file.
+          // The formula below will be zero if the spherical harmonics are summed up to the degree at max_degree_data_file.
+          ind += (max_degree_to_use+max_degree_data_file+3)*(max_degree_data_file-max_degree_to_use)/2;
         }
 
       // We need to reorder the spline_values because the coefficients are given from
@@ -272,7 +279,7 @@ namespace aspect
       // at the boundary (i.e. Moho and CMB). Values outside the range are linearly
       // extrapolated.
       aspect::Utilities::tk::spline s;
-      s.set_points(depth_values,spline_values_inv);
+      s.set_points(depth_values, spline_values_inv);
 
       // Return value of Vs perturbation at specific depth
       return s(scoord[0]);
@@ -328,7 +335,7 @@ namespace aspect
               in.velocity[0] = Tensor<1,dim> ();
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                 in.composition[0][c] = this->get_initial_composition_manager().initial_composition(position, c);
-              in.strain_rate.resize(0);
+              in.requested_properties = MaterialModel::MaterialProperties::thermal_expansion_coefficient;
 
               this->get_material_model().evaluate(in, out);
 
@@ -370,14 +377,14 @@ namespace aspect
                              "Method that is used to specify how the vs-to-density scaling varies "
                              "with depth.");
           prm.declare_entry ("Vs to density scaling", "0.25",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "This parameter specifies how the perturbation in shear wave velocity "
                              "as prescribed by S20RTS or S40RTS is scaled into a density perturbation. "
                              "See the general description of this model for more detailed information.");
           prm.declare_entry ("Thermal expansion coefficient in initial temperature scaling", "2e-5",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The value of the thermal expansion coefficient $\\beta$. "
-                             "Units: $1/K$.");
+                             "Units: \\si{\\per\\kelvin}.");
           prm.declare_entry ("Use thermal expansion coefficient from material model", "false",
                              Patterns::Bool (),
                              "Option to take the thermal expansion coefficient from the "
@@ -389,27 +396,28 @@ namespace aspect
                              "which will ensure that the laterally averaged temperature for a fixed "
                              "depth is equal to the background temperature.");
           prm.declare_entry ("Reference temperature", "1600.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The reference temperature that is perturbed by the spherical "
                              "harmonic functions. Only used in incompressible models.");
-          prm.declare_entry ("Remove temperature heterogeneity down to specified depth", boost::lexical_cast<std::string>(-std::numeric_limits<double>::max()),
+          prm.declare_entry ("Remove temperature heterogeneity down to specified depth",
+                             boost::lexical_cast<std::string>(std::numeric_limits<double>::lowest()),
                              Patterns::Double (),
                              "This will set the heterogeneity prescribed by S20RTS or S40RTS to zero "
                              "down to the specified depth (in meters). Note that your resolution has "
                              "to be adequate to capture this cutoff. For example if you specify a depth "
-                             "of 660km, but your closest spherical depth layers are only at 500km and "
-                             "750km (due to a coarse resolution) it will only zero out heterogeneities "
-                             "down to 500km. Similar caution has to be taken when using adaptive meshing.");
-          prm.declare_entry ("Specify a lower maximum order","false",
+                             "of 660 km, but your closest spherical depth layers are only at 500 km and "
+                             "750 km (due to a coarse resolution) it will only zero out heterogeneities "
+                             "down to 500 km. Similar caution has to be taken when using adaptive meshing.");
+          prm.declare_entry ("Specify a lower maximum degree","false",
                              Patterns::Bool (),
-                             "Option to use a lower maximum order when reading the data file of spherical "
+                             "Option to use a lower maximum degree when reading the data file of spherical "
                              "harmonic coefficients. This is probably used for the faster tests or when the "
-                             "users only want to see the spherical harmonic pattern up to a certain order.");
-          prm.declare_entry ("Maximum order","20",
+                             "users only want to see the spherical harmonic pattern up to a certain degree.");
+          prm.declare_entry ("Maximum degree","20",
                              Patterns::Integer (0),
-                             "The maximum order the users specify when reading the data file of spherical harmonic "
-                             "coefficients, which must be smaller than the maximum order the data file stored. "
-                             "This parameter will be used only if 'Specify a lower maximum order' is set to true.");
+                             "The maximum degree the users specify when reading the data file of spherical harmonic "
+                             "coefficients, which must be smaller than the maximum degree the data file stored. "
+                             "This parameter will be used only if 'Specify a lower maximum degree' is set to true.");
 
           aspect::Utilities::AsciiDataProfile<dim>::declare_parameters(prm,
                                                                        "$ASPECT_SOURCE_DIR/data/initial-temperature/S40RTS/",
@@ -442,8 +450,8 @@ namespace aspect
           zero_out_degree_0       = prm.get_bool ("Remove degree 0 from perturbation");
           reference_temperature   = prm.get_double ("Reference temperature");
           no_perturbation_depth   = prm.get_double ("Remove temperature heterogeneity down to specified depth");
-          lower_max_order         = prm.get_bool ("Specify a lower maximum order");
-          max_order               = prm.get_integer ("Maximum order");
+          lower_max_degree         = prm.get_bool ("Specify a lower maximum degree");
+          specified_max_degree               = prm.get_integer ("Maximum degree");
 
           if (prm.get("Vs to density scaling method") == "file")
             vs_to_density_method = file;
@@ -459,8 +467,6 @@ namespace aspect
         prm.leave_subsection ();
       }
       prm.leave_subsection ();
-
-      initialize ();
     }
   }
 }
@@ -486,10 +492,10 @@ namespace aspect
                                               "'Vs to density scaling' parameter or depth-dependent and "
                                               "read in from a file. To convert density the user can specify "
                                               "the 'Thermal expansion coefficient in initial temperature scaling' "
-                                              "parameter. The scaling is as follows: $\\delta ln \\rho "
-                                              "(r,\\theta,\\phi) = \\xi \\cdot \\delta ln v_s(r,\\theta, "
+                                              "parameter. The scaling is as follows: $\\delta \\ln \\rho "
+                                              "(r,\\theta,\\phi) = \\xi \\cdot \\delta \\ln v_s(r,\\theta, "
                                               "\\phi)$ and $\\delta T(r,\\theta,\\phi) = - \\frac{1}{\\alpha} "
-                                              "\\delta ln \\rho(r,\\theta,\\phi)$. $\\xi$ is the `vs to "
+                                              "\\delta \\ln \\rho(r,\\theta,\\phi)$. $\\xi$ is the `vs to "
                                               "density scaling' parameter and $\\alpha$ is the 'Thermal "
                                               "expansion coefficient in initial temperature scaling' "
                                               "parameter. The temperature perturbation is added to an "
@@ -518,7 +524,7 @@ namespace aspect
                                               "but the computation of properties is optimized in speed "
                                               "if they are."
                                               "\n"
-                                              "If the plugin is used in 2D it will use an equatorial "
+                                              "If the plugin is used in 2d it will use an equatorial "
                                               "slice of the seismic tomography model.")
   }
 }

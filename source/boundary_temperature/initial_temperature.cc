@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,12 +30,24 @@ namespace aspect
 // ------------------------------ InitialTemperature -------------------
 
     template <int dim>
+    void
+    InitialTemperature<dim>::initialize()
+    {
+      // Make sure we keep track of the initial temperature manager and
+      // that it continues to live beyond the time when the simulator
+      // class releases its pointer to it.
+      initial_temperature = this->get_initial_temperature_manager_pointer();
+    }
+
+
+
+    template <int dim>
     double
     InitialTemperature<dim>::
     boundary_temperature (const types::boundary_id,
                           const Point<dim> &position) const
     {
-      return this->get_initial_temperature_manager().initial_temperature(position);
+      return initial_temperature->initial_temperature(position);
     }
 
 
@@ -67,12 +79,12 @@ namespace aspect
       {
         prm.enter_subsection("Initial temperature");
         {
-          prm.declare_entry ("Minimal temperature", "0",
+          prm.declare_entry ("Minimal temperature", "0.",
                              Patterns::Double (),
-                             "Minimal temperature. Units: $\\si{K}$.");
-          prm.declare_entry ("Maximal temperature", "3773",
+                             "Minimal temperature. Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Maximal temperature", "3773.",
                              Patterns::Double (),
-                             "Maximal temperature. Units: $\\si{K}$.");
+                             "Maximal temperature. Units: \\si{\\kelvin}.");
         }
         prm.leave_subsection ();
       }

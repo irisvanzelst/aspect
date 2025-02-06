@@ -10,30 +10,34 @@
 <Piece NumberOfPoints="10" NumberOfCells="10" >
   <Points>
     <DataArray type="Float32" NumberOfComponents="3" format="binary">
-AQAAAHgAAAB4AAAAZQAAAA==eNqrbVS2f/7/px0DEDBdibSf7HUUzG68EGp/sfcQmO23Js72kj6zPYi9b/tl27XPZcHs9iMP7G6s9gaz373ZZKeuXwZm1xgy2Nfz2oHZ37JU7E9aKIDZ0y5n2M8TcwKzAVc1JAQ=
+AQAAAHgAAAB4AAAAZgAAAA==eAHbffeI3aMnR20YgMCt19d2UuEDOxCbYU2hHWvIAjC7N8DR1liF2x4krJ8zw9YqXxDM3ut70u63ZzGYvTuI0T50nRmYrbpR097TQA/MvrVJw76czQTMjvsRZP/5mBWYDQAgcx/D
     </DataArray>
   </Points>
 
   <Cells>
     <DataArray type="Int32" Name="connectivity" format="binary">
-AQAAACgAAAAoAAAAIAAAAA==eNoNw4kNACAMBKDT+nX/hYWEJBlOy+X2eH22HwK8AC4=
+AQAAACgAAAAoAAAAIAAAAA==eAENw4kNACAMBKDT+nX/hYWEJBlOy+X2eH22HwK8AC4=
     </DataArray>
     <DataArray type="Int32" Name="offsets" format="binary">
-AQAAACgAAAAoAAAAIAAAAA==eNoNw4kNACAMBKDzrbr/wEJCS9IdTpfb8nh9fgOYADg=
+AQAAACgAAAAoAAAAIAAAAA==eAENw4kNACAMBKDzrbr/wEJCS9IdTpfb8nh9fgOYADg=
     </DataArray>
     <DataArray type="UInt8" Name="types" format="binary">
-AQAAAAoAAAAKAAAACwAAAA==eNpjZIQBAABBAAs=
+AQAAAAoAAAAKAAAACwAAAA==eAFjZIQBAABBAAs=
     </DataArray>
   </Cells>
   <PointData Scalars="scalars">
     <DataArray type="Float32" Name="initial position" NumberOfComponents="3" format="binary">
-AQAAAHgAAAB4AAAAZQAAAA==eNqrbVS2f/7/px0DEDBdibSf7HUUzG68EGp/sfcQmO23Js72kj6zPYi9b/tl27XPZcHs9iMP7G6s9gaz373ZZKeuXwZm1xgy2Nfz2oHZ37JU7E9aKIDZ0y5n2M8TcwKzAVc1JAQ=    </DataArray>
+AQAAAHgAAAB4AAAAZgAAAA==eAHbffeI3aMnR20YgMCt19d2UuEDOxCbYU2hHWvIAjC7N8DR1liF2x4krJ8zw9YqXxDM3ut70u63ZzGYvTuI0T50nRmYrbpR097TQA/MvrVJw76czQTMjvsRZP/5mBWYDQAgcx/D
+    </DataArray>
     <DataArray type="Float32" Name="id" format="binary">
-AQAAACgAAAAoAAAAIwAAAA==eNpjYACBBnsg4QBEQNwAxAuA+AAQPwBiBkcGBgFHAGdtBdI=    </DataArray>
+AQAAACgAAAAoAAAAIwAAAA==eAFjYACBBnsg4QBEQNwAxAuA+AAQPwBiBkcGBgFHAGdtBdI=
+    </DataArray>
     <DataArray type="Float32" Name="function" format="binary">
-AQAAACgAAAAoAAAADAAAAA==eNpjYCAOAAAAKAAB    </DataArray>
+AQAAACgAAAAoAAAADwAAAA==eAFjYGiwZyACAAAcQwDA
+    </DataArray>
     <DataArray type="Float32" Name="initial C_1" format="binary">
-AQAAACgAAAAoAAAAGwAAAA==eNpjSLisyWWwzuD1FAlDhoYILQYcAACrfgU/    </DataArray>
+AQAAACgAAAAoAAAAHwAAAA==eAFjYGiwn+C5Xj/ygZcFA4OMBgNDgBoDFgAAnc0E7A==
+    </DataArray>
   </PointData>
  </Piece>
  </UnstructuredGrid>

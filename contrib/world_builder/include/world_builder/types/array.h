@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,14 +17,17 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_feature_types_array_h
-#define _world_feature_types_array_h
+#ifndef WORLD_BUILDER_TYPES_ARRAY_H
+#define WORLD_BUILDER_TYPES_ARRAY_H
 
-#include <world_builder/types/interface.h>
+
+#include "world_builder/types/interface.h"
 
 
 namespace WorldBuilder
 {
+  class Parameters;
+
   namespace Types
   {
     /**
@@ -37,7 +40,7 @@ namespace WorldBuilder
     * by index, and a list holds the values strictly ordered, only accessible
     * an iterator. An other difference it that lists have a name.
      */
-    class Array : public Interface
+    class Array final: public Interface
     {
       public:
         /**
@@ -48,28 +51,23 @@ namespace WorldBuilder
               const unsigned int max_items = std::numeric_limits<unsigned int>::max(),
               const bool unique_items = false);
 
+        /**
+         * Constructor for cloning an array.
+         */
+        Array(Array const &other);
+
 
         /**
          * Destructor
          */
-        ~Array();
-
-
-        /**
-         * Clone. The caller will be responsible for the liftime of this
-         * object, return a unique pointer. This clone can only be used
-         * when inner_type.size() == 0.
-         */
-        virtual
-        std::unique_ptr<Interface>   clone() const;
+        ~Array() override final;
 
         /**
          * Todo
          */
-        virtual
         void write_schema(Parameters &prm,
                           const std::string &name,
-                          const std::string &documentation) const;
+                          const std::string &documentation) const override final;
 
         /**
          * An enum of the type which this class points to
@@ -109,9 +107,13 @@ namespace WorldBuilder
          */
         bool unique_items;
 
-
+      protected:
+        Array *clone_impl() const override final
+        {
+          return new Array(*this);
+        };
     };
-  }
-}
+  } // namespace Types
+} // namespace WorldBuilder
 
 #endif

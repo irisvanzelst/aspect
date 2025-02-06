@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,14 +35,14 @@ namespace aspect
               const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
               HeatingModel::HeatingModelOutputs &heating_model_outputs) const
     {
-      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.position.size(),
+      Assert(heating_model_outputs.heating_source_terms.size() == material_model_inputs.n_evaluation_points(),
              ExcMessage ("Heating outputs need to have the same number of entries as the material model inputs."));
 
       AssertThrow(this->include_melt_transport(),
                   ExcMessage ("Heating model Adiabatic heating with melt only works if melt transport is enabled."));
 
       // get the melt velocity
-      const MaterialModel::MeltInputs<dim> *melt_in = material_model_inputs.template get_additional_input<MaterialModel::MeltInputs<dim> >();
+      const MaterialModel::MeltInputs<dim> *melt_in = material_model_inputs.template get_additional_input<MaterialModel::MeltInputs<dim>>();
       AssertThrow(melt_in != nullptr,
                   ExcMessage ("Need MeltInputs from the material model for adiabatic heating with melt!"));
 
@@ -57,7 +57,7 @@ namespace aspect
                                                             * material_model_inputs.temperature[q];
           else
             {
-              const MaterialModel::MeltOutputs<dim> *melt_outputs = material_model_outputs.template get_additional_output<MaterialModel::MeltOutputs<dim> >();
+              const MaterialModel::MeltOutputs<dim> *melt_outputs = material_model_outputs.template get_additional_output<MaterialModel::MeltOutputs<dim>>();
               Assert(melt_outputs != nullptr, ExcMessage("Need MeltOutputs from the material model for adiabatic heating with melt."));
 
               heating_model_outputs.heating_source_terms[q] = (-porosity * material_model_inputs.velocity[q]
@@ -131,11 +131,9 @@ namespace aspect
     create_additional_material_model_inputs(MaterialModel::MaterialModelInputs<dim> &inputs) const
     {
       // we need the melt inputs for this adiabatic heating of melt
-      if (inputs.template get_additional_input<MaterialModel::MeltInputs<dim> >() != nullptr)
-        return;
-
-      inputs.additional_inputs.push_back(
-        std_cxx14::make_unique<MaterialModel::MeltInputs<dim>> (inputs.position.size()));
+      if (inputs.template get_additional_input<MaterialModel::MeltInputs<dim>>() == nullptr)
+        inputs.additional_inputs.emplace_back(
+          std::make_unique<MaterialModel::MeltInputs<dim>> (inputs.n_evaluation_points()));
     }
   }
 }
@@ -151,7 +149,7 @@ namespace aspect
                                   "adiabatic heating of melt. The full model implements the "
                                   "heating term \n"
                                   "$\\alpha T (-\\phi \\mathbf u_s \\cdot \\nabla p) "
-                                  "+ \\alpha T (\\phi \\mathbf u_f \\cdot \nabla p)$.\n"
+                                  "+ \\alpha T (\\phi \\mathbf u_f \\cdot \\nabla p)$.\n"
                                   "For full adiabatic heating, "
                                   "this has to be used in combination with the heating model "
                                   "`adiabatic heating' to also include adiabatic heating for "

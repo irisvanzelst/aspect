@@ -1,3 +1,23 @@
+/*
+  Copyright (C) 2022 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
 // Check the Donea-Huerta benchmark using the Q1 x Q1 element
 
 #include <aspect/simulator.h>
@@ -19,8 +39,6 @@ namespace aspect
 {
   namespace DoneaHuertaBenchmark
   {
-    using namespace dealii;
-
     namespace AnalyticSolutions
     {
 
@@ -54,8 +72,8 @@ namespace aspect
             beta_(beta)
           {}
 
-          virtual void vector_value (const Point< dim >   &pos,
-                                     Vector< double >   &values) const
+          virtual void vector_value (const Point<dim>   &pos,
+                                     Vector<double>   &values) const
           {
             Assert (dim == 2, ExcNotImplemented());
             Assert (values.size() >= 4, ExcInternalError());
@@ -115,7 +133,7 @@ namespace aspect
         virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
                               MaterialModel::MaterialModelOutputs<dim> &out) const
         {
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
               out.viscosities[i] = 1.;
               out.densities[i] = 1;
@@ -164,14 +182,6 @@ namespace aspect
 
 
         /**
-         * @name Reference quantities
-         * @{
-         */
-        virtual double reference_viscosity () const;
-        /**
-         * @}
-         */
-        /**
          * Returns the viscosity value in the inclusion
          */
         double get_beta() const;
@@ -181,15 +191,6 @@ namespace aspect
          */
         double beta;
     };
-
-
-    template <int dim>
-    double
-    DoneaHuertaMaterial<dim>::
-    reference_viscosity () const
-    {
-      return 1;
-    }
 
 
     template <int dim>
@@ -373,7 +374,7 @@ namespace aspect
     std::pair<std::string,std::string>
     DoneaHuertaPostprocessor<dim>::execute (TableHandler &)
     {
-      std::unique_ptr<Function<dim> > ref_func;
+      std::unique_ptr<Function<dim>> ref_func;
       {
         const DoneaHuertaMaterial<dim> *
         material_model
@@ -469,4 +470,3 @@ namespace aspect
                                   "See the manual for more information.")
   }
 }
-

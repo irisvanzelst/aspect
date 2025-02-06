@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -26,9 +26,6 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/fe/fe_values.h>
 
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
-
 
 namespace aspect
 {
@@ -39,9 +36,9 @@ namespace aspect
     MeltStatistics<dim>::execute (TableHandler &statistics)
     {
       // create a quadrature formula based on the temperature element alone.
-      const QGauss<dim> quadrature_formula (this->get_fe().base_element(this->introspection().base_elements.temperature).degree+1);
+      const Quadrature<dim> &quadrature_formula = this->introspection().quadratures.temperature;
       const unsigned int n_q_points = quadrature_formula.size();
-      std::vector<std::vector<double> > composition_values (this->n_compositional_fields(),
+      std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),
                                                             std::vector<double> (n_q_points));
 
       FEValues<dim> fe_values (this->get_mapping(),
@@ -59,7 +56,7 @@ namespace aspect
 
       double local_melt_integral = 0.0;
       double local_min_melt = std::numeric_limits<double>::max();
-      double local_max_melt = -std::numeric_limits<double>::max();
+      double local_max_melt = std::numeric_limits<double>::lowest();
 
       // compute the integral quantities by quadrature
       for (const auto &cell : this->get_dof_handler().active_cell_iterators())
@@ -73,9 +70,9 @@ namespace aspect
             // in the simulation has implemented them
             // otherwise, set them to zero
             std::vector<double> melt_fractions(n_q_points, 0.0);
-            if (Plugins::plugin_type_matches<const MaterialModel::MeltFractionModel<dim>> (this->get_material_model()))
-              Plugins::get_plugin_as_type<const MaterialModel::MeltFractionModel<dim>>(this->get_material_model()).melt_fractions(in,
-                                                                                    melt_fractions);
+            if (MaterialModel::MeltFractionModel<dim>::is_melt_fraction_model(this->get_material_model()))
+              MaterialModel::MeltFractionModel<dim>::as_melt_fraction_model(this->get_material_model())
+              .melt_fractions(in, melt_fractions);
 
             for (unsigned int q=0; q<n_q_points; ++q)
               {
@@ -121,10 +118,10 @@ namespace aspect
                                   "Total melt volume",
                                   "Maximal melt fraction"
                                 };
-        for (unsigned int i=0; i<sizeof(columns)/sizeof(columns[0]); ++i)
+        for (auto &column : columns)
           {
-            statistics.set_precision (columns[i], 8);
-            statistics.set_scientific (columns[i], true);
+            statistics.set_precision (column, 8);
+            statistics.set_scientific (column, true);
           }
       }
 

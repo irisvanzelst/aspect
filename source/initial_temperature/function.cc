@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -41,7 +41,7 @@ namespace aspect
     Function<dim>::
     initial_temperature (const Point<dim> &position) const
     {
-      Utilities::NaturalCoordinate<dim> point =
+      const Utilities::NaturalCoordinate<dim> point =
         this->get_geometry_model().cartesian_to_other_coordinates(position, coordinate_system);
 
       return function.value(Utilities::convert_array_to_point<dim>(point.get_coordinates()));
@@ -67,7 +67,7 @@ namespace aspect
                              "A selection that determines the assumed coordinate "
                              "system for the function variables. Allowed values "
                              "are `cartesian', `spherical', and `depth'. `spherical' coordinates "
-                             "are interpreted as r,phi or r,phi,theta in 2D/3D "
+                             "are interpreted as r,phi or r,phi,theta in 2d/3d "
                              "respectively with theta being the polar angle. `depth' "
                              "will create a function, in which only the first "
                              "parameter is non-zero, which is interpreted to "
@@ -124,6 +124,6 @@ namespace aspect
                                               "Specify the initial temperature in terms of an "
                                               "explicit formula. The format of these "
                                               "functions follows the syntax understood by the "
-                                              "muparser library, see Section~\\ref{sec:muparser-format}.")
+                                              "muparser library, see {ref}\\`sec:run-aspect:parameters-overview:muparser-format\\`.")
   }
 }

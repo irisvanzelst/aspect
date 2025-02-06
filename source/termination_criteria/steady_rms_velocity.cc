@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,10 +30,9 @@ namespace aspect
   {
     template <int dim>
     bool
-    SteadyRMSVelocity<dim>::execute(void)
+    SteadyRMSVelocity<dim>::execute()
     {
-      const QGauss<dim> quadrature_formula (this->get_fe()
-                                            .base_element(this->introspection().base_elements.velocities).degree+1);
+      const Quadrature<dim> &quadrature_formula = this->introspection().quadratures.velocities;
       const unsigned int n_q_points = quadrature_formula.size();
 
       FEValues<dim> fe_values (this->get_mapping(),
@@ -42,7 +41,7 @@ namespace aspect
                                update_values   |
                                update_quadrature_points |
                                update_JxW_values);
-      std::vector<Tensor<1,dim> > velocity_values(n_q_points);
+      std::vector<Tensor<1,dim>> velocity_values(n_q_points);
 
       double local_velocity_square_integral = 0;
 
@@ -66,7 +65,7 @@ namespace aspect
       const double vrms = std::sqrt(global_velocity_square_integral) / std::sqrt(this->get_volume());
 
       // Keep a list of times and RMS velocities at those times
-      time_rmsvel.push_back(std::make_pair(this->get_time(), vrms));
+      time_rmsvel.emplace_back(this->get_time(), vrms);
 
       // If the length of the simulation time covered in the list is shorter than the
       // specified parameter, we must continue the simulation
@@ -78,9 +77,9 @@ namespace aspect
         return false;
 
       // Remove old times until we're at the correct time period
-      std::list<std::pair<double, double> >::iterator it = time_rmsvel.begin();
+      std::list<std::pair<double, double>>::iterator it = time_rmsvel.begin();
       while (time_rmsvel.back().first - (*it).first > adjusted_time)
-        it++;
+        ++it;
       time_rmsvel.erase(time_rmsvel.begin(), it);
 
       // Scan through the list and calculate the min, mean and max of the RMS velocities
@@ -118,13 +117,13 @@ namespace aspect
         prm.enter_subsection("Steady state velocity");
         {
           prm.declare_entry ("Maximum relative deviation", "0.05",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The maximum relative deviation of the RMS in recent "
                              "simulation time for the system to be considered in "
                              "steady state. If the actual deviation is smaller "
                              "than this number, then the simulation will be terminated.");
           prm.declare_entry ("Time in steady state", "1e7",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The minimum length of simulation time that the system "
                              "should be in steady state before termination."
                              "Units: years if the "

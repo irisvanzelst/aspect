@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,15 +17,18 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_feature_types_point_h
-#define _world_feature_types_point_h
+#ifndef WORLD_BUILDER_TYPES_POINT_H
+#define WORLD_BUILDER_TYPES_POINT_H
 
-#include <world_builder/types/interface.h>
-#include <world_builder/point.h>
+
+#include "world_builder/point.h"
+#include "world_builder/types/interface.h"
 
 
 namespace WorldBuilder
 {
+  class Parameters;
+
   namespace Types
   {
 
@@ -35,8 +38,8 @@ namespace WorldBuilder
      * the returned temperature or composition of the temperature and composition
      * functions of this class will be.
      */
-    template <int dim>
-    class Point : public Interface
+    template <unsigned int dim>
+    class Point final: public Interface
     {
       public:
 
@@ -48,31 +51,29 @@ namespace WorldBuilder
         /**
          * A constructor used for the load_entry function
          */
-        Point(const WorldBuilder::Point<dim> &default_value, const std::string &description);
+        Point(const WorldBuilder::Point<dim> &default_value, std::string description);
 
         /**
          * A constructor used for cloning and the set_entry function
          */
-        Point(const WorldBuilder::Point<dim> &value, const WorldBuilder::Point<dim> &default_value, const std::string &description);
+        Point(const WorldBuilder::Point<dim> &value, const WorldBuilder::Point<dim> &default_value, std::string description);
+
+        /**
+         * Copy constructor
+         */
+        Point(Point const &other);
 
         /**
          * Destructor
          */
-        ~Point();
-
-        /**
-         * clone
-         */
-        virtual
-        std::unique_ptr<Interface> clone() const;
+        ~Point() override final;
 
         /**
          * Todo
          */
-        virtual
         void write_schema(Parameters &prm,
                           const std::string &name,
-                          const std::string &documentation) const;
+                          const std::string &documentation) const override final;
 
         /**
          * dot product
@@ -92,7 +93,7 @@ namespace WorldBuilder
 
 
         /**
-         * Substract two points
+         * Subtract two points
          */
         WorldBuilder::Point<dim> operator-(const Point<dim> &point) const;
 
@@ -113,13 +114,19 @@ namespace WorldBuilder
         WorldBuilder::Point<dim> default_value;
         std::string description;
 
+      protected:
+        Point *clone_impl() const override final
+        {
+          return new Point(*this);
+        };
+
       private:
 
     };
 
-    template<int dim>
+    template<unsigned int dim>
     WorldBuilder::Point<dim> operator*(const double scalar, const Point<dim> &point);
-  }
-}
+  } // namespace Types
+} // namespace WorldBuilder
 
 #endif

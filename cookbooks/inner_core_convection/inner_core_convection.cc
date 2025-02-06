@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -27,8 +27,6 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     template <int dim>
     class InnerCore : public MaterialModel::Simple<dim>
     {
@@ -38,8 +36,8 @@ namespace aspect
          */
         InnerCore ();
 
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const;
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
         /**
          * A function that is called at the beginning of each time step to
@@ -47,9 +45,8 @@ namespace aspect
          * next be evaluated. For the current class, the function passes to
          * the parsed function what the current time is.
          */
-        virtual
         void
-        update ();
+        update () override;
 
         /**
          * Declare the parameters this class takes through input files. The
@@ -67,9 +64,8 @@ namespace aspect
          * parameters. Consequently, derived classes do not have to overload
          * this function if they do not take any runtime parameters.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
         /**
          * A function object representing resistance to phase change at the
@@ -103,7 +99,6 @@ namespace aspect
          * Percentage of material that has already undergone the phase
          * transition to the higher-pressure material.
          */
-        virtual
         double
         phase_function (const Point<dim> &position,
                         const double temperature) const;
@@ -111,7 +106,6 @@ namespace aspect
         /**
          * Hydrostatic pressure profile.
          */
-        virtual
         double
         hydrostatic_pressure (const double radius) const;
     };
@@ -179,7 +173,7 @@ namespace aspect
 
           // The gravity is zero in the center of the Earth, and we assume the density to be constant and equal to 1.
           // We fix the surface pressure to 0 (and we are only interested in pressure differences anyway).
-          return gravity_magnitude * 0.5 * (1.0 - std::pow(radius/max_radius,2));
+          return gravity_magnitude * 0.5 * (1.0 - Utilities::fixed_power<2>(radius/max_radius));
         }
       else
         return hydrostatic_pressure_profile.value(Point<1>(radius));
@@ -199,7 +193,7 @@ namespace aspect
 
       // We want the right-hand side of the momentum equation to be (- Ra T gravity) and
       // density * cp to be 1
-      for (unsigned int q=0; q < in.position.size(); ++q)
+      for (unsigned int q=0; q < in.n_evaluation_points(); ++q)
         {
           out.densities[q] = - out.thermal_expansion_coefficients[q] * in.temperature[q]
                              + phase_function (in.position[q], in.temperature[q]) * transition_density_change;
@@ -253,13 +247,13 @@ namespace aspect
                              Patterns::Double (0),
                              "The distance from the center of the Earth where the phase "
                              "transition occurs. "
-                             "Units: m.");
+                             "Units: \\si{\\meter}.");
           prm.declare_entry ("Phase transition width", "0.0",
                              Patterns::Double (0),
                              "The width of the phase transition. The argument of the phase function "
                              "is scaled with this value, leading to a jump between phases "
                              "for a value of zero and a gradual transition for larger values. "
-                             "Units: m.");
+                             "Units: \\si{\\meter}.");
           prm.declare_entry ("Phase transition temperature", "0.0",
                              Patterns::Double (0),
                              "The temperature at which the phase transition occurs in the depth "
@@ -267,7 +261,7 @@ namespace aspect
                              "temperatures lead to phase transition occurring in shallower or greater "
                              "depths, depending on the Clapeyron slope given in 'Phase transition "
                              "Clapeyron slope'. "
-                             "Units: K.");
+                             "Units: \\si{\\kelvin}.");
           prm.declare_entry ("Phase transition Clapeyron slope", "0.0",
                              Patterns::Double (),
                              "The Clapeyron slope of the phase transition. A positive "
@@ -281,7 +275,7 @@ namespace aspect
                              Patterns::Double (),
                              "The density change that occurs across the phase transition. "
                              "A positive value means that the density increases with depth. "
-                             "Units: kg/m$^3$.");
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Compute quadratic pressure profile from gravity", "true",
                              Patterns::Bool (),
                              "Whether to automatically compute the hydrostatic pressure profile "
@@ -361,8 +355,6 @@ namespace aspect
 {
   namespace HeatingModel
   {
-    using namespace dealii;
-
     /**
      * A class that implements a constant radiogenic heating rate.
      *
@@ -376,11 +368,10 @@ namespace aspect
          * Return the heating terms. For the current class, this
          * function obviously simply returns a constant value.
          */
-        virtual
         void
         evaluate (const MaterialModel::MaterialModelInputs<dim> &material_model_inputs,
                   const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
-                  HeatingModel::HeatingModelOutputs &heating_model_outputs) const;
+                  HeatingModel::HeatingModelOutputs &heating_model_outputs) const override;
 
         /**
          * @name Functions used in dealing with run-time parameters
@@ -396,9 +387,8 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
         /**
          * @}
          */
@@ -443,7 +433,7 @@ namespace aspect
                              "The specific rate of heating due to radioactive decay (or other bulk sources "
                              "you may want to describe). This parameter corresponds to the variable "
                              "$H$ in the temperature equation stated in the manual, and the heating "
-                             "term is $\rho H$. Units: W/kg.");
+                             "term is $\\rho H$. Units: W/kg.");
         }
         prm.leave_subsection();
       }

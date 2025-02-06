@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,7 +30,7 @@ namespace aspect
   {
     template <int dim>
     RadioactiveDecay<dim>::RadioactiveDecay ()
-    {}
+      = default;
 
 
     template <int dim>
@@ -40,8 +40,11 @@ namespace aspect
               const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
               HeatingModel::HeatingModelOutputs &heating_model_outputs) const
     {
-      AssertThrow(crust_composition_num < material_model_inputs.composition[0].size(),
-                  ExcMessage("The composition number of crust is larger than number of composition fields."));
+      if (is_crust_defined_by_composition)
+        {
+          AssertThrow(crust_composition_num < material_model_inputs.composition[0].size(),
+                      ExcMessage("The composition number of crust is larger than number of composition fields."));
+        }
 
       for (unsigned int q = 0; q < heating_model_outputs.heating_source_terms.size(); ++q)
         {
@@ -95,22 +98,22 @@ namespace aspect
                             Patterns::List (Patterns::Double ()),
                             "Heating rates of different elements (W/kg)");
           prm.declare_entry("Half decay times","",
-                            Patterns::List (Patterns::Double (0)),
+                            Patterns::List (Patterns::Double (0.)),
                             "Half decay times. Units: (Seconds), or "
                             "(Years) if set `use years instead of seconds'.");
           prm.declare_entry("Initial concentrations crust","",
-                            Patterns::List (Patterns::Double (0)),
+                            Patterns::List (Patterns::Double (0.)),
                             "Initial concentrations of different elements (ppm)");
           prm.declare_entry("Initial concentrations mantle","",
-                            Patterns::List (Patterns::Double (0)),
+                            Patterns::List (Patterns::Double (0.)),
                             "Initial concentrations of different elements (ppm)");
           prm.declare_entry("Crust defined by composition","false",
                             Patterns::Bool(),
                             "Whether crust defined by composition or depth");
-          prm.declare_entry("Crust depth","0",
+          prm.declare_entry("Crust depth","0.",
                             Patterns::Double(),
                             "Depth of the crust when crust if defined by depth. "
-                            "Units: $\\si{m}$");
+                            "Units: \\si{\\meter}.");
           prm.declare_entry("Crust composition number","0",
                             Patterns::Integer(0),
                             "Which composition field should be treated as crust");
@@ -201,5 +204,3 @@ namespace aspect
                                   "The formula is interpreted as having units W/kg.")
   }
 }
-
-

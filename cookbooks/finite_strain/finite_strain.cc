@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -28,15 +28,13 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     template <int dim>
     class FiniteStrain : public MaterialModel::Simple<dim>
     {
       public:
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const;
-        virtual void parse_parameters(ParameterHandler &prm);
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override;
+        void parse_parameters(ParameterHandler &prm) override;
     };
 
   }
@@ -68,7 +66,7 @@ namespace aspect
                                    quadrature_formula,
                                    update_gradients);
 
-          std::vector<Tensor<2,dim> > velocity_gradients (quadrature_formula.size(), Tensor<2,dim>());
+          std::vector<Tensor<2,dim>> velocity_gradients (quadrature_formula.size(), Tensor<2,dim>());
 
           fe_values.reinit (in.current_cell);
           fe_values[this->introspection().extractors.velocities].get_function_gradients (this->get_solution(),
@@ -77,19 +75,18 @@ namespace aspect
           // Assign the strain components to the compositional fields reaction terms.
           // If there are too many fields, we simply fill only the first fields with the
           // existing strain rate tensor components.
-          for (unsigned int q=0; q < in.position.size(); ++q)
+          for (unsigned int q=0; q < in.n_evaluation_points(); ++q)
             {
               // Convert the compositional fields into the tensor quantity they represent.
-              Tensor<2,dim> strain;
-              for (unsigned int i = 0; i < Tensor<2,dim>::n_independent_components ; ++i)
-                strain[Tensor<2,dim>::unrolled_to_component_indices(i)] = in.composition[q][i];
+              const Tensor<2,dim> strain(make_array_view(&in.composition[q][0],
+                                                         &in.composition[q][0] + Tensor<2,dim>::n_independent_components));
 
               // Compute the strain accumulated in this timestep.
               const Tensor<2,dim> strain_increment = this->get_timestep() * (velocity_gradients[q] * strain);
 
               // Output the strain increment component-wise to its respective compositional field's reaction terms.
-              for (unsigned int i = 0; i < Tensor<2,dim>::n_independent_components ; ++i)
-                out.reaction_terms[q][i] = strain_increment[Tensor<2,dim>::unrolled_to_component_indices(i)];
+              strain_increment.unroll(&out.reaction_terms[q][0],
+                                      &out.reaction_terms[q][0] + Tensor<2,dim>::n_independent_components);
             }
         }
     }

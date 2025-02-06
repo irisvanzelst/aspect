@@ -1,5 +1,5 @@
 # This parameter file reproduces an analytical benchmark for the evolution
-# of finite strain in a model of simple shear as described (for a specific 
+# of finite strain in a model of simple shear as described (for a specific
 # application) in McKenzie & Jackson (1983): "The relationship between
 # strain rates, crustal thickening, paleomagnetism, finite strain and
 # fault movements within a deforming zone." They show that the analytical
@@ -15,7 +15,7 @@
 # Because u_x,y = 2.0 / 1.0 is constant in the whole domain (and over time) we expect
 # a constant F at any given time, and in particular:
 # F_xy (t=1.0) = 2.0
-# 
+#
 # This parameter file tracks the finite strain in two ways, once by using
 # compositional fields as illustrated in the finite strain cookbook, and
 # once by using a particle particle that sits and remains in the center of the domain.
@@ -26,14 +26,14 @@
 # F_xy (t=1.0) = 2.0
 
 set Additional shared libraries            = ./libfinite_strain.so
-
 set Dimension                              = 2
 set End time                               = 1.0
 set Use years in output instead of seconds = false
-set Output directory = simple_shear
+set Output directory = output-simple_shear
 
 subsection Geometry model
   set Model name = box
+
   subsection Box
     set X extent  = 1.0
     set Y extent  = 1.0
@@ -41,9 +41,9 @@ subsection Geometry model
   end
 end
 
-
 subsection Boundary velocity model
   set Prescribed velocity boundary indicators = bottom:function, top:function
+
   subsection Function
     set Function expression = if (y < 0.5, -1, 1); 0
   end
@@ -51,6 +51,7 @@ end
 
 subsection Material model
   set Model name = finite strain
+
   subsection Simple model
     set Reference density             = 1010
     set Viscosity                     = 1e2
@@ -60,6 +61,7 @@ end
 
 subsection Gravity model
   set Model name = vertical
+
   subsection Vertical
     set Magnitude = 10
   end
@@ -76,6 +78,7 @@ end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
     set Function expression = 1.0;0.0;0.0;1.0
   end
@@ -84,12 +87,9 @@ end
 ############### Parameters describing the temperature field
 # Note: The temperature plays no role in this model
 
-subsection Boundary temperature model
-  set List of model names = box
-end
-
 subsection Initial temperature model
   set Model name = function
+
   subsection Function
     set Function expression = 0
   end
@@ -104,8 +104,6 @@ subsection Mesh refinement
   set Time steps between mesh refinement = 0
 end
 
-
-
 ############### Parameters describing what to do with the solution
 
 subsection Postprocess
@@ -117,18 +115,19 @@ subsection Postprocess
   end
 
   subsection Particles
-    set Number of particles = 1
     set Time between data output = 0.05
     set Data output format = vtu
-    set List of particle properties = integrated strain
+  end
+end
 
-    set Particle generator name = ascii file
-    subsection Generator
-      subsection Ascii file
-        set Data directory = ./
-        set Data file name = simple_shear_particle.dat
-      end
+subsection Particles
+  set List of particle properties = integrated strain
+  set Particle generator name = ascii file
 
+  subsection Generator
+    subsection Ascii file
+      set Data directory = ./
+      set Data file name = simple_shear_particle.dat
     end
   end
 end

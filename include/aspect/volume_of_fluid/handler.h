@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -28,8 +28,6 @@
 
 #include <boost/serialization/map.hpp>
 
-using namespace dealii;
-
 namespace aspect
 {
   /**
@@ -51,7 +49,7 @@ namespace aspect
        * Add the Volume of Fluid field declaration to the list to be included
        * in the solution vector.
        */
-      void edit_finite_element_variables (std::vector<VariableDeclaration<dim> > &vars);
+      void edit_finite_element_variables (std::vector<VariableDeclaration<dim>> &vars);
 
       /**
        * Declare the parameters this class takes through input files.
@@ -102,7 +100,7 @@ namespace aspect
       void set_initial_volume_fractions ();
 
       /**
-       * Initialize specified field based on a composition field initial conditon
+       * Initialize specified field based on a composition field initial condition
        */
       void initialize_from_composition_field (const VolumeOfFluidField<dim> &field);
 
@@ -144,7 +142,7 @@ namespace aspect
                                             const bool update_from_old_solution);
 
       /**
-       * Solve the diagnonal matrix assembled in assemble_volume_of_fluid_system for the
+       * Solve the diagonal matrix assembled in assemble_volume_of_fluid_system for the
        * specified field.
        */
       void solve_volume_of_fluid_system (const VolumeOfFluidField<dim> &field);
@@ -216,7 +214,7 @@ namespace aspect
        * held here as all access to the actual methods for composition
        * initialization is handled by the manager.
        */
-      std::vector<typename VolumeOfFluid::VolumeOfFluidInputType::Kind> initialization_data_type;
+      std::vector<VolumeOfFluid::VolumeOfFluidInputType::Kind> initialization_data_type;
 
       friend class Simulator<dim>;
   };

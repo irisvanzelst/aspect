@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -27,164 +27,19 @@ namespace aspect
   namespace MaterialModel
   {
     template <int dim>
-    std::vector<double>
-    DiffusionDislocation<dim>::
-    calculate_isostrain_viscosities ( const std::vector<double> &volume_fractions,
-                                      const double &pressure,
-                                      const double &temperature,
-                                      const SymmetricTensor<2,dim> &strain_rate) const
-    {
-      // This function calculates viscosities assuming that all the compositional fields
-      // experience the same strain rate (isostrain).
-
-      // If strain rate is zero (like during the first time step) set it to some very small number
-      // to prevent a division-by-zero, and a floating point exception.
-      // Otherwise, calculate the square-root of the norm of the second invariant of the deviatoric-
-      // strain rate (often simplified as epsilondot_ii)
-      const double edot_ii = std::max(std::sqrt(std::fabs(second_invariant(deviator(strain_rate)))),
-                                      min_strain_rate);
-
-
-      // Find effective viscosities for each of the individual phases
-      // Viscosities should have same number of entries as compositional fields
-      std::vector<double> composition_viscosities(volume_fractions.size());
-      for (unsigned int j=0; j < volume_fractions.size(); ++j)
-        {
-          // Power law creep equation
-          // edot_ii_i = A_i * stress_ii_i^{n_i} * d^{-m} \exp\left(-\frac{E_i^\ast + PV_i^\ast}{n_iRT}\right)
-          // where ii indicates the square root of the second invariant and
-          // i corresponds to diffusion or dislocation creep
-
-          // For diffusion creep, viscosity is grain size dependent
-          const double prefactor_stress_diffusion = prefactors_diffusion[j] *
-                                                    std::pow(grain_size, -grain_size_exponents_diffusion[j]) *
-                                                    std::exp(-(std::max(activation_energies_diffusion[j] + pressure*activation_volumes_diffusion[j],0.0))/
-                                                             (constants::gas_constant*temperature));
-
-          // For dislocation creep, viscosity is grain size independent (m=0)
-          const double prefactor_stress_dislocation = prefactors_dislocation[j] *
-                                                      std::exp(-(std::max(activation_energies_dislocation[j] + pressure*activation_volumes_dislocation[j],0.0))/
-                                                               (constants::gas_constant*temperature));
-
-          // Because the ratios of the diffusion and dislocation strain rates are not known, stress is also unknown
-          // We use Newton's method to find the second invariant of the stress tensor.
-          // Start with the assumption that all strain is accommodated by diffusion creep:
-          // If the diffusion creep prefactor is very small, that means that the diffusion viscosity is very large.
-          // In this case, use the maximum viscosity instead to compute the starting guess.
-          double stress_ii = (prefactor_stress_diffusion > (0.5 / max_visc)
-                              ?
-                              edot_ii/prefactor_stress_diffusion
-                              :
-                              0.5 / max_visc);
-          double strain_rate_residual = 2*strain_rate_residual_threshold;
-          double strain_rate_deriv = 0;
-          unsigned int stress_iteration = 0;
-          while (std::abs(strain_rate_residual) > strain_rate_residual_threshold
-                 && stress_iteration < stress_max_iteration_number)
-            {
-              strain_rate_residual = prefactor_stress_diffusion *
-                                     std::pow(stress_ii, stress_exponents_diffusion[j]) +
-                                     prefactor_stress_dislocation *
-                                     std::pow(stress_ii, stress_exponents_dislocation[j]) - edot_ii;
-
-              strain_rate_deriv = stress_exponents_diffusion[j] *
-                                  prefactor_stress_diffusion *
-                                  std::pow(stress_ii, stress_exponents_diffusion[j]-1) +
-                                  stress_exponents_dislocation[j] *
-                                  prefactor_stress_dislocation *
-                                  std::pow(stress_ii, stress_exponents_dislocation[j]-1);
-
-              // If the strain rate derivative is zero, we catch it below.
-              if (strain_rate_deriv>std::numeric_limits<double>::min())
-                stress_ii -= strain_rate_residual/strain_rate_deriv;
-              stress_iteration += 1;
-
-              // In case the Newton iteration does not succeed, we do a fixpoint iteration.
-              // This allows us to bound both the diffusion and dislocation viscosity
-              // between a minimum and maximum value, so that we can compute the correct
-              // viscosity values even if the parameters lead to one or both of the
-              // viscosities being essentially zero or infinity.
-              // If anything that would be used in the next iteration is not finite, the
-              // Newton iteration would trigger an exception and we want to do the fixpoint
-              // iteration instead.
-              const bool abort_newton_iteration = !numbers::is_finite(stress_ii)
-                                                  || !numbers::is_finite(strain_rate_residual)
-                                                  || !numbers::is_finite(strain_rate_deriv)
-                                                  || strain_rate_deriv < std::numeric_limits<double>::min()
-                                                  || !numbers::is_finite(std::pow(stress_ii, stress_exponents_diffusion[j]-1))
-                                                  || !numbers::is_finite(std::pow(stress_ii, stress_exponents_dislocation[j]-1))
-                                                  || stress_iteration == stress_max_iteration_number;
-              if (abort_newton_iteration)
-                {
-                  double diffusion_strain_rate = edot_ii;
-                  double dislocation_strain_rate = min_strain_rate;
-                  stress_iteration = 0;
-
-                  do
-                    {
-                      const double old_diffusion_strain_rate = diffusion_strain_rate;
-
-                      const double diffusion_prefactor = 0.5 * std::pow(prefactors_diffusion[j],-1.0/stress_exponents_diffusion[j]);
-                      const double diffusion_grain_size_dependence = std::pow(grain_size, grain_size_exponents_diffusion[j]/stress_exponents_diffusion[j]);
-                      const double diffusion_strain_rate_dependence = std::pow(diffusion_strain_rate, (1.-stress_exponents_diffusion[j])/stress_exponents_diffusion[j]);
-                      const double diffusion_T_and_P_dependence = std::exp(std::max(activation_energies_diffusion[j] + pressure*activation_volumes_diffusion[j],0.0)/
-                                                                           (constants::gas_constant*temperature));
-
-                      const double diffusion_viscosity = std::min(std::max(diffusion_prefactor * diffusion_grain_size_dependence
-                                                                           * diffusion_strain_rate_dependence * diffusion_T_and_P_dependence,
-                                                                           min_visc), max_visc);
-
-                      const double dislocation_prefactor = 0.5 * std::pow(prefactors_dislocation[j],-1.0/stress_exponents_dislocation[j]);
-                      const double dislocation_strain_rate_dependence = std::pow(dislocation_strain_rate, (1.-stress_exponents_dislocation[j])/stress_exponents_dislocation[j]);
-                      const double dislocation_T_and_P_dependence = std::exp(std::max(activation_energies_dislocation[j] + pressure*activation_volumes_dislocation[j],0.0)/
-                                                                             (stress_exponents_dislocation[j]*constants::gas_constant*temperature));
-
-                      const double dislocation_viscosity = std::min(std::max(dislocation_prefactor * dislocation_strain_rate_dependence
-                                                                             * dislocation_T_and_P_dependence,
-                                                                             min_visc), max_visc);
-
-                      diffusion_strain_rate = dislocation_viscosity / (diffusion_viscosity + dislocation_viscosity) * edot_ii;
-                      dislocation_strain_rate = diffusion_viscosity / (diffusion_viscosity + dislocation_viscosity) * edot_ii;
-
-                      stress_iteration++;
-                      AssertThrow(stress_iteration < stress_max_iteration_number,
-                                  ExcMessage("No convergence has been reached in the loop that determines "
-                                             "the ratio of diffusion/dislocation viscosity. Aborting! "
-                                             "Residual is " + Utilities::to_string(strain_rate_residual) +
-                                             " after " + Utilities::to_string(stress_iteration) + " iterations. "
-                                             "You can increase the number of iterations by adapting the "
-                                             "parameter 'Maximum strain rate ratio iterations'."));
-
-                      strain_rate_residual = std::abs((diffusion_strain_rate-old_diffusion_strain_rate) / diffusion_strain_rate);
-                      stress_ii = 2.0 * edot_ii * 1./(1./diffusion_viscosity + 1./dislocation_viscosity);
-                    }
-                  while (strain_rate_residual > strain_rate_residual_threshold);
-
-                  break;
-                }
-            }
-
-          // The effective viscosity, with minimum and maximum bounds
-          composition_viscosities[j] = std::min(std::max(stress_ii/edot_ii/2, min_visc), max_visc);
-        }
-      return composition_viscosities;
-    }
-
-    template <int dim>
     void
     DiffusionDislocation<dim>::
     evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
              MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i = 0; i < in.n_evaluation_points(); ++i)
         {
           // const Point<dim> position = in.position[i];
           const double temperature = in.temperature[i];
           const double pressure= in.pressure[i];
           const std::vector<double> composition = in.composition[i];
-          const std::vector<double> volume_fractions = MaterialUtilities::compute_volume_fractions(composition);
-
-          // Averaging composition-field dependent properties
+          const std::vector<double> volume_fractions = MaterialUtilities::compute_only_composition_fractions(composition,
+                                                       this->introspection().chemical_composition_field_indices());
 
           // densities
           double density = 0.0;
@@ -202,20 +57,12 @@ namespace aspect
             thermal_expansivity += volume_fractions[j] * thermal_expansivities[j];
 
           // calculate effective viscosity
-          if (in.strain_rate.size())
+          if (in.requests_property(MaterialProperties::viscosity))
             {
-              // Currently, the viscosities for each of the compositional fields are calculated assuming
-              // isostrain amongst all compositions, allowing calculation of the viscosity ratio.
-              // TODO: This is only consistent with viscosity averaging if the arithmetic averaging
-              // scheme is chosen. It would be useful to have a function to calculate isostress viscosities.
-              const std::vector<double> composition_viscosities =
-                calculate_isostrain_viscosities(volume_fractions, pressure, temperature, in.strain_rate[i]);
-
-              // The isostrain condition implies that the viscosity averaging should be arithmetic (see above).
-              // We have given the user freedom to apply alternative bounds, because in diffusion-dominated
-              // creep (where n_diff=1) viscosities are stress and strain-rate independent, so the calculation
-              // of compositional field viscosities is consistent with any averaging scheme.
-              out.viscosities[i] = MaterialUtilities::average_value(volume_fractions, composition_viscosities, viscosity_averaging);
+              Assert(std::isfinite(in.strain_rate[i].norm()),
+                     ExcMessage("Invalid strain_rate in the MaterialModelInputs. This is likely because it was "
+                                "not filled by the caller."));
+              out.viscosities[i] = diffusion_dislocation.compute_viscosity(pressure, temperature, volume_fractions, in.strain_rate[i]);
             }
 
           out.densities[i] = density;
@@ -250,14 +97,6 @@ namespace aspect
     }
 
     template <int dim>
-    double
-    DiffusionDislocation<dim>::
-    reference_viscosity () const
-    {
-      return ref_visc;
-    }
-
-    template <int dim>
     bool
     DiffusionDislocation<dim>::
     is_compressible () const
@@ -273,122 +112,7 @@ namespace aspect
       {
         prm.enter_subsection ("Diffusion dislocation");
         {
-          // Reference and minimum/maximum values
-          prm.declare_entry ("Reference temperature", "293", Patterns::Double(0),
-                             "For calculating density by thermal expansivity. Units: $\\si{K}$");
-          prm.declare_entry ("Minimum strain rate", "1.4e-20", Patterns::Double(0),
-                             "Stabilizes strain dependent viscosity. Units: $1 / s$");
-          prm.declare_entry ("Minimum viscosity", "1e17", Patterns::Double(0),
-                             "Lower cutoff for effective viscosity. Units: $Pa \\, s$");
-          prm.declare_entry ("Maximum viscosity", "1e28", Patterns::Double(0),
-                             "Upper cutoff for effective viscosity. Units: $Pa \\, s$");
-          prm.declare_entry ("Effective viscosity coefficient", "1.0", Patterns::Double(0),
-                             "Scaling coefficient for effective viscosity.");
-          prm.declare_entry ("Reference viscosity", "1e22", Patterns::Double(0),
-                             "The reference viscosity that is used for pressure scaling. "
-                             "To understand how pressure scaling works, take a look at "
-                             "\\cite{KHB12}. In particular, the value of this parameter "
-                             "would not affect the solution computed by \\aspect{} if "
-                             "we could do arithmetic exactly; however, computers do "
-                             "arithmetic in finite precision, and consequently we need to "
-                             "scale quantities in ways so that their magnitudes are "
-                             "roughly the same. As explained in \\cite{KHB12}, we scale "
-                             "the pressure during some computations (never visible by "
-                             "users) by a factor that involves a reference viscosity. This "
-                             "parameter describes this reference viscosity."
-                             "\n\n"
-                             "For problems with a constant viscosity, you will generally want "
-                             "to choose the reference viscosity equal to the actual viscosity. "
-                             "For problems with a variable viscosity, the reference viscosity "
-                             "should be a value that adequately represents the order of "
-                             "magnitude of the viscosities that appear, such as an average "
-                             "value or the value one would use to compute a Rayleigh number."
-                             "\n\n"
-                             "Units: $Pa \\, s$");
-
-          // Viscosity iteration parameters
-          prm.declare_entry ("Strain rate residual tolerance", "1e-22", Patterns::Double(0),
-                             "Tolerance for correct diffusion/dislocation strain rate ratio.");
-          prm.declare_entry ("Maximum strain rate ratio iterations", "40", Patterns::Integer(0),
-                             "Maximum number of iterations to find the correct "
-                             "diffusion/dislocation strain rate ratio.");
-
-          // Equation of state parameters
-          prm.declare_entry ("Thermal diffusivity", "0.8e-6", Patterns::Double(0), "Units: $m^2/s$");
-          prm.declare_entry ("Heat capacity", "1.25e3",
-                             Patterns::Double(0),
-                             "The value of the specific heat $C_p$. "
-                             "Units: $J/kg/K$");
-          prm.declare_entry ("Densities", "3300.",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of densities, $\\rho$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $kg / m^3$");
-          prm.declare_entry ("Thermal expansivities", "3.5e-5",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of thermal expansivities for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $1 / K$");
-
-          // Rheological parameters
-          prm.declare_entry ("Grain size", "1e-3", Patterns::Double(0), "Units: $m$");
-          prm.declare_entry ("Viscosity averaging scheme", "harmonic",
-                             Patterns::Selection("arithmetic|harmonic|geometric|maximum composition"),
-                             "When more than one compositional field is present at a point "
-                             "with different viscosities, we need to come up with an average "
-                             "viscosity at that point.  Select a weighted harmonic, arithmetic, "
-                             "geometric, or maximum composition.");
-          // Diffusion creep parameters
-          prm.declare_entry ("Prefactors for diffusion creep", "1.5e-15",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of viscosity prefactors, $A$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value. "
-                             "Units: $Pa^{-1} m^{m_{\\text{diffusion}}} s^{-1}$");
-          prm.declare_entry ("Stress exponents for diffusion creep", "1",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of stress exponents, $n_{\\text{diffusion}}$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("Grain size exponents for diffusion creep", "3",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of grain size exponents, $m_{\\text{diffusion}}$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("Activation energies for diffusion creep", "375e3",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of activation energies, $E_a$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $J / mol$");
-          prm.declare_entry ("Activation volumes for diffusion creep", "6e-6",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of activation volumes, $V_a$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $m^3 / mol$");
-
-          // Dislocation creep parameters
-          prm.declare_entry ("Prefactors for dislocation creep", "1.1e-16",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of viscosity prefactors, $A$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value. "
-                             "Units: $Pa^{-n_{\\text{dislocation}}} s^{-1}$");
-          prm.declare_entry ("Stress exponents for dislocation creep", "3.5",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of stress exponents, $n_{\\text{dislocation}}$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: None");
-          prm.declare_entry ("Activation energies for dislocation creep", "530e3",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of activation energies, $E_a$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $J / mol$");
-          prm.declare_entry ("Activation volumes for dislocation creep", "1.4e-5",
-                             Patterns::List(Patterns::Double(0)),
-                             "List of activation volumes, $V_a$, for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value.  Units: $m^3 / mol$");
-
+          Rheology::DiffusionDislocation<dim>::declare_parameters(prm);
         }
         prm.leave_subsection();
       }
@@ -401,75 +125,37 @@ namespace aspect
     void
     DiffusionDislocation<dim>::parse_parameters (ParameterHandler &prm)
     {
-      // increment by one for background:
-      const unsigned int n_fields = this->n_compositional_fields() + 1;
-
       prm.enter_subsection("Material model");
       {
         prm.enter_subsection ("Diffusion dislocation");
         {
-          // Initialise empty vector for compositional field variables
-          std::vector<double> x_values;
-
-          // Reference and minimum/maximum values
           reference_T = prm.get_double("Reference temperature");
-          min_strain_rate = prm.get_double("Minimum strain rate");
-          min_visc = prm.get_double ("Minimum viscosity");
-          max_visc = prm.get_double ("Maximum viscosity");
-          veff_coefficient = prm.get_double ("Effective viscosity coefficient");
-          ref_visc = prm.get_double ("Reference viscosity");
 
-          // Iteration parameters
-          strain_rate_residual_threshold = prm.get_double ("Strain rate residual tolerance");
-          stress_max_iteration_number = prm.get_integer ("Maximum strain rate ratio iterations");
+          // Retrieve the list of composition names
+          std::vector<std::string> compositional_field_names = this->introspection().get_composition_names();
+          // Establish that a background field is required here
+          compositional_field_names.insert(compositional_field_names.begin(),"background");
 
-          // Equation of state parameters
+          // Make options file for parsing maps to double arrays
+          std::vector<std::string> chemical_field_names = this->introspection().chemical_composition_field_names();
+
+          // Establish that a background field is required here
+          chemical_field_names.insert(chemical_field_names.begin(),"background");
+
+          Utilities::MapParsing::Options options(chemical_field_names, "");
+          options.list_of_allowed_keys = compositional_field_names;
+          options.property_name = "Densities";
+          densities = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
+
+          options.property_name = "Thermal expansivities";
+          thermal_expansivities = Utilities::MapParsing::parse_map_to_double_array (prm.get(options.property_name), options);
+
+          // Phenomenological parameters
           thermal_diffusivity = prm.get_double("Thermal diffusivity");
           heat_capacity = prm.get_double("Heat capacity");
 
-          // ---- Compositional parameters
-          grain_size = prm.get_double("Grain size");
-          densities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Densities"))),
-                                                              n_fields,
-                                                              "Densities");
-          thermal_expansivities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Thermal expansivities"))),
-                                                                          n_fields,
-                                                                          "Thermal expansivities");
-
-          viscosity_averaging = MaterialUtilities::parse_compositional_averaging_operation ("Viscosity averaging scheme",
-                                prm);
-
-          // Rheological parameters
-          // Diffusion creep parameters (Stress exponents often but not always 1)
-          prefactors_diffusion = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Prefactors for diffusion creep"))),
-                                                                         n_fields,
-                                                                         "Prefactors for diffusion creep");
-          stress_exponents_diffusion = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Stress exponents for diffusion creep"))),
-                                                                               n_fields,
-                                                                               "Stress exponents for diffusion creep");
-          grain_size_exponents_diffusion = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Grain size exponents for diffusion creep"))),
-                                                                                   n_fields,
-                                                                                   "Grain size exponents for diffusion creep");
-          activation_energies_diffusion = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Activation energies for diffusion creep"))),
-                                                                                  n_fields,
-                                                                                  "Activation energies for diffusion creep");
-          activation_volumes_diffusion = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Activation volumes for diffusion creep"))),
-                                                                                 n_fields,
-                                                                                 "Activation volumes for diffusion creep");
-          // Dislocation creep parameters (Note the lack of grain size exponents)
-          prefactors_dislocation = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Prefactors for dislocation creep"))),
-                                                                           n_fields,
-                                                                           "Prefactors for dislocation creep");
-          stress_exponents_dislocation = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Stress exponents for dislocation creep"))),
-                                                                                 n_fields,
-                                                                                 "Stress exponents for dislocation creep");
-          activation_energies_dislocation = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Activation energies for dislocation creep"))),
-                                                                                    n_fields,
-                                                                                    "Activation energies for dislocation creep");
-          activation_volumes_dislocation = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Activation volumes for dislocation creep"))),
-                                                                                   n_fields,
-                                                                                   "Activation volumes for dislocation creep");
-
+          diffusion_dislocation.initialize_simulator (this->get_simulator());
+          diffusion_dislocation.parse_parameters(prm);
         }
         prm.leave_subsection();
       }
@@ -498,12 +184,12 @@ namespace aspect
                                    "activation energies, reference densities, thermal expansivities, "
                                    "and stress exponents. The effective viscosity is defined as "
                                    "\n\n"
-                                   "\\[\\eta_{\\text{eff}} = \\left(\\frac{1}{\\eta_{\\text{eff}}^\\text{diff}}+ "
-                                   "\\frac{1}{\\eta_{\\text{eff}}^\\text{dis}}\\right)^{-1}\\] "
+                                   "$\\eta_{\\text{eff}} = \\left(\\frac{1}{\\eta_{\\text{eff}}^\\text{diff}}+ "
+                                   "\\frac{1}{\\eta_{\\text{eff}}^\\text{dis}}\\right)^{-1}$ "
                                    "where "
-                                   "\\[\\eta_{\\text{i}} = \\frac{1}{2} A^{-\\frac{1}{n_i}} d^\\frac{m_i}{n_i} "
+                                   "$\\eta_{\\text{i}} = \\frac{1}{2} A^{-\\frac{1}{n_i}} d^\\frac{m_i}{n_i} "
                                    "\\dot{\\varepsilon_i}^{\\frac{1-n_i}{n_i}} "
-                                   "\\exp\\left(\\frac{E_i^\\ast + PV_i^\\ast}{n_iRT}\\right)\\] "
+                                   "\\exp\\left(\\frac{E_i^\\ast + PV_i^\\ast}{n_iRT}\\right)$ "
                                    "\n\n"
                                    "where $d$ is grain size, $i$ corresponds to diffusion or dislocation creep, "
                                    "$\\dot{\\varepsilon}$ is the square root of the second invariant of the "
@@ -512,7 +198,7 @@ namespace aspect
                                    "$A_i$ are prefactors, $n_i$ and $m_i$ are stress and grain size exponents "
                                    "$E_i$ are the activation energies and $V_i$ are the activation volumes. "
                                    "\n\n"
-                                   "This form of the viscosity equation is commonly used in geodynamic simulatons "
+                                   "This form of the viscosity equation is commonly used in geodynamic simulations "
                                    "See, for example, Billen and Hirth (2007), G3, 8, Q08012. Significantly, "
                                    "other studies may use slightly different forms of the viscosity equation "
                                    "leading to variations in how specific terms are defined or combined. For "

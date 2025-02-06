@@ -1,5 +1,5 @@
 # This test is used to check if the shear heating
-# of melt, in particular the segregation heating, is 
+# of melt, in particular the segregation heating, is
 # calculated correctly.
 # There is no in- or outflux of solid material, but melt
 # is allowed to flow in freely, so that it moves upwards
@@ -20,8 +20,7 @@ set Nonlinear solver scheme                = iterated Advection and Stokes
 # There are several global variables that have to do with what
 # time system we want to work in and what the end time is.
 set Use years in output instead of seconds = false
-set End time                               = 0.5
-
+set End time                               = 0.1
 set Pressure normalization                 = surface
 set Surface pressure                       = 0
 set Adiabatic surface temperature          = 1600
@@ -30,7 +29,6 @@ subsection Discretization
   set Stokes velocity polynomial degree    = 2
   set Composition polynomial degree        = 1
 end
-
 
 subsection Geometry model
   set Model name = box
@@ -48,13 +46,15 @@ end
 
 subsection Initial temperature model
   set Model name = function
-    subsection Function
-      set Function expression       = 1600
+
+  subsection Function
+    set Function expression       = 1600
   end
 end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
     set Function expression = 0.5; 0.0
   end
@@ -62,39 +62,24 @@ end
 
 subsection Boundary temperature model
   set List of model names = initial temperature
+  set Fixed temperature boundary indicators   = 2
 end
 
 subsection Boundary composition model
   set List of model names = initial composition
+  set Fixed composition boundary indicators   = 2
 end
 
 subsection Boundary velocity model
+  set Tangential velocity boundary indicators = 0,1,2,3
+
   subsection Function
     set Function expression = 0;0
   end
 end
 
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
-subsection Boundary velocity model
-  set Tangential velocity boundary indicators = 0,1,2,3
-end
-
-subsection Boundary temperature model
-  set Fixed temperature boundary indicators   = 2
-end
-
-subsection Boundary composition model
-  set Fixed composition boundary indicators   = 2
-end
-
 subsection Melt settings
   set Include melt transport                  = true
-end
-
-subsection Melt settings
   set Heat advection by melt = true
 end
 
@@ -114,7 +99,6 @@ subsection Gravity model
   end
 end
 
-
 subsection Material model
   set Model name = melt global
 
@@ -122,7 +106,7 @@ subsection Material model
     set Reference solid density    = 2
     set Reference melt density     = 1
     set Reference specific heat    = 1
-    set Reference temperature      = 1600 
+    set Reference temperature      = 1600
     set Thermal conductivity       = 0.0
     set Surface solidus            = 10000.0
     set Include melting and freezing = false
@@ -135,13 +119,11 @@ subsection Material model
   end
 end
 
-
 subsection Mesh refinement
   set Initial global refinement                = 4
   set Initial adaptive refinement              = 0
   set Time steps between mesh refinement       = 0
 end
-
 
 subsection Postprocess
   set List of postprocessors = temperature statistics, heating statistics, visualization
@@ -149,7 +131,11 @@ subsection Postprocess
   subsection Visualization
     set Interpolate output = false
     set Time between graphical output = 0.01
-    set List of output variables = viscosity, density, nonadiabatic temperature, heating
+    set List of output variables = material properties, nonadiabatic temperature, heating
+
+    subsection Material properties
+      set List of material properties = viscosity, density
+    end
   end
 end
 

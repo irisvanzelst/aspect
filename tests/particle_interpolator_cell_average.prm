@@ -10,56 +10,47 @@ set Use years in output instead of seconds = false
 
 subsection Geometry model
   set Model name = box
+
   subsection Box
     set X extent  = 0.9142
     set Y extent  = 1.0000
   end
 end
 
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = left, right
-end
-
-subsection Boundary velocity model
   set Zero velocity boundary indicators       = bottom, top
 end
 
-
 subsection Material model
   set Model name = simple
+
   subsection Simple model
     set Reference density             = 1010
     set Viscosity                     = 1e2
     set Thermal expansion coefficient = 0
+    set Density differential for compositional field 1 = -10
   end
 end
 
 subsection Gravity model
   set Model name = vertical
+
   subsection Vertical
     set Magnitude = 10
   end
 end
 
-
 ############### Parameters describing the temperature field
 # Note: The temperature plays no role in this model
 
-subsection Boundary temperature model
-  set List of model names = box
-end
-
 subsection Initial temperature model
   set Model name = function
+
   subsection Function
     set Function expression = 0
   end
 end
-
 
 ############### Parameters describing the compositional field
 # Note: The compositional field is what drives the flow
@@ -74,6 +65,7 @@ end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
     set Variable names      = x,z
     set Function constants  = pi=3.1415926
@@ -81,16 +73,9 @@ subsection Initial composition model
   end
 end
 
-subsection Material model
-  subsection Simple model
-    set Density differential for compositional field 1 = -10
-  end
-end
-
 subsection Discretization
   set Use discontinuous composition discretization = true
 end
-
 
 ############### Parameters describing the discretization
 
@@ -103,8 +88,6 @@ subsection Mesh refinement
   set Refinement fraction                = 0.3
 end
 
-
-
 ############### Parameters describing what to do with the solution
 
 subsection Postprocess
@@ -116,25 +99,24 @@ subsection Postprocess
   end
 
   subsection Particles
-    set Number of particles = 100000
     set Time between data output = 70
     set Data output format = none
-    set List of particle properties = velocity, function, initial composition
-    set Interpolation scheme = cell average
-    set Update ghost particles = true
+  end
+end
 
-    subsection Function
-      set Variable names      = x,z
-      set Function expression = 0.5*(1+tanh((0.2+0.02*cos(pi*x/0.9142)-z)/0.02))
-    end
+subsection Particles
+  set List of particle properties = velocity, function, initial composition
+  set Interpolation scheme = cell average
+  set Particle generator name = random uniform
 
-    set Particle generator name = random uniform
+  subsection Function
+    set Variable names      = x,z
+    set Function expression = 0.5*(1+tanh((0.2+0.02*cos(pi*x/0.9142)-z)/0.02))
+  end
 
-    subsection Generator
-      subsection Probability density function
-        set Variable names      = x,z
-        set Function expression = x*x*z
-      end
+  subsection Generator
+    subsection Random uniform
+      set Number of particles = 100000
     end
   end
 end

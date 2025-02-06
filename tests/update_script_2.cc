@@ -1,3 +1,23 @@
+/*
+  Copyright (C) 2022 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
 #include <aspect/simulator.h>
 #include <iostream>
 
@@ -21,8 +41,8 @@ int f()
 
   command = ("cp update_script_2.x.prm output-update_script_2/updated2.prm;"
              "sed -i.bak 's:set Additional shared libraries = ./libupdate_script_2.so::' output-update_script_2/updated2.prm;"
-             "bash " ASPECT_SOURCE_DIR "/doc/update_prm_files.sh output-update_script_2/updated2.prm;"
-             "bash " ASPECT_SOURCE_DIR "/doc/update_prm_files.sh output-update_script_2/updated2.prm;"
+             "bash " ASPECT_SOURCE_DIR "/contrib/utilities/update_prm_files.sh output-update_script_2/updated2.prm;"
+             "bash " ASPECT_SOURCE_DIR "/contrib/utilities/update_prm_files.sh output-update_script_2/updated2.prm;"
              "rm output-update_script_2/updated2.prm.bak");
 
   std::cout << "Executing the update script:\n"

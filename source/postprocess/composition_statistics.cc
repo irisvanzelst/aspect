@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -24,9 +24,6 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/fe/fe_values.h>
 
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
-
 
 namespace aspect
 {
@@ -37,14 +34,10 @@ namespace aspect
     CompositionStatistics<dim>::execute (TableHandler &statistics)
     {
       if (this->n_compositional_fields() == 0)
-        return std::pair<std::string,std::string>();
+        return {"", ""};
 
       // create a quadrature formula based on the compositional element alone.
-      // be defensive about determining that a compositional field actually exists
-      AssertThrow (this->introspection().base_elements.compositional_fields
-                   != numbers::invalid_unsigned_int,
-                   ExcMessage("This postprocessor cannot be used without compositional fields."));
-      const QGauss<dim> quadrature_formula (this->get_fe().base_element(this->introspection().base_elements.compositional_fields).degree+1);
+      const Quadrature<dim> &quadrature_formula = this->introspection().quadratures.compositional_field_max;
       const unsigned int n_q_points = quadrature_formula.size();
 
       FEValues<dim> fe_values (this->get_mapping(),
@@ -84,7 +77,7 @@ namespace aspect
       std::vector<double> local_min_compositions (this->n_compositional_fields(),
                                                   std::numeric_limits<double>::max());
       std::vector<double> local_max_compositions (this->n_compositional_fields(),
-                                                  -std::numeric_limits<double>::max());
+                                                  std::numeric_limits<double>::lowest());
 
       for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
         {
@@ -104,7 +97,7 @@ namespace aspect
       std::vector<double> global_min_compositions (this->n_compositional_fields(),
                                                    std::numeric_limits<double>::max());
       std::vector<double> global_max_compositions (this->n_compositional_fields(),
-                                                   -std::numeric_limits<double>::max());
+                                                   std::numeric_limits<double>::lowest());
       {
         Utilities::MPI::min (local_min_compositions,
                              this->get_mpi_communicator(),
@@ -125,7 +118,7 @@ namespace aspect
                                 global_compositional_integrals[c]);
         }
 
-      // also make sure that the other columns filled by the this object
+      // also make sure that the other columns filled by this object
       // all show up with sufficient accuracy and in scientific notation
       for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
         {
@@ -133,10 +126,10 @@ namespace aspect
                                           "Maximal value for composition " + this->introspection().name_for_compositional_index(c),
                                           "Global mass for composition " + this->introspection().name_for_compositional_index(c)
                                         };
-          for (unsigned int i=0; i<sizeof(columns)/sizeof(columns[0]); ++i)
+          for (const auto &col : columns)
             {
-              statistics.set_precision (columns[i], 8);
-              statistics.set_scientific (columns[i], true);
+              statistics.set_precision (col, 8);
+              statistics.set_scientific (col, true);
             }
         }
 

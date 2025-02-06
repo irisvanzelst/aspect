@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -28,8 +28,6 @@
 
 namespace aspect
 {
-  using namespace dealii;
-
   template <int dim>
   class Simulator;
 
@@ -53,7 +51,14 @@ namespace aspect
                                const Mapping<dim>       &mapping,
                                const Quadrature<dim>    &quadrature,
                                const Quadrature<dim-1>  &face_quadrature);
+
           VolumeOfFluidSystem (const VolumeOfFluidSystem &scratch);
+
+          /**
+           * Add a defaulted assignment operator because relying on it
+           * implicitly is deprecated.
+           */
+          VolumeOfFluidSystem &operator=(const VolumeOfFluidSystem &) = default;
 
           FEValues<dim>          finite_element_values;
           FEValues<dim>          neighbor_finite_element_values;
@@ -79,17 +84,17 @@ namespace aspect
 
           std::vector<double>         old_field_values;
           /* Vector for interface normal in the unit cell */
-          std::vector<Tensor<1,dim> > cell_i_n_values;
+          std::vector<Tensor<1,dim>> cell_i_n_values;
           /* "Distance" from cell center to interface as d value for the interface in the form $\vec{n}\cdot\vec{x}=d$ */
           std::vector<double>         cell_i_d_values;
 
-          std::vector<Tensor<1,dim> > face_current_velocity_values;
-          std::vector<Tensor<1,dim> > face_old_velocity_values;
-          std::vector<Tensor<1,dim> > face_old_old_velocity_values;
+          std::vector<Tensor<1,dim>> face_current_velocity_values;
+          std::vector<Tensor<1,dim>> face_old_velocity_values;
+          std::vector<Tensor<1,dim>> face_old_old_velocity_values;
 
           std::vector<double>         neighbor_old_values;
           /* Vector for interface normal in the unit cell */
-          std::vector<Tensor<1,dim> > neighbor_i_n_values;
+          std::vector<Tensor<1,dim>> neighbor_i_n_values;
           /* "Distance" from cell center to interface as d value for the interface in the form $\vec{n}\cdot\vec{x}=d$ */
           std::vector<double>         neighbor_i_d_values;
         };
@@ -113,6 +118,12 @@ namespace aspect
           VolumeOfFluidSystem(const VolumeOfFluidSystem &data);
 
           /**
+           * Add a defaulted assignment operator because relying on it
+           * implicitly is deprecated.
+           */
+          VolumeOfFluidSystem &operator=(const VolumeOfFluidSystem &) = default;
+
+          /**
            * Local contributions to the global matrix and right hand side
            * that correspond only to the variables listed in local_dof_indices
            */
@@ -122,23 +133,23 @@ namespace aspect
           /**
            * Local contributions to the global rhs from the face terms in the
            * discontinuous Galerkin interpretation of the VolumeOfFluid method.
-           **/
-          std::array<Vector<double>,
-              GeometryInfo<dim>::max_children_per_face *GeometryInfo<dim>::faces_per_cell>
-              local_face_rhs;
-          std::array<FullMatrix<double>,
-              GeometryInfo<dim>::max_children_per_face *GeometryInfo<dim>::faces_per_cell>
-              local_face_matrices_ext_ext;
+           *
+           * The array has a length sufficient to hold one element for each
+           * possible face and sub-face of a cell.
+           */
+          std::vector<Vector<double>> local_face_rhs;
+          std::vector<FullMatrix<double>> local_face_matrices_ext_ext;
 
           /**
            * Denotes which face's rhs have actually been assembled in the DG
            * field assembly. Entries not used (for example, those corresponding
            * to non-existent subfaces; or faces being assembled by the
            * neighboring cell) are set to false.
-           **/
-          std::array<bool,
-              GeometryInfo<dim>::max_children_per_face *GeometryInfo<dim>::faces_per_cell>
-              face_contributions_mask;
+           *
+           * The array has a length sufficient to hold one element for each
+           * possible face and sub-face of a cell.
+           */
+          std::vector<bool> face_contributions_mask;
 
           /**
            * Indices of those degrees of freedom that actually correspond to
@@ -155,10 +166,11 @@ namespace aspect
            * Indices of the degrees of freedom corresponding to the volume_of_fluid field
            * on all possible neighboring cells. This is used in the
            * discontinuous Galerkin interpretation of the VolumeOfFluid method.
-           **/
-          std::array<std::vector<types::global_dof_index>,
-              GeometryInfo<dim>::max_children_per_face *GeometryInfo<dim>::faces_per_cell>
-              neighbor_dof_indices;
+           *
+           * The array has a length sufficient to hold one element for each
+           * possible face and sub-face of a cell.
+           */
+          std::vector<std::vector<types::global_dof_index>> neighbor_dof_indices;
         };
       }
     }

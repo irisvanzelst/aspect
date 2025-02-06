@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -26,17 +26,19 @@
 
 #include <deal.II/base/utilities.h>
 #include <deal.II/base/parameter_handler.h>
-#include <tuple>
 #include <deal.II/base/exceptions.h>
+#include <deal.II/fe/component_mask.h>
 
 #include <boost/core/demangle.hpp>
 
+#include <tuple>
 #include <string>
 #include <list>
 #include <set>
 #include <map>
 #include <iostream>
 #include <typeinfo>
+#include <type_traits>
 
 
 namespace aspect
@@ -45,8 +47,6 @@ namespace aspect
 
   namespace Plugins
   {
-    using namespace dealii;
-
     /**
      * This function returns if a given plugin (e.g. a material model returned
      * from SimulatorAccess::get_material_model() ) matches a certain plugin
@@ -56,8 +56,17 @@ namespace aspect
      * a radial gravity model might only be implemented for spherical geometry
      * models, and would want to check if the current geometry is in fact a
      * spherical shell.
+     *
+     * This function can only be called with types that correspond to the same
+     * plugin system. In other words, the type of the plugin has to either be
+     * derived from the type of the object being tested, or they have to both
+     * be derived from a common base class. This function is not appropriate
+     * to check whether a class `TestType` derived from an interface base
+     * class is *also* derived from a second base class `PluginType`. For these
+     * cases, use a `dynamic_cast`.
      */
-    template <typename TestType, typename PluginType>
+    template <typename TestType, typename PluginType,
+              typename = typename std::enable_if_t<std::is_base_of<PluginType,TestType>::value>>
     inline
     bool
     plugin_type_matches (const PluginType &object)
@@ -73,8 +82,17 @@ namespace aspect
      * first check if the plugin type is actually convertible by calling
      * plugin_matches_type() before calling this function. If the plugin is
      * not convertible this function throws an exception.
+     *
+     * This function can only be called with types that correspond to the same
+     * plugin system. In other words, the type of the plugin has to either be
+     * derived from the type of the object being tested, or they have to both
+     * be derived from a common base class. This function is not appropriate
+     * to convert references to classes whether a class `TestType` derived
+     * from an interface base class is *also* derived from a second base
+     * class `PluginType`. For these cases, use a `dynamic_cast`.
      */
-    template <typename TestType, typename PluginType>
+    template <typename TestType, typename PluginType,
+              typename = typename std::enable_if_t<std::is_base_of<PluginType,TestType>::value>>
     inline
     TestType &
     get_plugin_as_type (PluginType &object)
@@ -93,16 +111,317 @@ namespace aspect
     }
   }
 
+  namespace Plugins
+  {
+    /**
+     * A base class for all plugin systems. The class ensures that a
+     * common set of functions is declared as `virtual` (namely, the
+     * destructor, `initialize()`, `update()`, and
+     * `parse_parameters()`) and implemented with empty bodies so that
+     * derived interface classes do not have to declare these
+     * functions themselves. Furthermore, the class provides an empty,
+     * `static` function `declare_parameters()` that derived classes
+     * can re-implement to declare their parameters.
+     */
+    class InterfaceBase
+    {
+      public:
+        /**
+         * Destructor. Made virtual to enforce that derived classes also have
+         * virtual destructors.
+         */
+        virtual ~InterfaceBase() = default;
+
+        /**
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters() is run and after
+         * the SimulatorAccess (if applicable) is initialized.
+         *
+         * The default implementation of this function does nothing, but
+         * plugins that derive from this class (via the <code>Interface</code>
+         * classes of their respective plugin systems) may overload it
+         * if they want something to happen upon startup of the
+         * Simulator object to which the plugin contributes.
+         */
+        virtual
+        void
+        initialize ();
+
+        /**
+         * A function that is called at the beginning of each time step.
+         *
+         * The default implementation of this function does nothing, but
+         * plugins that derive from this class (via the <code>Interface</code>
+         * classes of their respective plugin systems) may overload it
+         * if they want something to happen upon startup of the
+         * Simulator object to which the plugin contributes.
+         */
+        virtual
+        void
+        update ();
+
+        /**
+         * Declare the parameters the plugin takes through input files. The
+         * default implementation of this function does not describe any
+         * parameters. Consequently, derived classes do not have to overload
+         * this function if they do not take any runtime parameters. On
+         * the other hand, most plugins do have run-time parameters, and
+         * they may then overload this function.
+         */
+        static
+        void
+        declare_parameters (ParameterHandler &prm);
+
+        /**
+         * Read the parameters this class declares from the parameter file.
+         * The default implementation of this function does not read any
+         * parameters. Consequently, derived classes do not have to overload
+         * this function if they do not take any runtime parameters. On
+         * the other hand, most plugins do have run-time parameters, and
+         * they may then overload this function.
+         */
+        virtual
+        void
+        parse_parameters (ParameterHandler &prm);
+    };
+
+
+
+    /**
+     * A base class for "plugin manager" classes. Plugin manager classes are
+     * used in places where one can legitimately use more than one plugin of
+     * a certain kind. For example, while there can only ever be one geometry
+     * (and consequently, the Simulator class only stores a single object of
+     * type derived from GeometryModels::Interface), one can have many different
+     * postprocessor objects at the same time. In these circumstances, the
+     * Simulator class stores a Postprocess::Manager object that internally
+     * stores zero or more objects of type derived from Postprocess::Interface.
+     * Since there are many places inside ASPECT where we need these "plugin
+     * manager" classes, the current class provides some common functionality
+     * to all of these classes.
+     *
+     * The class takes as template argument the type of the derived
+     * class's interface type. Since a manager is always also a plugin
+     * (to the Simulator class) itself, the current class is derived from
+     * the `InterfaceBase` class as well.
+     */
+    template <typename InterfaceType>
+    class ManagerBase : public InterfaceBase
+    {
+      public:
+        /**
+         * Destructor.
+         */
+        ~ManagerBase () override;
+
+        /**
+         * A function that is called at the beginning of each time step,
+         * calling the update function of the individual heating models.
+         */
+        void
+        update () override;
+
+        /**
+         * Go through the list of all plugins that have been selected
+         * in the input file (and are consequently currently active) and return
+         * true if one of them has the desired type specified by the template
+         * argument.
+         *
+         * This function can only be called if the given template type (the first template
+         * argument) is a class derived from the Interface class in this namespace.
+         */
+        template <typename PluginType,
+                  typename = typename std::enable_if_t<std::is_base_of<InterfaceType,PluginType>::value>>
+        bool
+        has_matching_active_plugin () const;
+
+        /**
+         * Go through the list of all plugins that have been selected
+         * in the input file (and are consequently currently active) and see
+         * if one of them has the type specified by the template
+         * argument or can be cast to that type. If so, return a reference
+         * to it. If no postprocessor is active that matches the given type,
+         * throw an exception.
+         *
+         * The returned object is necessarily an element in the list returned by
+         * `get_active_plugins()`, but cast to a derived type.
+         *
+         * This function can only be called if the given template type (the first template
+         * argument) is a class derived from the Interface class in this namespace.
+         */
+        template <typename PluginType,
+                  typename = typename std::enable_if_t<std::is_base_of<InterfaceType,PluginType>::value>>
+        const PluginType &
+        get_matching_active_plugin () const;
+
+        /**
+         * Return a list of plugin objects that have been requested in the
+         * parameter file and that are, consequently, active in the current
+         * manager object.
+         */
+        const std::list<std::unique_ptr<InterfaceType>> &
+        get_active_plugins () const;
+
+        /**
+         * Return a list of names used in the input file to select plugins,
+         * and that are, consequently, active in the current manager object.
+         * The names in the returned list correspond to the objects returned
+         * by `get_active_plugins()`.
+         */
+        const std::vector<std::string> &
+        get_active_plugin_names () const;
+
+      protected:
+        /**
+         * A list of plugin objects that have been requested in the
+         * parameter file.
+         */
+        std::list<std::unique_ptr<InterfaceType>> plugin_objects;
+
+        /**
+         * A list of names used in the input file to identify plugins,
+         * corresponding to the plugin objects stored in the previous variable.
+         */
+        std::vector<std::string> plugin_names;
+    };
+
+
+
+    template <typename InterfaceType>
+    ManagerBase<InterfaceType>::~ManagerBase()
+    {
+      // only check and throw if we are not unwinding the stack due
+      // to an active exception
+#ifdef DEAL_II_HAVE_CXX17
+      if (std::uncaught_exceptions() == 0)
+#else
+      if (std::uncaught_exception() == false)
+#endif
+        {
+          Assert (plugin_names.size() == plugin_objects.size(), ExcInternalError());
+        }
+    }
+
+
+    template <typename InterfaceType>
+    void ManagerBase<InterfaceType>::update()
+    {
+      // call the update() functions of all plugins:
+      for (const auto &p : plugin_objects)
+        {
+          try
+            {
+              p->update ();
+            }
+
+          // plugins that throw exceptions usually do not result in
+          // anything good because they result in an unwinding of the stack
+          // and, if only one processor triggers an exception, the
+          // destruction of objects often causes a deadlock. thus, if
+          // an exception is generated, catch it, print an error message,
+          // and abort the program
+          catch (std::exception &exc)
+            {
+              std::cerr << std::endl << std::endl
+                        << "----------------------------------------------------"
+                        << std::endl;
+              std::cerr << "Exception on MPI process <"
+                        << dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
+                        << "> while running plugin <"
+                        << typeid(*p).name()
+                        << ">: " << std::endl
+                        << exc.what() << std::endl
+                        << "Aborting!" << std::endl
+                        << "----------------------------------------------------"
+                        << std::endl;
+
+              // terminate the program!
+              MPI_Abort (MPI_COMM_WORLD, 1);
+            }
+          catch (...)
+            {
+              std::cerr << std::endl << std::endl
+                        << "----------------------------------------------------"
+                        << std::endl;
+              std::cerr << "Exception on MPI process <"
+                        << dealii::Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
+                        << "> while running plugin <"
+                        << typeid(*p).name()
+                        << ">: " << std::endl;
+              std::cerr << "Unknown exception!" << std::endl
+                        << "Aborting!" << std::endl
+                        << "----------------------------------------------------"
+                        << std::endl;
+
+              // terminate the program!
+              MPI_Abort (MPI_COMM_WORLD, 1);
+            }
+        }
+    }
+
+
+    template <typename InterfaceType>
+    template <typename PluginType, typename>
+    inline
+    bool
+    ManagerBase<InterfaceType>::has_matching_active_plugin () const
+    {
+      for (const auto &p : plugin_objects)
+        if (Plugins::plugin_type_matches<PluginType>(*p))
+          return true;
+      return false;
+    }
+
+
+    template <typename InterfaceType>
+    template <typename PluginType, typename>
+    inline
+    const PluginType &
+    ManagerBase<InterfaceType>::get_matching_active_plugin () const
+    {
+      AssertThrow(has_matching_active_plugin<PluginType> (),
+                  ExcMessage("You asked the object managing a collection of plugins for a "
+                             "plugin object of type <" + boost::core::demangle(typeid(PluginType).name()) + "> "
+                             "that could not be found in the current model. You need to "
+                             "activate this plugin in the input file for it to be "
+                             "available."));
+
+      for (const auto &p : plugin_objects)
+        if (Plugins::plugin_type_matches<PluginType>(*p))
+          return Plugins::get_plugin_as_type<PluginType>(*p);
+
+      // We will never get here, because we had the Assert above. Just to avoid warnings.
+      return Plugins::get_plugin_as_type<PluginType>(**(plugin_objects.begin()));
+    }
+
+
+
+    template <typename InterfaceType>
+    const std::list<std::unique_ptr<InterfaceType>> &
+    ManagerBase<InterfaceType>::get_active_plugins () const
+    {
+      return plugin_objects;
+    }
+
+
+
+    template <typename InterfaceType>
+    const std::vector<std::string> &
+    ManagerBase<InterfaceType>::get_active_plugin_names () const
+    {
+      return plugin_names;
+    }
+
+  }
+
   namespace internal
   {
     /**
      * A namespace for the definition of classes that have to do with the
-     * plugin architecture of Aspect.
+     * plugin architecture of ASPECT.
      */
     namespace Plugins
     {
-      using namespace dealii;
-
       /**
        * An internal class that is used in the definition of the
        * ASPECT_REGISTER_* macros. Given a registration function, a classname,
@@ -125,7 +444,7 @@ namespace aspect
         RegisterHelper (void (*register_function) (const std::string &,
                                                    const std::string &,
                                                    void ( *)(ParameterHandler &),
-                                                   InterfaceClass * ( *)()),
+                                                   std::unique_ptr<InterfaceClass> ( *)()),
                         const char *name,
                         const char *description)
         {
@@ -140,9 +459,9 @@ namespace aspect
          * this class.
          */
         static
-        InterfaceClass *factory ()
+        std::unique_ptr<InterfaceClass> factory ()
         {
-          return new ModelClass();
+          return std::make_unique<ModelClass>();
         }
       };
 
@@ -157,18 +476,19 @@ namespace aspect
         /**
          * A type describing everything we need to know about a plugin.
          *
-         * The entries in the tuple are: - The name by which it can be
-         * selected. - A description of this plugin that will show up in the
-         * documentation in the parameter file. - A function that can declare
-         * the run-time parameters this plugin takes from the parameter file.
+         * The entries in the tuple are:
+         * - The name by which it can be selected.
+         * - A description of this plugin that will show up in the
+         *   documentation in the parameter file.
+         * - A function that can declare the run-time parameters this
+         *   plugin takes from the parameter file.
          * - A function that can produce objects of this plugin type.
          */
-        typedef
-        std::tuple<std::string,
-            std::string,
-            void ( *) (ParameterHandler &),
-            InterfaceClass *( *) ()>
-            PluginInfo;
+        using PluginInfo
+        = std::tuple<std::string,
+        std::string,
+        void ( *) (ParameterHandler &),
+        std::unique_ptr<InterfaceClass>( *) ()>;
 
         /**
          * A pointer to a list of all registered plugins.
@@ -176,7 +496,7 @@ namespace aspect
          * The object is a pointer rather than an object for the following
          * reason: objects with static initializers (such as =0) are
          * initialized before any objects for which one needs to run
-         * constructors. consequently, we can be sure that this pointer is set
+         * constructors. Consequently, we can be sure that this pointer is set
          * to zero before we ever try to register a postprocessor, and
          * consequently whenever we run Manager::register_postprocessor, we
          * need not worry whether we try to add something to this list before
@@ -198,7 +518,7 @@ namespace aspect
         void register_plugin (const std::string &name,
                               const std::string &description,
                               void (*declare_parameters_function) (ParameterHandler &),
-                              InterfaceClass * (*factory_function) ());
+                              std::unique_ptr<InterfaceClass> (*factory_function) ());
 
         /**
          * Generate a list of names of the registered plugins separated by '|'
@@ -236,7 +556,7 @@ namespace aspect
          * function.
          */
         static
-        InterfaceClass *
+        std::unique_ptr<InterfaceClass>
         create_plugin (const std::string  &name,
                        const std::string &documentation);
 
@@ -244,14 +564,14 @@ namespace aspect
          * Given the name of one plugin, create a corresponding object and
          * return a pointer to it. The second argument provides a hint where
          * this function was called from, to be printed in case there is an
-         * error. Before returning, let the newly created object read its run-
-         * time parameters from the parameter object.
+         * error. Before returning, let the newly created object read its
+         * run-time parameters from the parameter object.
          *
          * Ownership of the object is handed over to the caller of this
          * function.
          */
         static
-        InterfaceClass *
+        std::unique_ptr<InterfaceClass>
         create_plugin (const std::string  &name,
                        const std::string &documentation,
                        ParameterHandler &prm);
@@ -314,7 +634,7 @@ namespace aspect
       register_plugin (const std::string &name,
                        const std::string &description,
                        void (*declare_parameters_function) (ParameterHandler &),
-                       InterfaceClass * (*factory_function) ())
+                       std::unique_ptr<InterfaceClass> (*factory_function) ())
       {
         // see if this is the first time we get into this
         // function and if so initialize the static member variable
@@ -324,18 +644,20 @@ namespace aspect
         // verify that the same name has not previously been
         // used to register a plugin, since we would then no
         // longer be able to identify the plugin
-        for (typename std::list<PluginInfo>::const_iterator
-             p = plugins->begin();
-             p != plugins->end(); ++p)
-          Assert (std::get<0>(*p) != name,
-                  ExcMessage ("A plugin with name <" + name + "> has "
-                              "already been registered!"));
+        for (const auto &p : *plugins)
+          {
+            Assert (std::get<0>(p) != name,
+                    ExcMessage ("A plugin with name <" + name + "> has "
+                                "already been registered!"));
+            (void)p;
+          }
+
 
         // now add one record to the list
-        plugins->push_back (PluginInfo(name,
-                                       description,
-                                       declare_parameters_function,
-                                       factory_function));
+        plugins->emplace_back (name,
+                               description,
+                               declare_parameters_function,
+                               factory_function);
       }
 
 
@@ -358,13 +680,11 @@ namespace aspect
 
         // now create a pattern from all of these sorted names
         std::string pattern_of_names;
-        for (typename std::set<std::string>::const_iterator
-             p = names.begin();
-             p != names.end(); ++p)
+        for (const auto &name : names)
           {
             if (pattern_of_names.size() > 0)
               pattern_of_names += "|";
-            pattern_of_names += *p;
+            pattern_of_names += name;
           }
 
         return pattern_of_names;
@@ -385,10 +705,10 @@ namespace aspect
         for (typename std::list<PluginInfo>::const_iterator
              p = plugins->begin();
              p != plugins->end(); ++p)
-          names_and_descriptions[std::get<0>(*p)] = std::get<1>(*p);;
+          names_and_descriptions[std::get<0>(*p)] = std::get<1>(*p);
 
         // then output it all
-        typename std::map<std::string,std::string>::const_iterator
+        std::map<std::string,std::string>::const_iterator
         p = names_and_descriptions.begin();
         while (true)
           {
@@ -434,7 +754,7 @@ namespace aspect
 
 
       template <typename InterfaceClass>
-      InterfaceClass *
+      std::unique_ptr<InterfaceClass>
       PluginList<InterfaceClass>::
       create_plugin (const std::string &name,
                      const std::string &documentation)
@@ -463,7 +783,7 @@ namespace aspect
              p != plugins->end(); ++p)
           if (std::get<0>(*p) == name)
             {
-              InterfaceClass *i = std::get<3>(*p)();
+              std::unique_ptr<InterfaceClass> i = std::get<3>(*p)();
               return i;
             }
 
@@ -474,13 +794,13 @@ namespace aspect
 
 
       template <typename InterfaceClass>
-      InterfaceClass *
+      std::unique_ptr<InterfaceClass>
       PluginList<InterfaceClass>::
       create_plugin (const std::string &name,
                      const std::string &documentation,
                      ParameterHandler  &prm)
       {
-        InterfaceClass *i = create_plugin(name, documentation);
+        std::unique_ptr<InterfaceClass> i = create_plugin(name, documentation);
         i->parse_parameters (prm);
         return i;
       }
@@ -503,7 +823,7 @@ namespace aspect
         output_stream << std::string(typeid(InterfaceClass).name())
                       << " [label=\""
                       << plugin_system_name
-                      << "\", height=.8,width=.8,shape=\"rect\",fillcolor=\"green\"]"
+                      << "\", height=.8,width=.8,shape=\"rect\",fillcolor=\"lightgreen\"]"
                       << std::endl;
 
         // then output the graph nodes for each plugin, with links to the
@@ -531,7 +851,7 @@ namespace aspect
             // again using \n to make dot/neato show these parts of
             // the name on separate lines
             const std::vector<std::string> plugin_label_parts
-              = Utilities::break_text_into_lines(p->first, 15);
+              = dealii::Utilities::break_text_into_lines(p->first, 15);
             Assert (plugin_label_parts.size()>0, ExcInternalError());
             std::string plugin_name = plugin_label_parts[0];
             for (unsigned int i=1; i<plugin_label_parts.size(); ++i)
@@ -586,6 +906,14 @@ namespace aspect
         // read when looking over stuff visually
         output_stream << std::endl;
       }
+
+
+      /**
+       * A placeholder class that is used wherever we need a PluginList object
+       * for `dim==0` and `dim==1`, which of course are not dimensions we
+       * support in ASPECT.
+       */
+      class UnusablePluginList {};
     }
   }
 }

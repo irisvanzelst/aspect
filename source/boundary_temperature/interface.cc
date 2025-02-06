@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -27,86 +27,26 @@
 
 #include <deal.II/base/exceptions.h>
 #include <deal.II/base/signaling_nan.h>
-#include <tuple>
 
 #include <list>
+#include <tuple>
 
 
 namespace aspect
 {
   namespace BoundaryTemperature
   {
-    template <int dim>
-    Interface<dim>::~Interface ()
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::update ()
-    {}
-
-    template <int dim>
-    void
-    Interface<dim>::initialize ()
-    {}
-
-    template <int dim>
-    double
-    Interface<dim>::boundary_temperature (const types::boundary_id /*boundary_indicator*/,
-                                          const Point<dim>        &/*position*/) const
-    {
-      AssertThrow(false,
-                  ExcMessage("The boundary temperature plugin has to implement a function called `temperature' "
-                             "with three arguments or a function `boundary_temperature' with two arguments. "
-                             "The function with three arguments is deprecated and will "
-                             "be removed in a later version of ASPECT."));
-      return numbers::signaling_nan<double>();
-    }
-
-
-    template <int dim>
-    void
-    Interface<dim>::
-    declare_parameters (dealii::ParameterHandler &)
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::parse_parameters (dealii::ParameterHandler &)
-    {}
-
-
     // ------------------------------ Manager -----------------------------
     // -------------------------------- Deal with registering boundary_temperature models and automating
     // -------------------------------- their setup and selection at run time
 
-    template <int dim>
-    Manager<dim>::~Manager()
-    {}
-
-
-
-    template <int dim>
-    void
-    Manager<dim>::update ()
-    {
-      for (unsigned int i=0; i<boundary_temperature_objects.size(); ++i)
-        {
-          boundary_temperature_objects[i]->update();
-        }
-    }
-
-
-
     namespace
     {
       std::tuple
-      <void *,
-      void *,
-      aspect::internal::Plugins::PluginList<Interface<2> >,
-      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::PluginList<Interface<2>>,
+      aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -115,7 +55,7 @@ namespace aspect
     Manager<dim>::register_boundary_temperature (const std::string &name,
                                                  const std::string &description,
                                                  void (*declare_parameters_function) (ParameterHandler &),
-                                                 Interface<dim> *(*factory_function) ())
+                                                 std::unique_ptr<Interface<dim>> (*factory_function) ())
     {
       std::get<dim>(registered_plugins).register_plugin (name,
                                                          description,
@@ -132,29 +72,29 @@ namespace aspect
       // parameters we declare here
       prm.enter_subsection ("Boundary temperature model");
       {
-        model_names
+        this->plugin_names
           = Utilities::split_string_list(prm.get("List of model names"));
 
-        AssertThrow(Utilities::has_unique_entries(model_names),
+        AssertThrow(Utilities::has_unique_entries(this->plugin_names),
                     ExcMessage("The list of strings for the parameter "
                                "'Boundary temperature model/List of model names' contains entries more than once. "
                                "This is not allowed. Please check your parameter file."));
 
         const std::string model_name = prm.get ("Model name");
 
-        AssertThrow (model_name == "unspecified" || model_names.size() == 0,
+        AssertThrow (model_name == "unspecified" || this->plugin_names.size() == 0,
                      ExcMessage ("The parameter 'Model name' is only used for reasons"
                                  "of backwards compatibility and can not be used together with "
                                  "the new functionality 'List of model names'. Please add your "
                                  "boundary temperature model to the list instead."));
 
         if (!(model_name == "unspecified"))
-          model_names.push_back(model_name);
+          this->plugin_names.push_back(model_name);
 
         // create operator list
         std::vector<std::string> model_operator_names =
           Utilities::possibly_extend_from_1_to_N (Utilities::split_string_list(prm.get("List of model operators")),
-                                                  model_names.size(),
+                                                  this->plugin_names.size(),
                                                   "List of model operators");
         model_operators = Utilities::create_model_operator_list(model_operator_names);
 
@@ -167,11 +107,16 @@ namespace aspect
               = std::set<types::boundary_id> (x_fixed_temperature_boundary_indicators.begin(),
                                               x_fixed_temperature_boundary_indicators.end());
 
-            // If model names have been set, but no boundaries on which to use them,
-            // ignore the set values, do not create objects that are never used.
+            // If no fixed temperature boundary indicators have been set, there should be no model_names chosen either.
+            // If that is indeed the case, clear the model_operators vector. Otherwise, raise an exception.
             if (fixed_temperature_boundary_indicators.size() == 0)
               {
-                model_names.clear();
+                AssertThrow(this->plugin_names.size() == 0,
+                            ExcMessage ("You have indicated that you wish to apply a boundary temperature "
+                                        "model, but the <Fixed temperature boundary indicators> parameter "
+                                        "is empty. Please use this parameter to specify the boundaries "
+                                        "on which the model(s) should be applied."));
+
                 model_operators.clear();
               }
           }
@@ -179,7 +124,7 @@ namespace aspect
           {
             AssertThrow (false, ExcMessage ("While parsing the entry <Model settings/Fixed temperature "
                                             "boundary indicators>, there was an error. Specifically, "
-                                            "the conversion function complained as follows: "
+                                            "the conversion function complained as follows:\n\n"
                                             + error));
           }
 
@@ -189,19 +134,18 @@ namespace aspect
 
       // go through the list, create objects and let them parse
       // their own parameters
-      for (unsigned int i=0; i<model_names.size(); ++i)
+      for (auto &model_name : this->plugin_names)
         {
           // create boundary temperature objects
-          boundary_temperature_objects.push_back (std::unique_ptr<Interface<dim> >
-                                                  (std::get<dim>(registered_plugins)
-                                                   .create_plugin (model_names[i],
-                                                                   "Boundary temperature::Model names")));
+          this->plugin_objects.emplace_back (std::get<dim>(registered_plugins)
+                                             .create_plugin (model_name,
+                                                             "Boundary temperature::Model names"));
 
-          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(boundary_temperature_objects.back().get()))
+          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(this->plugin_objects.back().get()))
             sim->initialize_simulator (this->get_simulator());
 
-          boundary_temperature_objects.back()->parse_parameters (prm);
-          boundary_temperature_objects.back()->initialize ();
+          this->plugin_objects.back()->parse_parameters (prm);
+          this->plugin_objects.back()->initialize ();
         }
     }
 
@@ -214,10 +158,11 @@ namespace aspect
     {
       double temperature = 0.0;
 
-      for (unsigned int i=0; i<boundary_temperature_objects.size(); ++i)
+      auto p = this->plugin_objects.begin();
+      for (unsigned int i=0; i<this->plugin_objects.size(); ++p, ++i)
         temperature = model_operators[i](temperature,
-                                         boundary_temperature_objects[i]->boundary_temperature(boundary_indicator,
-                                             position));
+                                         (*p)->boundary_temperature(boundary_indicator,
+                                                                    position));
 
       return temperature;
     }
@@ -230,9 +175,9 @@ namespace aspect
     {
       double temperature = std::numeric_limits<double>::max();
 
-      for (unsigned int i=0; i<boundary_temperature_objects.size(); ++i)
+      for (const auto &p : this->plugin_objects)
         temperature = std::min(temperature,
-                               boundary_temperature_objects[i]->minimal_temperature(fixed_boundary_ids));
+                               p->minimal_temperature(fixed_boundary_ids));
 
       return temperature;
     }
@@ -245,9 +190,9 @@ namespace aspect
     {
       double temperature = 0.0;
 
-      for (unsigned int i=0; i<boundary_temperature_objects.size(); ++i)
+      for (const auto &p : this->plugin_objects)
         temperature = std::max(temperature,
-                               boundary_temperature_objects[i]->maximal_temperature(fixed_boundary_ids));
+                               p->maximal_temperature(fixed_boundary_ids));
 
       return temperature;
     }
@@ -258,15 +203,15 @@ namespace aspect
     const std::vector<std::string> &
     Manager<dim>::get_active_boundary_temperature_names () const
     {
-      return model_names;
+      return this->plugin_names;
     }
 
 
     template <int dim>
-    const std::vector<std::unique_ptr<Interface<dim> > > &
+    const std::list<std::unique_ptr<Interface<dim>>> &
     Manager<dim>::get_active_boundary_temperature_conditions () const
     {
-      return boundary_temperature_objects;
+      return this->plugin_objects;
     }
 
 
@@ -407,11 +352,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<BoundaryTemperature::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<BoundaryTemperature::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<BoundaryTemperature::Interface<2>>::PluginInfo> *
+      internal::Plugins::PluginList<BoundaryTemperature::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<BoundaryTemperature::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<BoundaryTemperature::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<BoundaryTemperature::Interface<3>>::PluginInfo> *
+      internal::Plugins::PluginList<BoundaryTemperature::Interface<3>>::plugins = nullptr;
     }
   }
 
@@ -422,5 +367,7 @@ namespace aspect
   template class Manager<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

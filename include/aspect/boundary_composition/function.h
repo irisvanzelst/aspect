@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,8 +32,6 @@ namespace aspect
 {
   namespace BoundaryComposition
   {
-    using namespace dealii;
-
     /**
      * A class that implements boundary composition based on a functional
      * description provided in the input file.
@@ -81,7 +79,7 @@ namespace aspect
         /**
          * A function object representing the compositional fields.
          */
-        std::unique_ptr<Functions::ParsedFunction<dim> > function;
+        std::unique_ptr<Functions::ParsedFunction<dim>> function;
 
         /**
          * The coordinate representation to evaluate the function. Possible

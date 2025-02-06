@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,18 +17,20 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_builder_coordinate_systems_interface_h
-#define _world_builder_coordinate_systems_interface_h
+#ifndef WORLD_BUILDER_COORDINATE_SYSTEMS_INTERFACE_H
+#define WORLD_BUILDER_COORDINATE_SYSTEMS_INTERFACE_H
 
-#include <world_builder/coordinate_system.h>
-#include <world_builder/parameters.h>
-#include <world_builder/utilities.h>
-#include <world_builder/world.h>
-#include <world_builder/types/string.h>
+#include "world_builder/coordinate_systems/interface.h"
+
+#include "world_builder/coordinate_system.h"
+#include "world_builder/parameters.h"
+#include "world_builder/types/string.h"
 
 
 namespace WorldBuilder
 {
+  class World;
+
   namespace CoordinateSystems
   {
 
@@ -105,11 +107,18 @@ namespace WorldBuilder
         double distance_between_points_at_same_depth(const Point<3> &point_1, const Point<3> &point_2) const = 0;
 
         /**
+         * Returns the max model depth. This should be the infinity for Cartesian
+         * models and the radius in spherical models.
+         */
+        virtual
+        double max_model_depth() const = 0;
+
+        /**
          * A function to register a new type. This is part of the automatic
          * registration of the object factory.
          */
         static void registerType(const std::string &name,
-                                 void ( *)(Parameters &, const std::string &),
+                                 void ( * /*declare_entries*/)(Parameters &, const std::string &),
                                  ObjectFactory *factory);
 
         /**
@@ -163,13 +172,13 @@ namespace WorldBuilder
       { \
         Interface::registerType(#name, klass::declare_entries, this); \
       } \
-      virtual std::unique_ptr<Interface> create(World *world) { \
+      std::unique_ptr<Interface> create(World *world) override final { \
         return std::unique_ptr<Interface>(new klass(world)); \
       } \
   }; \
   static klass##Factory global_##klass##Factory;
 
-  }
-}
+  } // namespace CoordinateSystems
+} // namespace WorldBuilder
 
 #endif

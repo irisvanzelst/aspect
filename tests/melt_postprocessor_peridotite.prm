@@ -1,9 +1,9 @@
-# This test checks if the postprocessor 'melt fraction' works as 
-# intended. The visulaization output is then a p-T-diagramme of
-# the melt fraction of peridotite using the melting model of 
+# This test checks if the postprocessor 'melt fraction' works as
+# intended. The visualization output is then a p-T-diagram of
+# the melt fraction of peridotite using the melting model of
 # Katz et. al, 2003 (Geochem., Geophys., Geosyst. )
-# with the temperature ranging from 1000°C to 1900°C on the x axis 
-# and the pressure ranging from 0 GPa to 8 GPa on the y axis. 
+# with the temperature ranging from 1000°C to 1900°C on the x axis
+# and the pressure ranging from 0 GPa to 8 GPa on the y axis.
 
 # MPI: 2
 
@@ -14,10 +14,8 @@ set Dimension                              = 2
 # also designate an output directory.
 set Use years in output instead of seconds = false
 set End time                               = 0.0
-
 set Pressure normalization                 = surface
 set Surface pressure                       = 0
-
 
 # Then come a number of sections that deal with the setup
 # of the problem to solve. The first one deals with the
@@ -35,7 +33,6 @@ subsection Geometry model
     set Y extent = 8
   end
 end
-
 
 # The next section deals with the initial conditions for the
 # temperature (there are no initial conditions for the
@@ -56,18 +53,9 @@ subsection Initial temperature model
   end
 end
 
-subsection Boundary temperature model
-  set List of model names = box
-end
-
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = 0,1,2,3
 end
-
 
 # The following two sections describe first the
 # direction (vertical) and magnitude of gravity and the
@@ -82,9 +70,8 @@ subsection Gravity model
   end
 end
 
-
 subsection Material model
-  set Model name = simple # default:
+  set Model name = simple
 
   subsection Simple model
     set Reference density             = 1
@@ -95,7 +82,6 @@ subsection Material model
     set Viscosity                     = 1
   end
 end
-
 
 # The settings above all pertain to the description of the
 # continuous partial differential equations we want to solve.
@@ -108,7 +94,6 @@ subsection Mesh refinement
   set Initial adaptive refinement              = 0
   set Time steps between mesh refinement       = 0
 end
-
 
 # The final part is to specify what ASPECT should do with the
 # solution once computed at the end of every time step. The
@@ -134,4 +119,3 @@ subsection Postprocess
     end
   end
 end
-

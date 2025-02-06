@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -19,6 +19,7 @@
  */
 
 #include <aspect/particle/integrator/euler.h>
+#include <aspect/geometry_model/interface.h>
 
 namespace aspect
 {
@@ -26,16 +27,12 @@ namespace aspect
   {
     namespace Integrator
     {
-      /**
-       * Euler scheme integrator, where $y_{n+1} = y_n + \\Delta t\\, v(y_n)$.
-       * This requires only one step per integration, and doesn't involve any extra data.
-       */
       template <int dim>
       void
       Euler<dim>::local_integrate_step(const typename ParticleHandler<dim>::particle_iterator &begin_particle,
                                        const typename ParticleHandler<dim>::particle_iterator &end_particle,
-                                       const std::vector<Tensor<1,dim> > &old_velocities,
-                                       const std::vector<Tensor<1,dim> > &,
+                                       const std::vector<Tensor<1,dim>> &old_velocities,
+                                       const std::vector<Tensor<1,dim>> &,
                                        const double dt)
       {
         Assert(static_cast<unsigned int> (std::distance(begin_particle, end_particle)) == old_velocities.size(),
@@ -43,14 +40,46 @@ namespace aspect
                           "to the number of particles to advect. For some unknown reason they are different, "
                           "most likely something went wrong in the calling function."));
 
-        typename std::vector<Tensor<1,dim> >::const_iterator old_velocity = old_velocities.begin();
+        const auto cell = begin_particle->get_surrounding_cell();
+        bool at_periodic_boundary = false;
+        if (this->get_triangulation().get_periodic_face_map().empty() == false)
+          for (const auto face_index: cell->face_indices())
+            if (cell->at_boundary(face_index))
+              if (cell->has_periodic_neighbor(face_index))
+                {
+                  at_periodic_boundary = true;
+                  break;
+                }
+
+        typename std::vector<Tensor<1,dim>>::const_iterator old_velocity = old_velocities.begin();
 
         for (typename ParticleHandler<dim>::particle_iterator it = begin_particle;
              it != end_particle; ++it, ++old_velocity)
           {
-            const Point<dim> loc = it->get_location();
-            it->set_location(loc + dt * (*old_velocity));
+#if DEAL_II_VERSION_GTE(9, 6, 0)
+            // Get a reference to the particle location, so that we can update it in-place
+            Point<dim> &location = it->get_location();
+#else
+            Point<dim> location = it->get_location();
+#endif
+            location += dt * (*old_velocity);
+
+            if (at_periodic_boundary)
+              this->get_geometry_model().adjust_positions_for_periodicity(location);
+
+#if !DEAL_II_VERSION_GTE(9, 6, 0)
+            it->set_location(location);
+#endif
           }
+      }
+
+
+
+      template <int dim>
+      std::array<bool, 3>
+      Euler<dim>::required_solution_vectors() const
+      {
+        return {{false, true, false}};
       }
     }
   }

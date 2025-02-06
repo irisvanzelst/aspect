@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -52,11 +52,19 @@ namespace aspect
           Geoid();
 
           /**
-           * @copydoc DataPostprocessorScalar<dim>::evaluate_vector_field()
+           * Initialization function. This function is called once at the
+           * beginning of the program after parse_parameters is run and after
+           * the SimulatorAccess (if applicable) is initialized.
+           */
+          void
+          initialize () override;
+
+          /**
+           * @copydoc dealii::DataPostprocessor<dim>::evaluate_vector_field()
            */
           void
           evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                                std::vector<Vector<double> > &computed_quantities) const override;
+                                std::vector<Vector<double>> &computed_quantities) const override;
 
 
           /**

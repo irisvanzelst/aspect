@@ -1,13 +1,12 @@
 
-Loading shared library <./libprescribed_field_temperature.so>
+Loading shared library <./libprescribed_field_temperature.debug.so>
 
 Number of active cells: 256 (on 5 levels)
 Number of degrees of freedom: 3,556 (2,178+289+1,089)
 
-*** Timestep 0:  t=0 seconds
-   Copying properties into prescribed temperature field.
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 33+0 iterations.
+*** Timestep 0:  t=0 seconds, dt=0 seconds
+   Copying properties into prescribed temperature field... done.
+   Solving Stokes system (GMG)... 8+0 iterations.
 
    Postprocessing:
      Writing graphical output: output-prescribed_field_temperature/solution/solution-00000
@@ -16,7 +15,4 @@ Number of degrees of freedom: 3,556 (2,178+289+1,089)
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 

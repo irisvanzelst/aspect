@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -18,17 +18,13 @@
   <http://www.gnu.org/licenses/>.
 */
 #include <aspect/global.h>
-
+#include <aspect/utilities.h>
 #include <aspect/postprocess/interface.h>
 #include <aspect/simulator_access.h>
 
-#include <deal.II/base/data_out_base.h>
-
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/fe/fe_values.h>
-#include <deal.II/numerics/vector_tools.h>
 
-#include <math.h>
 #include <algorithm>
 
 
@@ -45,9 +41,8 @@ namespace aspect
     class TemperatureAsciiOut : public Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
-        virtual
         std::pair<std::string,std::string>
-        execute (TableHandler &statistics);
+        execute (TableHandler &statistics) override;
     };
 
     template <int dim>
@@ -63,7 +58,6 @@ namespace aspect
       };
       std::vector<entry> entries;
 
-      //      const QTrapez<dim> quadrature_formula;
       const QMidpoint<dim> quadrature_formula;
 
       const unsigned int n_q_points =  quadrature_formula.size();
@@ -72,22 +66,20 @@ namespace aspect
 
       std::vector<double> temperature_values(n_q_points);
 
-      typename DoFHandler<dim>::active_cell_iterator
-      cell = this->get_dof_handler().begin_active(),
-      endc = this->get_dof_handler().end();
-      for (; cell != endc; ++cell)
-        {
-          fe_values.reinit (cell);
-          fe_values[this->introspection().extractors.temperature].get_function_values (this->get_solution(), temperature_values);
+      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
+        if (cell->is_locally_owned())
+          {
+            fe_values.reinit (cell);
+            fe_values[this->introspection().extractors.temperature].get_function_values (this->get_solution(), temperature_values);
 
-          for (unsigned int q=0; q<fe_values.n_quadrature_points; ++q)
-            {
-              entry e;
-              e.p = fe_values.quadrature_point(q);
-              e.t = temperature_values[q];
-              entries.push_back(e);
-            }
-        }
+            for (unsigned int q=0; q<fe_values.n_quadrature_points; ++q)
+              {
+                entry e;
+                e.p = fe_values.quadrature_point(q);
+                e.t = temperature_values[q];
+                entries.push_back(e);
+              }
+          }
 
       struct sorter
       {
@@ -135,18 +127,23 @@ namespace aspect
       }
 
 
-      std::ofstream f(filename.c_str());
+      std::stringstream f;
 
       f << std::scientific << std::setprecision(15);
 
-      // Note: POINTS is only useful if our mesh is a structured grid
-      f << "# POINTS: " << n_x << " " << n_y << "\n";
-      f << "# x y T\n";
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
+        {
+          // Note: POINTS is only useful if our mesh is a structured grid
+          f << "# POINTS: " << n_x << ' ' << n_y << "\n";
+          f << "# x y T\n";
+        }
 
       for (unsigned int idx = 0; idx< entries.size(); ++idx)
         f << entries[idx].p << ' ' << entries[idx].t << '\n';
 
-      f.close();
+      aspect::Utilities::collect_and_write_file_content(filename,
+                                                        f.str(),
+                                                        this->get_mpi_communicator());
 
       return std::make_pair (std::string ("Writing TemperatureAsciiOut:"),
                              filename);

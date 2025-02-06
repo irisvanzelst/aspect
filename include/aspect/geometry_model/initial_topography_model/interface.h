@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,7 +33,7 @@ namespace aspect
 {
   /**
    * A namespace for the definition of properties of the initial topography.
-   * This includes mainly the storage and retrival of the initial topography.
+   * This includes mainly the storage and retrieval of the initial topography.
    * The retrieval is done through the value function, which requires a point
    * of size dim-1, and it returns a double which represents the elevation.
    *
@@ -41,8 +41,6 @@ namespace aspect
    */
   namespace InitialTopographyModel
   {
-    using namespace dealii;
-
     /**
      * Base class for classes that describe particular initial topographies
      * for the domain.
@@ -50,54 +48,27 @@ namespace aspect
      * @ingroup InitialTopographyModels
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
         /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         */
-        virtual void initialize ();
-
-        /**
-         * Return the value of the elevation at the given point.
+         * Return the value of the elevation at the given surface point.
+         *
+         * Note that different geometry models use different conventions for
+         * how they describe surface points. In general, the models use
+         * their own "natural" coordinate system. For example, box-type
+         * geometry models will generally provide points as x-y coordinates
+         * on the surface, whereas spherical-type geometry models will generally
+         * provide surface points in spherical coordinates.
          */
         virtual
-        double value (const Point<dim-1> &p) const = 0;
+        double value (const Point<dim-1> &surface_point) const = 0;
 
         /**
          * Return the maximum value of the elevation.
          */
         virtual
         double max_topography () const = 0;
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
-
     };
 
 
@@ -122,20 +93,20 @@ namespace aspect
     register_initial_topography_model (const std::string &name,
                                        const std::string &description,
                                        void (*declare_parameters_function) (ParameterHandler &),
-                                       Interface<dim> *(*factory_function) ());
+                                       std::unique_ptr<Interface<dim>> (*factory_function) ());
 
     /**
      * A function that given the name of a model returns a pointer to an
      * object that describes it. Ownership of the pointer is transferred to
      * the caller.
      *
-     * The intial topography model will also be asked to read its runtime
+     * The initial topography model will also be asked to read its runtime
      * parameters already.
      *
      * @ingroup InitialTopographyModels
      */
     template <int dim>
-    Interface<dim> *
+    std::unique_ptr<Interface<dim>>
     create_initial_topography_model (ParameterHandler &prm);
 
 
@@ -176,10 +147,10 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_INITIAL_TOPOGRAPHY_MODEL_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::InitialTopographyModel::Interface<2>,classname<2> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::InitialTopographyModel::Interface<2>,classname<2>> \
     dummy_ ## classname ## _2d (&aspect::InitialTopographyModel::register_initial_topography_model<2>, \
                                 name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::InitialTopographyModel::Interface<3>,classname<3> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::InitialTopographyModel::Interface<3>,classname<3>> \
     dummy_ ## classname ## _3d (&aspect::InitialTopographyModel::register_initial_topography_model<3>, \
                                 name, description); \
   }

@@ -1,5 +1,26 @@
-#include <aspect/material_model/simple.h>
+/*
+  Copyright (C) 2022 - 2024 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
 #include <aspect/global.h>
+#include <aspect/material_model/simple.h>
+#include <aspect/simulator_signals.h>
 
 #include <deal.II/base/point.h>
 #include <deal.II/base/exceptions.h>
@@ -8,16 +29,16 @@
 namespace aspect
 {
   /**
-   * This is the "NSinker" benchmark defined in \cite May2015496 in the implementation
-   * of \cite rudi2017weighted. It creates a number of spherical high-viscosity, high-density
-   * sinking spheres in a box geometry that provide a challenge for the Stokes preconditioner.
-   * The difficulty of the problem is determined by the number of sinkers and the viscosity
-   * contrast between sinkers and background.
+   * This is the "NSinker" benchmark as defined in Rudi et al. (2017),
+   * which is based on May et al. (2014). It creates a number of
+   * spherical high-viscosity, high-density sinking spheres in a box
+   * geometry that provide a challenge for the Stokes preconditioner.
+   * The difficulty of the problem is determined by the number of
+   * sinkers and the viscosity contrast between sinkers and
+   * background.
    */
   namespace NSinkerBenchmark
   {
-    using namespace dealii;
-
     /**
      * @note This benchmark only talks about the flow field, not about a
      * temperature field. All quantities related to the temperature are
@@ -34,21 +55,19 @@ namespace aspect
          */
         NSinkerMaterial ();
 
-        double value (const Point<dim> &/*p*/) const;
-
         /**
          * @name Physical parameters used in the basic equations
          * @{
          */
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override
         {
           const double sqrt_dynamic_viscosity_ratio = std::sqrt(dynamic_viscosity_ratio);
 
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
-              const double chi = value(in.position[i]);
-              out.viscosities[i] = (sqrt_dynamic_viscosity_ratio - 1/sqrt_dynamic_viscosity_ratio)*(1-chi) + 1/sqrt_dynamic_viscosity_ratio;
+              const double chi = inside_outside_factor(in.position[i]);
+              out.viscosities[i] = (sqrt_dynamic_viscosity_ratio - 1./sqrt_dynamic_viscosity_ratio)*(1-chi) + 1./sqrt_dynamic_viscosity_ratio;
               out.densities[i] = sinker_density * (1.0 - chi);
               out.compressibilities[i] = 0;
               out.specific_heat[i] = 0;
@@ -75,7 +94,7 @@ namespace aspect
          * (compressible Stokes) or as $\nabla \cdot \mathbf{u}=0$
          * (incompressible Stokes).
          */
-        virtual bool is_compressible () const
+        bool is_compressible () const override
         {
           return false;
         }
@@ -111,9 +130,8 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm)
+        parse_parameters (ParameterHandler &prm) override
         {
           prm.enter_subsection("Material model");
           {
@@ -137,16 +155,6 @@ namespace aspect
 
 
 
-        /**
-         * The reference viscosity was chosen to coincide with the reference length scale of
-         * a box of size 1 (0.01) so that the resulting pressure scaling is equal to one, and
-         * therefore does not influence the scaling of the equations.
-         */
-        virtual double reference_viscosity () const
-        {
-          return 0.01;
-        }
-
       private:
         /**
          * Ratio of viscosities between sinkers and background material.
@@ -167,17 +175,26 @@ namespace aspect
         /**
          * Centers for the sinkers provided by Cedric Thielot (pers. comm. from Dave May)
          */
-        std::vector<Point<3> > centers;
+        std::vector<Point<3>> centers;
 
         /**
          * Parameters for evaluating viscosity
          */
         double delta;
         double omega;
+
+        /**
+         * Return a factor that indicates whether a point is inside or
+         * outside the sinker spheres. The function can be thought of
+         * as a 1 (outside) vs 0 (inside) factor, but is in reality a
+         * smoothed version of this that takes into account the
+         * distance from the centers of the sinkers.
+         */
+        double inside_outside_factor (const Point<dim> &p) const;
     };
 
 
-    template<int dim>
+    template <int dim>
     NSinkerMaterial<dim>::NSinkerMaterial ()
     {
       delta = 200.0;
@@ -261,9 +278,11 @@ namespace aspect
       centers[74] = Point<3>(8.2308128282e-01, 5.2712029523e-01, 3.1080186614e-01);
     }
 
+
+
     template <>
     double
-    NSinkerMaterial<2>::value (const Point<2> &p) const
+    NSinkerMaterial<2>::inside_outside_factor (const Point<2> &p) const
     {
       double chi = 1.0;
 
@@ -271,7 +290,7 @@ namespace aspect
         {
           double dist = p.distance(Point<2>(centers[s](0), centers[s](1)));
           double temp = 1-std::exp(-delta*
-                                   std::pow(std::max(0.0,dist-omega/2.0),2));
+                                   Utilities::fixed_power<2>(std::max(0.0,dist-omega/2.0)));
           chi *= temp;
         }
       return chi;
@@ -281,7 +300,7 @@ namespace aspect
 
     template <>
     double
-    NSinkerMaterial<3>::value (const Point<3> &p) const
+    NSinkerMaterial<3>::inside_outside_factor (const Point<3> &p) const
     {
       double chi = 1.0;
 
@@ -289,7 +308,7 @@ namespace aspect
         {
           double dist = p.distance(centers[s]);
           double temp = 1-std::exp(-delta*
-                                   std::pow(std::max(0.0,dist-omega/2.0),2));
+                                   Utilities::fixed_power<2>(std::max(0.0,dist-omega/2.0)));
           chi *= temp;
         }
       return chi;
@@ -297,7 +316,25 @@ namespace aspect
   }
 }
 
-// explicit instantiations
+
+// Change pressure scaling to 1.0:
+double pressure_scaling_signal(const double /*pressure_scaling*/,
+                               const double /*reference_viscosity*/,
+                               const double /*length_scale*/)
+{
+  return 1.0;
+}
+
+template <int dim>
+void signal_connector (aspect::SimulatorSignals<dim> &signals)
+{
+  signals.modify_pressure_scaling.connect(&pressure_scaling_signal);
+}
+
+ASPECT_REGISTER_SIGNALS_CONNECTOR(signal_connector<2>,
+                                  signal_connector<3>)
+
+
 namespace aspect
 {
   namespace NSinkerBenchmark

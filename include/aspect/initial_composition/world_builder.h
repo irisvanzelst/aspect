@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -18,19 +18,26 @@
   <http://www.gnu.org/licenses/>.
 */
 
-#ifdef ASPECT_WITH_WORLD_BUILDER
 #ifndef _aspect_initial_composition_world_builder_h
 #define _aspect_initial_composition_world_builder_h
 
+#include <aspect/global.h>
+
+#ifdef ASPECT_WITH_WORLD_BUILDER
+
 #include <aspect/initial_composition/interface.h>
 #include <aspect/simulator_access.h>
+
+namespace WorldBuilder
+{
+  class World;
+}
+
 
 namespace aspect
 {
   namespace InitialComposition
   {
-    using namespace dealii;
-
     /**
      * A class that implements initial conditions for the compositional fields
      * based on a functional description provided in the input file through the
@@ -48,7 +55,6 @@ namespace aspect
          * beginning of the program after parse_parameters is run and after
          * the SimulatorAccess (if applicable) is initialized.
          */
-        virtual
         void
         initialize () override;
 
@@ -58,6 +64,37 @@ namespace aspect
          */
         double initial_composition (const Point<dim> &position, const unsigned int n_comp) const override;
 
+        /**
+         * Declare the parameters this class takes through input files. The
+         * default implementation of this function does not describe any
+         * parameters. Consequently, derived classes do not have to overload
+         * this function if they do not take any runtime parameters.
+         */
+        static
+        void
+        declare_parameters (ParameterHandler &prm);
+
+        /**
+         * Read the parameters this class declares from the parameter file.
+         * The default implementation of this function does not read any
+         * parameters. Consequently, derived classes do not have to overload
+         * this function if they do not take any runtime parameters.
+         */
+        void
+        parse_parameters (ParameterHandler &prm) override;
+
+      private:
+        /**
+         * A vector that specifies for each compositional field index if the world builder
+         * should be evaluated for this compositional field.
+         */
+        std::vector<bool> relevant_compositions;
+
+        /**
+         * A pointer to the WorldBuilder object. Keeping this pointer ensures
+         * that the object doesn't go away while we still need it.
+         */
+        std::shared_ptr<const ::WorldBuilder::World> world_builder;
     };
   }
 }

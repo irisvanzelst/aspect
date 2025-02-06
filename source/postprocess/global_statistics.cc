@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2017 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2017 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -112,7 +112,7 @@ namespace aspect
           column_position = i;
 
       if (column_position == numbers::invalid_unsigned_int)
-        advection_iterations.push_back(std::make_pair(column_name,std::vector<unsigned int>(1,solver_control.last_step())));
+        advection_iterations.emplace_back(column_name,std::vector<unsigned int>(1,solver_control.last_step()));
       else
         advection_iterations[column_position].second.push_back(solver_control.last_step());
     }
@@ -131,8 +131,8 @@ namespace aspect
       // vectors in which we store our data.
       unsigned int nonlinear_iterations = stokes_iterations_cheap.size();
 
-      for (unsigned int column=0; column<advection_iterations.size(); ++column)
-        nonlinear_iterations = std::max(nonlinear_iterations, static_cast<unsigned int> (advection_iterations[column].second.size()));
+      for (const auto &advection_iteration : advection_iterations)
+        nonlinear_iterations = std::max(nonlinear_iterations, static_cast<unsigned int> (advection_iteration.second.size()));
 
       if (one_line_per_iteration)
         for (unsigned int iteration = 0; iteration < nonlinear_iterations; ++iteration)
@@ -142,10 +142,10 @@ namespace aspect
             statistics.add_value("Nonlinear iteration number",
                                  iteration);
 
-            for (unsigned int column=0; column<advection_iterations.size(); ++column)
-              if (iteration < advection_iterations[column].second.size())
-                statistics.add_value(advection_iterations[column].first,
-                                     advection_iterations[column].second[iteration]);
+            for (const auto &advection_iteration : advection_iterations)
+              if (iteration < advection_iteration.second.size())
+                statistics.add_value(advection_iteration.first,
+                                     advection_iteration.second[iteration]);
 
             if (iteration < stokes_iterations_cheap.size())
               {

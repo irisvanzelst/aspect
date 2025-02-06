@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -21,7 +21,7 @@
 #ifndef _aspect_particle_integrator_interface_h
 #define _aspect_particle_integrator_interface_h
 
-#include <aspect/plugins.h>
+#include <aspect/particle/interface.h>
 #include <aspect/global.h>
 
 #include <deal.II/particles/particle.h>
@@ -34,7 +34,6 @@ namespace aspect
   {
     namespace Integrator
     {
-      using namespace dealii;
       using namespace dealii::Particles;
 
       /**
@@ -44,15 +43,9 @@ namespace aspect
        * @ingroup ParticleIntegrators
        */
       template <int dim>
-      class Interface
+      class Interface : public ParticleInterfaceBase
       {
         public:
-          /**
-           * Destructor. Made virtual so that derived classes can be created
-           * and destroyed through pointers to the base class.
-           */
-          virtual ~Interface ();
-
           /**
            * Perform an integration step of moving the particles of one cell
            * by the specified timestep dt. Implementations of this function
@@ -76,8 +69,8 @@ namespace aspect
           void
           local_integrate_step(const typename ParticleHandler<dim>::particle_iterator &begin_particle,
                                const typename ParticleHandler<dim>::particle_iterator &end_particle,
-                               const std::vector<Tensor<1,dim> > &old_velocities,
-                               const std::vector<Tensor<1,dim> > &velocities,
+                               const std::vector<Tensor<1,dim>> &old_velocities,
+                               const std::vector<Tensor<1,dim>> &velocities,
                                const double dt) = 0;
 
           /**
@@ -87,7 +80,7 @@ namespace aspect
            * false, which is ok for single-step integration methods.
            *
            * @return This function returns true if the integrator requires
-           * another integration step. The particle world will continue
+           * another integration step. The particle manager will continue
            * to start new integration steps until this function returns false.
            */
           virtual bool new_integration_step();
@@ -105,6 +98,17 @@ namespace aspect
            * integrator data for one particle.
            */
           virtual std::size_t get_data_size() const;
+
+          /**
+           * Return a list of boolean values indicating which solution vectors
+           * are required for the integration. The first entry indicates if
+           * the particle integrator requires the solution vector at the old
+           * old time (k-1), the second entry indicates if the particle integrator
+           * requires the solution vector at the old time (k), and the third entry
+           * indicates if the particle integrator requires the solution vector
+           * at the new time (k+1).
+           */
+          virtual std::array<bool, 3> required_solution_vectors() const = 0;
 
           /**
            * Read integration related data for a particle specified by particle_id
@@ -139,27 +143,6 @@ namespace aspect
           void *
           write_data(const typename ParticleHandler<dim>::particle_iterator &particle,
                      void *data) const;
-
-
-          /**
-           * Declare the parameters this class takes through input files. The
-           * default implementation of this function does not describe any
-           * parameters. Consequently, derived classes do not have to overload
-           * this function if they do not take any runtime parameters.
-           */
-          static
-          void
-          declare_parameters (ParameterHandler &prm);
-
-          /**
-           * Read the parameters this class declares from the parameter file.
-           * The default implementation of this function does not read any
-           * parameters. Consequently, derived classes do not have to overload
-           * this function if they do not take any runtime parameters.
-           */
-          virtual
-          void
-          parse_parameters (ParameterHandler &prm);
       };
 
 
@@ -191,7 +174,7 @@ namespace aspect
       register_particle_integrator (const std::string &name,
                                     const std::string &description,
                                     void (*declare_parameters_function) (ParameterHandler &),
-                                    Interface<dim> *(*factory_function) ());
+                                    std::unique_ptr<Interface<dim>> (*factory_function) ());
 
       /**
        * A function that given the name of a model returns a pointer to an
@@ -204,7 +187,7 @@ namespace aspect
        * @ingroup ParticleIntegrators
        */
       template <int dim>
-      Interface<dim> *
+      std::unique_ptr<Interface<dim>>
       create_particle_integrator (ParameterHandler &prm);
 
 
@@ -243,10 +226,10 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_PARTICLE_INTEGRATOR_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::Particle::Integrator::Interface<2>,classname<2> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::Particle::Integrator::Interface<2>,classname<2>> \
     dummy_ ## classname ## _2d (&aspect::Particle::Integrator::register_particle_integrator<2>, \
                                 name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::Particle::Integrator::Interface<3>,classname<3> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::Particle::Integrator::Interface<3>,classname<3>> \
     dummy_ ## classname ## _3d (&aspect::Particle::Integrator::register_particle_integrator<3>, \
                                 name, description); \
   }

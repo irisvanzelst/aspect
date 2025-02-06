@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -42,7 +42,7 @@ namespace aspect
          * Read the data file into the class.
          */
         void read(const std::string &filename,
-                  const MPI_Comm &comm);
+                  const MPI_Comm comm);
 
         /**
          * Get the melting temperature.
@@ -95,8 +95,7 @@ namespace aspect
         /**
          * Return the initial temperature as a function of position.
          */
-        virtual
-        double initial_temperature (const Point<dim> &position) const;
+        double initial_temperature (const Point<dim> &position) const override;
 
         /**
          * Declare the parameters this class takes through input files.
@@ -108,9 +107,8 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
       private:
         /**
@@ -166,7 +164,7 @@ namespace aspect
     };
 
     void MeltingCurve::read(const std::string &filename,
-                            const MPI_Comm &comm)
+                            const MPI_Comm comm)
     {
       data_filename=filename;
       // Read data from disk and distribute among processes
@@ -193,7 +191,7 @@ namespace aspect
               else if (T_Unit!="K")
                 {
                   AssertThrow(false,ExcMessage ("Unit of the first column of melting curve data "
-                                                "has to be one of the following: C/K."))
+                                                "has to be one of the following: C/K."));
                 }
 
               is_radius=false;                    // Second column is pressure
@@ -208,8 +206,8 @@ namespace aspect
                     p*=1.e3;                    // km to meters
                   else if (P_Unit!="m")
                     AssertThrow(false,ExcMessage ("Unit of the second column of melting curve data "
-                                                  "has to be one of the following: Pa/GPa/km/m."))
-                  }
+                                                  "has to be one of the following: Pa/GPa/km/m."));
+                }
               T_array.push_back(T);
               P_or_R_array.push_back(p);
               n_points++;
@@ -259,7 +257,7 @@ namespace aspect
       AssertThrow(solidus_curve.n_points!=0,ExcMessage("Error reading solidus file."));
       AssertThrow(solidus_curve.is_radius==true,ExcMessage("The solidus curve has to be radius dependent."));
       const GeometryModel::SphericalShell<dim> *spherical_geometry_model=
-        dynamic_cast< const GeometryModel::SphericalShell<dim> *>(&this->get_geometry_model());
+        dynamic_cast<const GeometryModel::SphericalShell<dim> *>(&this->get_geometry_model());
 
       AssertThrow(spherical_geometry_model!=0,
                   ExcMessage("This initial condition can only be used with spherical shell geometry model."));
@@ -275,7 +273,7 @@ namespace aspect
         {
           // Use a sine as lateral perturbation that is scaled to the opening angle of the geometry.
           // This way the perturbation is always 0 at the model boundaries.
-          const double opening_angle = spherical_geometry_model->opening_angle()*numbers::PI/180.0;
+          const double opening_angle = spherical_geometry_model->opening_angle() * constants::degree_to_radians;
           lateral_perturbation = std::sin(lateral_wave_number_1*scoord[1]*numbers::PI/opening_angle);
         }
       else if (dim==3)
@@ -337,10 +335,10 @@ namespace aspect
                              "The difference from solidus, use this number to generate initial conditions "
                              "that close to solidus instead of exactly at solidus. Use small negative number"
                              " in this parameter to prevent large melting generation at the beginning. "
-                             "  Units: K ");
+                             "  Units: \\si{\\kelvin} ");
           prm.declare_entry ("Lithosphere thickness","0",
                              Patterns::Double (0),
-                             "The thickness of lithosphere thickness. Units: m");
+                             "The thickness of lithosphere thickness. Units: \\si{\\meter}");
           prm.enter_subsection("Perturbation");
           {
             prm.declare_entry ("Temperature amplitude", "0e0",

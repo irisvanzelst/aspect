@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,380 +22,195 @@
 #define _aspect_compat_h
 
 #include <aspect/global.h>
-
 // C++11 related includes.
 #include <array>
 #include <functional>
 #include <memory>
 
-// for std_cxx14::make_unique:
-#include <deal.II/base/std_cxx14/memory.h>
-
-#if DEAL_II_VERSION_GTE(9,1,0)
-#include <deal.II/lac/affine_constraints.h>
-namespace aspect
+namespace big_mpi
 {
-  /**
-   * The ConstraintMatrix class was deprecated in deal.II 9.1 in favor
-   * of AffineConstraints. To make the name available for ASPECT
-   * nonetheless, use a `using` declaration. This injects the name
-   * into the `aspect` namespace, where it is visible before the
-   * deprecated name in the `dealii` namespace, thereby suppressing
-   * the deprecation message.
-   */
-  using ConstraintMatrix = class dealii::AffineConstraints<double>;
+
+  using dealii::Utilities::MPI::broadcast;
+
+}
+
+// deal.II 9.6 introduces the new MGTransferMF class as a replacement
+// for MGTransferMatrixFree. Instead of putting an ifdef in every place,
+// do this in one central location:
+#if !DEAL_II_VERSION_GTE(9,6,0)
+#include <deal.II/multigrid/mg_transfer_matrix_free.h>
+namespace dealii
+{
+  template <int dim, class NumberType>
+  using MGTransferMF = MGTransferMatrixFree<dim,NumberType>;
 }
 #endif
 
-#if !DEAL_II_VERSION_GTE(9,2,0)
-#include <deal.II/base/table.h>
-#include <deal.II/base/function_lib.h>
-namespace aspect
-{
-  namespace Functions
-  {
-    using namespace dealii;
-    using namespace dealii::Functions;
-    /**
-     * A scalar function that computes its values by (bi-, tri-)linear
-     * interpolation from a set of point data that are arranged on a uniformly
-     * spaced tensor product mesh. This function is derived from
-     * deal.II (dealii/include/deal.II/base/function_lib.h)
-     */
-    template <int dim>
-    class InterpolatedUniformGridData : public dealii::Function<dim>
-    {
-      public:
-        /**
-         * Constructor
-         * @param interval_endpoints The left and right end points of the
-         * (uniformly subdivided) intervals in each of the coordinate directions.
-         * @param n_subintervals The number of subintervals in each coordinate
-         * direction. A value of one for a coordinate means that the interval is
-         * considered as one subinterval consisting of the entire range. A value
-         * of two means that there are two subintervals each with one half of the
-         * range, etc.
-         * @param data_values A dim-dimensional table of data at each of the mesh
-         * points defined by the coordinate arrays above. Note that the Table
-         * class has a number of conversion constructors that allow converting
-         * other data types into a table where you specify this argument.
-         */
-        InterpolatedUniformGridData(
-          const std::array<std::pair<double, double>, dim> &interval_endpoints,
-          const std::array<unsigned int, dim>              &n_subintervals,
-          const Table<dim, double>                         &data_values);
-
-        /**
-         * Compute the value of the function set by bilinear interpolation of the
-         * given data set.
-         *
-         * @param p The point at which the function is to be evaluated.
-         * @param component The vector component. Since this function is scalar,
-         * only zero is a valid argument here.
-         * @return The interpolated value at this point. If the point lies outside
-         * the set of coordinates, the function is extended by a constant.
-         */
-        Tensor<1, dim>
-        gradient(const Point<dim> &p,
-                 const unsigned int component = 0) const override;
-
-        /**
-         * Compute the value of the function set by bilinear interpolation of the
-         * given data set.
-         *
-         * @param p The point at which the function is to be evaluated.
-         * @param component The vector component. Since this function is scalar,
-         * only zero is a valid argument here.
-         * @return The interpolated value at this point. If the point lies outside
-         * the set of coordinates, the function is extended by a constant.
-         */
-        double
-        value(const Point<dim> &p,
-              const unsigned int component = 0) const override;
 
 
-      private:
-        /**
-         * The set of interval endpoints in each of the coordinate directions.
-         */
-        const std::array<std::pair<double, double>, dim> interval_endpoints;
+// deal.II versions up to 9.5 had a poorly designed interface of the
+// SphericalManifold class that made it impossible for us to use.
+// This file thus contains a copy of it.
+#if !DEAL_II_VERSION_GTE(9,6,0)
 
-        /**
-         * The number of subintervals in each of the coordinate directions.
-         */
-        const std::array<unsigned int, dim> n_subintervals;
-
-        /**
-         * The data that is to be interpolated.
-         */
-        const Table<dim, double> data_values;
-    };
-  }
-}
+#include <deal.II/grid/manifold.h>
+#include <deal.II/grid/manifold_lib.h>
 
 namespace aspect
 {
-  namespace Functions
+  using namespace dealii;
+
+  /**
+   * The deal.II class SphericalManifold has a design flaw that made it
+   * impossible to derive from the class. This is fixed post-9.5,
+   * see https://github.com/dealii/dealii/pull/16242 and
+   * https://github.com/dealii/dealii/pull/16248, but we can't
+   * use deal.II 9.5 and earlier for this class. The current class
+   * here is therefore a copy of the fixed class.
+   */
+  template <int dim, int spacedim = dim>
+  class SphericalManifold : public Manifold<dim, spacedim>
   {
-    namespace
-    {
-      // interpolate a data value from a table where ix denotes
-      // the (lower) left endpoint of the interval to interpolate
-      // in, and p_unit denotes the point in unit coordinates to do so.
-      inline
-      double
-      interpolate(const Table<1, double> &data_values,
-                  const TableIndices<1> &ix,
-                  const Point<1>         &xi)
-      {
-        return ((1 - xi[0]) * data_values[ix[0]] +
-                xi[0] * data_values[ix[0] + 1]);
-      }
+    public:
+      /**
+       * Constructor.
+       *
+       * @param[in] center The center of the coordinate system. Defaults to the
+       * origin.
+       */
+      SphericalManifold(const Point<spacedim> center = Point<spacedim>());
 
-      inline
-      double
-      interpolate(const Table<2, double> &data_values,
-                  const TableIndices<2> &ix,
-                  const Point<2>         &p_unit)
-      {
-        return (((1 - p_unit[0]) * data_values[ix[0]][ix[1]] +
-                 p_unit[0] * data_values[ix[0] + 1][ix[1]]) *
-                (1 - p_unit[1]) +
-                ((1 - p_unit[0]) * data_values[ix[0]][ix[1] + 1] +
-                 p_unit[0] * data_values[ix[0] + 1][ix[1] + 1]) *
-                p_unit[1]);
-      }
+      /**
+       * Make a clone of this Manifold object.
+       */
+      virtual std::unique_ptr<Manifold<dim, spacedim>>
+      clone() const override;
 
-      inline
-      double
-      interpolate(const Table<3, double> &data_values,
-                  const TableIndices<3> &ix,
-                  const Point<3>         &p_unit)
-      {
-        return ((((1 - p_unit[0]) * data_values[ix[0]][ix[1]][ix[2]] +
-                  p_unit[0] * data_values[ix[0] + 1][ix[1]][ix[2]]) *
-                 (1 - p_unit[1]) +
-                 ((1 - p_unit[0]) * data_values[ix[0]][ix[1] + 1][ix[2]] +
-                  p_unit[0] * data_values[ix[0] + 1][ix[1] + 1][ix[2]]) *
-                 p_unit[1]) *
-                (1 - p_unit[2]) +
-                (((1 - p_unit[0]) * data_values[ix[0]][ix[1]][ix[2] + 1] +
-                  p_unit[0] * data_values[ix[0] + 1][ix[1]][ix[2] + 1]) *
-                 (1 - p_unit[1]) +
-                 ((1 - p_unit[0]) * data_values[ix[0]][ix[1] + 1][ix[2] + 1] +
-                  p_unit[0] * data_values[ix[0] + 1][ix[1] + 1][ix[2] + 1]) *
-                 p_unit[1]) *
-                p_unit[2]);
-      }
+      /**
+       * Given any two points in space, first project them on the surface
+       * of a sphere with unit radius, then connect them with a geodesic
+       * and find the intermediate point, and finally rescale the final
+       * radius so that the resulting one is the convex combination of the
+       * starting radii.
+       */
+      virtual Point<spacedim>
+      get_intermediate_point(const Point<spacedim> &p1,
+                             const Point<spacedim> &p2,
+                             const double           w) const override;
 
+      /**
+       * Compute the derivative of the get_intermediate_point() function
+       * with parameter w equal to zero.
+       */
+      virtual Tensor<1, spacedim>
+      get_tangent_vector(const Point<spacedim> &x1,
+                         const Point<spacedim> &x2) const override;
 
-      // Interpolate the gradient of a data value from a table where ix
-      // denotes the lower left endpoint of the interval to interpolate
-      // in, p_unit denotes the point in unit coordinates, and dx
-      // denotes the width of the interval in each dimension.
-      inline
-      Tensor<1, 1>
-      gradient_interpolate(const Table<1, double> &data_values,
-                           const TableIndices<1> &ix,
-                           const Point<1>         &p_unit,
-                           const Point<1>         &dx)
-      {
-        (void)p_unit;
-        Tensor<1, 1> grad;
-        grad[0] = (data_values[ix[0] + 1] - data_values[ix[0]]) / dx[0];
-        return grad;
-      }
+      /**
+       * @copydoc Manifold::normal_vector()
+       */
+      virtual Tensor<1, spacedim>
+      normal_vector(
+        const typename Triangulation<dim, spacedim>::face_iterator &face,
+        const Point<spacedim> &p) const override;
 
+      /**
+       * Compute the normal vectors to the boundary at each vertex.
+       */
+      virtual void
+      get_normals_at_vertices(
+        const typename Triangulation<dim, spacedim>::face_iterator &face,
+        typename Manifold<dim, spacedim>::FaceVertexNormals &face_vertex_normals)
+      const override;
 
-      inline
-      Tensor<1, 2>
-      gradient_interpolate(const Table<2, double> &data_values,
-                           const TableIndices<2> &ix,
-                           const Point<2>         &p_unit,
-                           const Point<2>         &dx)
-      {
-        Tensor<1, 2> grad;
-        double       u00 = data_values[ix[0]][ix[1]],
-                     u01       = data_values[ix[0] + 1][ix[1]],
-                     u10       = data_values[ix[0]][ix[1] + 1],
-                     u11       = data_values[ix[0] + 1][ix[1] + 1];
+      /**
+       * Compute a new set of points that interpolate between the given points @p
+       * surrounding_points. @p weights is a table with as many columns as @p
+       * surrounding_points.size(). The number of rows in @p weights must match
+       * the length of @p new_points.
+       *
+       * This function is optimized to perform on a collection
+       * of new points, by collecting operations that are not dependent on the
+       * weights outside of the loop over all new points.
+       *
+       * The implementation does not allow for @p surrounding_points and
+       * @p new_points to point to the same array, so make sure to pass different
+       * objects into the function.
+       */
+      virtual void
+      get_new_points(const ArrayView<const Point<spacedim>> &surrounding_points,
+                     const Table<2, double>                 &weights,
+                     ArrayView<Point<spacedim>> new_points) const override;
 
-        grad[0] =
-          ((1 - p_unit[1]) * (u01 - u00) + p_unit[1] * (u11 - u10)) / dx[0];
-        grad[1] =
-          ((1 - p_unit[0]) * (u10 - u00) + p_unit[0] * (u11 - u01)) / dx[1];
-        return grad;
-      }
+      /**
+       * Return a point on the spherical manifold which is intermediate
+       * with respect to the surrounding points.
+       */
+      virtual Point<spacedim>
+      get_new_point(const ArrayView<const Point<spacedim>> &vertices,
+                    const ArrayView<const double>          &weights) const override;
 
-      inline
-      Tensor<1, 3>
-      gradient_interpolate(const Table<3, double> &data_values,
-                           const TableIndices<3> &ix,
-                           const Point<3>         &p_unit,
-                           const Point<3>         &dx)
-      {
-        Tensor<1, 3> grad;
-        double       u000 = data_values[ix[0]][ix[1]][ix[2]],
-                     u001       = data_values[ix[0] + 1][ix[1]][ix[2]],
-                     u010       = data_values[ix[0]][ix[1] + 1][ix[2]],
-                     u100       = data_values[ix[0]][ix[1]][ix[2] + 1],
-                     u011       = data_values[ix[0] + 1][ix[1] + 1][ix[2]],
-                     u101       = data_values[ix[0] + 1][ix[1]][ix[2] + 1],
-                     u110       = data_values[ix[0]][ix[1] + 1][ix[2] + 1],
-                     u111       = data_values[ix[0] + 1][ix[1] + 1][ix[2] + 1];
+      /**
+       * The center of the spherical coordinate system.
+       */
+      const Point<spacedim> center;
 
-        grad[0] =
-          ((1 - p_unit[2]) *
-           ((1 - p_unit[1]) * (u001 - u000) + p_unit[1] * (u011 - u010)) +
-           p_unit[2] *
-           ((1 - p_unit[1]) * (u101 - u100) + p_unit[1] * (u111 - u110))) /
-          dx[0];
-        grad[1] =
-          ((1 - p_unit[2]) *
-           ((1 - p_unit[0]) * (u010 - u000) + p_unit[0] * (u011 - u001)) +
-           p_unit[2] *
-           ((1 - p_unit[0]) * (u110 - u100) + p_unit[0] * (u111 - u101))) /
-          dx[1];
-        grad[2] =
-          ((1 - p_unit[1]) *
-           ((1 - p_unit[0]) * (u100 - u000) + p_unit[0] * (u101 - u001)) +
-           p_unit[1] *
-           ((1 - p_unit[0]) * (u110 - u010) + p_unit[0] * (u111 - u011))) /
-          dx[2];
+    private:
+      /**
+       * Return a point on the spherical manifold which is intermediate
+       * with respect to the surrounding points. This function uses a linear
+       * average of the directions to find an estimated point. It returns a pair
+       * of radius and direction from the center point to the candidate point.
+       */
+      std::pair<double, Tensor<1, spacedim>>
+      guess_new_point(const ArrayView<const Tensor<1, spacedim>> &directions,
+                      const ArrayView<const double>              &distances,
+                      const ArrayView<const double>              &weights) const;
 
-        return grad;
-      }
-    } // namespace internal
+      /**
+       * This function provides an internal implementation of the get_new_points()
+       * interface.
+       *
+       * It computes a new set of points that interpolate between the given points
+       * @p
+       * surrounding_points. @p weights is an array view with as many entries as @p
+       * surrounding_points.size() times @p new_points.size().
+       *
+       * This function is optimized to perform on a collection
+       * of new points, by collecting operations that are not dependent on the
+       * weights outside of the loop over all new points.
+       *
+       * The implementation does not allow for @p surrounding_points and
+       * @p new_points to point to the same array, so make sure to pass different
+       * objects into the function.
+       */
+      void
+      do_get_new_points(const ArrayView<const Point<spacedim>> &surrounding_points,
+                        const ArrayView<const double>          &weights,
+                        ArrayView<Point<spacedim>>              new_points) const;
 
-    template <int dim>
-    inline
-    InterpolatedUniformGridData<dim>::InterpolatedUniformGridData(
-      const std::array<std::pair<double, double>, dim> &interval_endpoints,
-      const std::array<unsigned int, dim>              &n_subintervals,
-      const Table<dim, double>                         &data_values)
-      :
-      interval_endpoints(interval_endpoints),
-      n_subintervals(n_subintervals),
-      data_values(data_values)
-    {
-      for (unsigned int d = 0; d < dim; ++d)
-        {
-          Assert(n_subintervals[d] >= 1,
-                 ExcMessage("There needs to be at least one subinterval in each "
-                            "coordinate direction."));
-          Assert(interval_endpoints[d].first < interval_endpoints[d].second,
-                 ExcMessage("The interval in each coordinate direction needs "
-                            "to have positive size"));
-          Assert(data_values.size()[d] == n_subintervals[d] + 1,
-                 ExcMessage("The data table does not have the correct size."));
-        }
-    }
-
-
-    /**
-     * This function is derived from
-     * deal.II (dealii/source/base/function_lib.cc)
-    */
-    template <int dim>
-    inline
-    Tensor<1, dim>
-    InterpolatedUniformGridData<dim>::gradient(
-      const Point<dim> &p,
-      const unsigned int component) const
-    {
-      (void)component;
-      Assert(
-        component == 0,
-        ExcMessage(
-          "This is a scalar function object, the component can only be zero."));
-
-      // find out where this data point lies, relative to the given
-      // subdivision points
-      TableIndices<dim> ix;
-      for (unsigned int d = 0; d < dim; ++d)
-        {
-          const double delta_x =
-            ((this->interval_endpoints[d].second - this->interval_endpoints[d].first) /
-             this->n_subintervals[d]);
-          if (p[d] <= this->interval_endpoints[d].first)
-            ix[d] = 0;
-          else if (p[d] >= this->interval_endpoints[d].second - delta_x)
-            ix[d] = this->n_subintervals[d] - 1;
-          else
-            ix[d] = static_cast<unsigned int>(
-                      (p[d] - this->interval_endpoints[d].first) / delta_x);
-        }
-
-      // now compute the relative point within the interval/rectangle/box
-      // defined by the point coordinates found above. truncate below and
-      // above to accommodate points that may lie outside the range
-      Point<dim> p_unit;
-      Point<dim> delta_x;
-      for (unsigned int d = 0; d < dim; ++d)
-        {
-          delta_x[d] =
-            ((this->interval_endpoints[d].second - this->interval_endpoints[d].first) /
-             this->n_subintervals[d]);
-          p_unit[d] = std::max(std::min((p[d] - this->interval_endpoints[d].first -
-                                         ix[d] * delta_x[d]) /
-                                        delta_x[d],
-                                        1.),
-                               0.);
-        }
-
-      return gradient_interpolate(this->data_values, ix, p_unit, delta_x);
-    }
-
-    template <int dim>
-    inline
-    double
-    InterpolatedUniformGridData<dim>::value(const Point<dim> &p,
-                                            const unsigned int component) const
-    {
-      (void)component;
-      Assert(
-        component == 0,
-        ExcMessage(
-          "This is a scalar function object, the component can only be zero."));
-
-      // find out where this data point lies, relative to the given
-      // subdivision points
-      TableIndices<dim> ix;
-      for (unsigned int d = 0; d < dim; ++d)
-        {
-          const double delta_x =
-            ((interval_endpoints[d].second - interval_endpoints[d].first) /
-             n_subintervals[d]);
-          if (p[d] <= interval_endpoints[d].first)
-            ix[d] = 0;
-          else if (p[d] >= interval_endpoints[d].second - delta_x)
-            ix[d] = n_subintervals[d] - 1;
-          else
-            ix[d] = static_cast<unsigned int>(
-                      (p[d] - interval_endpoints[d].first) / delta_x);
-        }
-
-      // now compute the relative point within the interval/rectangle/box
-      // defined by the point coordinates found above. truncate below and
-      // above to accommodate points that may lie outside the range
-      Point<dim> p_unit;
-      for (unsigned int d = 0; d < dim; ++d)
-        {
-          const double delta_x =
-            ((interval_endpoints[d].second - interval_endpoints[d].first) /
-             n_subintervals[d]);
-          p_unit[d] = std::max(std::min((p[d] - interval_endpoints[d].first -
-                                         ix[d] * delta_x) /
-                                        delta_x,
-                                        1.),
-                               0.);
-        }
-
-      return interpolate(data_values, ix, p_unit);
-    }
-  }
-
+      /**
+       * A manifold description to be used for get_new_point in 2d.
+       */
+      const PolarManifold<spacedim> polar_manifold;
+  };
 }
+
+#else
+
+// For sufficiently new deal.II versions, we can use the deal.II class, but to
+// avoid name clashes, we have to import the class into namespace aspect. Once
+// we rely on these sufficiently new versions of deal.II, we can not only remove
+// the code above, but also the following lines, and in all places where we
+// reference 'aspect::SphericalManifold' simply use 'SphericalManifold' instead
+// (which then refers to the deal.II class).
+
+#include <deal.II/grid/manifold_lib.h>
+namespace aspect
+{
+  using dealii::SphericalManifold;
+}
+
 #endif
 
 #endif

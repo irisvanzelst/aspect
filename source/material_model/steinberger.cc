@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -20,6 +20,9 @@
 
 
 #include <aspect/material_model/steinberger.h>
+#include <aspect/material_model/equation_of_state/interface.h>
+#include <aspect/material_model/thermal_conductivity/constant.h>
+#include <aspect/material_model/thermal_conductivity/tosi_stackhouse.h>
 #include <aspect/adiabatic_conditions/interface.h>
 #include <aspect/utilities.h>
 #include <aspect/lateral_averaging.h>
@@ -27,8 +30,6 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/fe/fe_values.h>
 #include <deal.II/base/table.h>
-#include <fstream>
-#include <iostream>
 #include <memory>
 
 
@@ -39,7 +40,7 @@ namespace aspect
     namespace internal
     {
       LateralViscosityLookup::LateralViscosityLookup(const std::string &filename,
-                                                     const MPI_Comm &comm)
+                                                     const MPI_Comm comm)
       {
         std::string temp;
         // Read data from disk and distribute among processes
@@ -53,7 +54,7 @@ namespace aspect
         while (!in.eof())
           {
             double visc, depth;
-            in >> visc;;
+            in >> visc;
             if (in.eof())
               break;
             in >> depth;
@@ -86,7 +87,7 @@ namespace aspect
       }
 
       RadialViscosityLookup::RadialViscosityLookup(const std::string &filename,
-                                                   const MPI_Comm &comm)
+                                                   const MPI_Comm comm)
       {
         std::string temp;
         // Read data from disk and distribute among processes
@@ -98,7 +99,7 @@ namespace aspect
         while (!in.eof())
           {
             double visc, depth;
-            in >> visc;;
+            in >> visc;
             if (in.eof())
               break;
             in >> depth;
@@ -132,16 +133,15 @@ namespace aspect
     void
     Steinberger<dim>::initialize()
     {
-      for (unsigned i = 0; i < material_file_names.size(); i++)
-        material_lookup.push_back(std_cxx14::make_unique<MaterialModel::MaterialUtilities::Lookup::PerplexReader>
-                                  (data_directory+material_file_names[i],interpolation,this->get_mpi_communicator()));
+      equation_of_state.initialize();
+
       lateral_viscosity_lookup
-        = std_cxx14::make_unique<internal::LateralViscosityLookup>(data_directory+lateral_viscosity_file_name,
-                                                                   this->get_mpi_communicator());
+        = std::make_unique<internal::LateralViscosityLookup>(data_directory+lateral_viscosity_file_name,
+                                                             this->get_mpi_communicator());
       radial_viscosity_lookup
-        = std_cxx14::make_unique<internal::RadialViscosityLookup>(data_directory+radial_viscosity_file_name,
-                                                                  this->get_mpi_communicator());
-      avg_temp.resize(n_lateral_slices);
+        = std::make_unique<internal::RadialViscosityLookup>(data_directory+radial_viscosity_file_name,
+                                                            this->get_mpi_communicator());
+      average_temperature.resize(n_lateral_slices);
     }
 
 
@@ -153,9 +153,9 @@ namespace aspect
     {
       if (use_lateral_average_temperature)
         {
-          this->get_lateral_averaging().get_temperature_averages(avg_temp);
-          for (unsigned int i = 0; i < avg_temp.size(); ++i)
-            AssertThrow(numbers::is_finite(avg_temp[i]),
+          this->get_lateral_averaging().get_temperature_averages(average_temperature);
+          for (double temperature : average_temperature)
+            AssertThrow(numbers::is_finite(temperature),
                         ExcMessage("In computing depth averages, there is at"
                                    " least one depth band that does not have"
                                    " any quadrature points in it."
@@ -172,7 +172,7 @@ namespace aspect
     Steinberger<dim>::
     viscosity (const double temperature,
                const double /*pressure*/,
-               const std::vector<double> &,
+               const std::vector<double> &volume_fractions,
                const SymmetricTensor<2,dim> &,
                const Point<dim> &position) const
     {
@@ -182,285 +182,38 @@ namespace aspect
       double delta_temperature;
       if (use_lateral_average_temperature)
         {
-          const unsigned int idx = static_cast<unsigned int>((avg_temp.size()-1) * depth / this->get_geometry_model().maximal_depth());
-          delta_temperature = temperature-avg_temp[idx];
+          const unsigned int idx = static_cast<unsigned int>((average_temperature.size()-1) * depth / this->get_geometry_model().maximal_depth());
+          delta_temperature = temperature-average_temperature[idx];
         }
       else
         delta_temperature = temperature-adiabatic_temperature;
 
       // For an explanation on this formula see the Steinberger & Calderwood 2006 paper
-      const double vis_lateral_exp = -1.0*lateral_viscosity_lookup->lateral_viscosity(depth)*delta_temperature/(temperature*adiabatic_temperature);
+      // We here compute the lateral variation of viscosity due to temperature (thermal_prefactor) as
+      // V_lT = exp [-(H/nR)*dT/(T_adiabatic*(T_adiabatic + dT))] as in Eq. 6 of the paper.
+      // We get H/nR from the lateral_viscosity_lookup->lateral_viscosity function.
+      const double log_thermal_prefactor = -1.0 * lateral_viscosity_lookup->lateral_viscosity(depth) * delta_temperature / (temperature * adiabatic_temperature);
+
       // Limit the lateral viscosity variation to a reasonable interval
-      const double vis_lateral = std::max(std::min(std::exp(vis_lateral_exp),max_lateral_eta_variation),1/max_lateral_eta_variation);
+      const double thermal_prefactor = std::max(std::min(std::exp(log_thermal_prefactor), max_lateral_eta_variation), 1/max_lateral_eta_variation);
 
-      const double vis_radial = radial_viscosity_lookup->radial_viscosity(depth);
+      const double compositional_prefactor = MaterialUtilities::average_value (volume_fractions, viscosity_prefactors, viscosity_averaging_scheme);
 
-      return std::max(std::min(vis_lateral * vis_radial,max_eta),min_eta);
+      // Visc_rT = exp[(H/nR)/T_adiabatic], Eq. 7 of the paper
+      const double eta_ref = radial_viscosity_lookup->radial_viscosity(depth);
+
+      // Radial viscosity profile is multiplied by thermal and compositional prefactors
+      return std::max(std::min(thermal_prefactor * compositional_prefactor * eta_ref, max_eta), min_eta);
     }
 
 
-
-    template <int dim>
-    double
-    Steinberger<dim>::
-    reference_viscosity () const
-    {
-      return reference_eta;
-    }
-
-
-
-    template <int dim>
-    double
-    Steinberger<dim>::
-    specific_heat (const double temperature,
-                   const double pressure,
-                   const std::vector<double> &compositional_fields,
-                   const Point<dim> &) const
-    {
-      double cp = 0.0;
-
-      if (material_lookup.size() == 1)
-        {
-          cp = material_lookup[0]->specific_heat(temperature,pressure);
-        }
-      else if (material_lookup.size() == compositional_fields.size() + 1)
-        {
-          const double background_cp = material_lookup[0]->specific_heat(temperature,pressure);
-          cp = background_cp;
-          for (unsigned int i = 0; i < compositional_fields.size(); ++i)
-            cp += compositional_fields[i] *
-                  (material_lookup[i+1]->specific_heat(temperature,pressure) - background_cp);
-        }
-      else
-        {
-          for (unsigned i = 0; i < material_lookup.size(); ++i)
-            cp += compositional_fields[i] * material_lookup[i]->specific_heat(temperature,pressure);
-        }
-
-      return cp;
-    }
-
-
-
-    template <int dim>
-    double
-    Steinberger<dim>::
-    thermal_conductivity (const double,
-                          const double,
-                          const std::vector<double> &,
-                          const Point<dim> &) const
-    {
-      return thermal_conductivity_value;
-    }
-
-
-
-    template <int dim>
-    double
-    Steinberger<dim>::
-    density (const double temperature,
-             const double pressure,
-             const std::vector<double> &compositional_fields,
-             const Point<dim> &) const
-    {
-      double rho = 0.0;
-      if (material_lookup.size() == 1)
-        {
-          rho = material_lookup[0]->density(temperature,pressure);
-        }
-      else if (material_lookup.size() == compositional_fields.size() + 1)
-        {
-          const double background_density = material_lookup[0]->density(temperature,pressure);
-          rho = background_density;
-          for (unsigned int i = 0; i < compositional_fields.size(); ++i)
-            rho += compositional_fields[i] *
-                   (material_lookup[i+1]->density(temperature,pressure) - background_density);
-        }
-      else
-        {
-          for (unsigned i = 0; i < material_lookup.size(); ++i)
-            rho += compositional_fields[i] * material_lookup[i]->density(temperature,pressure);
-        }
-
-      return rho;
-    }
-
-
-
-    template <int dim>
-    double
-    Steinberger<dim>::
-    thermal_expansion_coefficient (const double      temperature,
-                                   const double      pressure,
-                                   const std::vector<double> &compositional_fields,
-                                   const Point<dim> &/*position*/) const
-    {
-      double alpha = 0.0;
-
-      if (material_lookup.size() == 1)
-        {
-          alpha = material_lookup[0]->thermal_expansivity(temperature,pressure);
-        }
-      else if (material_lookup.size() == compositional_fields.size() + 1)
-        {
-          const double background_alpha = material_lookup[0]->thermal_expansivity(temperature,pressure);
-          alpha = background_alpha;
-          for (unsigned int i = 0; i<compositional_fields.size(); ++i)
-            alpha += compositional_fields[i] *
-                     (material_lookup[i+1]->thermal_expansivity(temperature,pressure) - background_alpha);
-        }
-      else
-        {
-          for (unsigned i = 0; i < material_lookup.size(); ++i)
-            alpha += compositional_fields[i] * material_lookup[i]->thermal_expansivity(temperature,pressure);
-        }
-      return alpha;
-    }
-
-
-
-    template <int dim>
-    double
-    Steinberger<dim>::
-    seismic_Vp (const double      temperature,
-                const double      pressure,
-                const std::vector<double> &compositional_fields,
-                const Point<dim> &) const
-    {
-      double vp = 0.0;
-
-      if (material_lookup.size() == 1)
-        {
-          vp = material_lookup[0]->seismic_Vp(temperature,pressure);
-        }
-      else if (material_lookup.size() == compositional_fields.size() + 1)
-        {
-          const double background_vp = material_lookup[0]->seismic_Vp(temperature,pressure);
-          vp = background_vp;
-          for (unsigned int i = 0; i < compositional_fields.size(); ++i)
-            vp += compositional_fields[i] *
-                  (material_lookup[i+1]->seismic_Vp(temperature,pressure) - background_vp);
-        }
-      else
-        {
-          for (unsigned i = 0; i < material_lookup.size(); i++)
-            vp += compositional_fields[i] * material_lookup[i]->seismic_Vp(temperature,pressure);
-        }
-      return vp;
-    }
-
-
-
-    template <int dim>
-    double
-    Steinberger<dim>::
-    seismic_Vs (const double      temperature,
-                const double      pressure,
-                const std::vector<double> &compositional_fields,
-                const Point<dim> &) const
-    {
-      double vs = 0.0;
-
-      if (material_lookup.size() == 1)
-        {
-          vs = material_lookup[0]->seismic_Vs(temperature,pressure);
-        }
-      else if (material_lookup.size() == compositional_fields.size() + 1)
-        {
-          const double background_vs = material_lookup[0]->seismic_Vs(temperature,pressure);
-          vs = background_vs;
-          for (unsigned int i = 0; i < compositional_fields.size(); ++i)
-            vs += compositional_fields[i] *
-                  (material_lookup[i+1]->seismic_Vs(temperature,pressure) - background_vs);
-        }
-      else
-        {
-          for (unsigned i = 0; i < material_lookup.size(); i++)
-            vs += compositional_fields[i] * material_lookup[i]->seismic_Vs(temperature,pressure);
-        }
-      return vs;
-    }
-
-
-
-    template <int dim>
-    double
-    Steinberger<dim>::
-    compressibility (const double temperature,
-                     const double pressure,
-                     const std::vector<double> &compositional_fields,
-                     const Point<dim> &position) const
-    {
-      double dRhodp = 0.0;
-      if (material_lookup.size() == 1)
-        {
-          dRhodp = material_lookup[0]->dRhodp(temperature,pressure);
-        }
-      else if (material_lookup.size() == compositional_fields.size() + 1)
-        {
-          const double background_dRhodp = material_lookup[0]->dRhodp(temperature,pressure);
-          dRhodp = background_dRhodp;
-          for (unsigned int i = 0; i < compositional_fields.size(); ++i)
-            dRhodp += compositional_fields[i] *
-                      (material_lookup[i+1]->dRhodp(temperature,pressure) - background_dRhodp);
-        }
-      else
-        {
-          for (unsigned i = 0; i < material_lookup.size(); i++)
-            dRhodp += compositional_fields[i] * material_lookup[i]->dRhodp(temperature,pressure);
-        }
-
-      const double rho = density(temperature,pressure,compositional_fields,position);
-      return (1/rho)*dRhodp;
-    }
 
     template <int dim>
     bool
     Steinberger<dim>::
     is_compressible () const
     {
-      return true;
-    }
-
-
-
-    template <int dim>
-    std::array<std::pair<double, unsigned int>,2>
-    Steinberger<dim>::
-    enthalpy_derivative (const typename Interface<dim>::MaterialModelInputs &in) const
-    {
-      // We have to take into account here that the p,T spacing of the table of material properties
-      // we use might be on a finer grid than our model. Because of that we compute the enthalpy
-      // derivatives by using finite differences that average over the whole temperature and
-      // pressure range that is used in this cell. This way we should not miss any phase transformation.
-      std::array<std::pair<double, unsigned int>,2> derivative;
-
-      // get the pressures and temperatures at the vertices of the cell
-      const QTrapez<dim> quadrature_formula;
-      const unsigned int n_q_points = quadrature_formula.size();
-      FEValues<dim> fe_values (this->get_mapping(),
-                               this->get_fe(),
-                               quadrature_formula,
-                               update_values);
-
-      std::vector<double> temperatures(n_q_points), pressures(n_q_points);
-      fe_values.reinit (in.current_cell);
-
-      fe_values[this->introspection().extractors.temperature]
-      .get_function_values (this->get_current_linearization_point(), temperatures);
-      fe_values[this->introspection().extractors.pressure]
-      .get_function_values (this->get_current_linearization_point(), pressures);
-
-      // compute the averaged enthalpy derivatives for all temperatures and
-      // pressures in this cell. The 1 means we only do one substep for this
-      // computation (see documentation of the called function for more
-      // information.
-      derivative = material_lookup[0]->enthalpy_derivatives(temperatures,
-                                                            pressures,
-                                                            1);
-
-      return derivative;
+      return equation_of_state.is_compressible();
     }
 
 
@@ -470,77 +223,79 @@ namespace aspect
     Steinberger<dim>::evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
                                MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      std::vector<EquationOfStateOutputs<dim>> eos_outputs (in.n_evaluation_points(), equation_of_state.number_of_lookups());
+      std::vector<std::vector<double>> volume_fractions (in.n_evaluation_points(), std::vector<double> (equation_of_state.number_of_lookups()));
+
+      // We need to make a copy of the material model inputs because we want to use the adiabatic pressure
+      // rather than the real pressure for the equations of state (to avoid numerical instabilities).
+      MaterialModel::MaterialModelInputs<dim> eos_in(in);
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
+        eos_in.pressure[i] = this->get_adiabatic_conditions().pressure(in.position[i]);
+
+      // Evaluate the equation of state properties over all evaluation points
+      equation_of_state.evaluate(eos_in, eos_outputs);
+      thermal_conductivity->evaluate(in, out);
+
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
-          // We are only asked to give viscosities if strain_rate.size() > 0.
-          if (in.strain_rate.size() > 0)
-            out.viscosities[i]                  = viscosity                     (in.temperature[i], in.pressure[i], in.composition[i], in.strain_rate[i], in.position[i]);
-
-          out.densities[i]                      = density                       (in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
-          if (!latent_heat)
-            {
-              out.thermal_expansion_coefficients[i] = thermal_expansion_coefficient (in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
-              out.specific_heat[i]                  = specific_heat                 (in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
-            }
-          out.thermal_conductivities[i]         = thermal_conductivity          (in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
-          out.compressibilities[i]              = compressibility               (in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
-          out.entropy_derivative_pressure[i]    = 0;
-          out.entropy_derivative_temperature[i] = 0;
           for (unsigned int c=0; c<in.composition[i].size(); ++c)
-            out.reaction_terms[i][c]            = 0;
+            out.reaction_terms[i][c] = 0;
 
-          // fill seismic velocities outputs if they exist
-          if (SeismicAdditionalOutputs<dim> *seismic_out = out.template get_additional_output<SeismicAdditionalOutputs<dim> >())
+          // Calculate volume fractions from mass fractions
+          // If there is only one lookup table, set the mass and volume fractions to 1
+          std::vector<double> mass_fractions;
+          if (equation_of_state.number_of_lookups() == 1)
+            mass_fractions.push_back(1.0);
+          else
             {
-              seismic_out->vp[i] = seismic_Vp(in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
-              seismic_out->vs[i] = seismic_Vs(in.temperature[i], in.pressure[i], in.composition[i], in.position[i]);
+              // We only want to compute mass/volume fractions for fields that are chemical compositions.
+              mass_fractions = MaterialUtilities::compute_only_composition_fractions(in.composition[i],
+                                                                                     this->introspection().chemical_composition_field_indices());
+
+              // The function compute_volumes_from_masses expects as many mass_fractions as densities.
+              // But the function compute_composition_fractions always adds another element at the start
+              // of the vector that represents the background field. If there is no lookup table for
+              // the background field, the mass_fractions vector is too long and we remove this element.
+              if (!has_background_field)
+                mass_fractions.erase(mass_fractions.begin());
             }
+
+          volume_fractions[i] = MaterialUtilities::compute_volumes_from_masses(mass_fractions,
+                                                                               eos_outputs[i].densities,
+                                                                               true);
+
+          if (in.requests_property(MaterialProperties::viscosity))
+            out.viscosities[i] = viscosity(in.temperature[i], in.pressure[i], volume_fractions[i], in.strain_rate[i], in.position[i]);
+
+          MaterialUtilities::fill_averaged_equation_of_state_outputs(eos_outputs[i], mass_fractions, volume_fractions[i], i, out);
+          fill_prescribed_outputs(i, volume_fractions[i], in, out);
         }
 
-      if (latent_heat)
+      // fill additional outputs if they exist
+      equation_of_state.fill_additional_outputs(in, volume_fractions, out);
+    }
+
+
+
+    template <int dim>
+    void
+    Steinberger<dim>::
+    fill_prescribed_outputs(const unsigned int q,
+                            const std::vector<double> &,
+                            const MaterialModel::MaterialModelInputs<dim> &,
+                            MaterialModel::MaterialModelOutputs<dim> &out) const
+    {
+      // set up variable to interpolate prescribed field outputs onto compositional field
+      PrescribedFieldOutputs<dim> *prescribed_field_out = out.template get_additional_output<PrescribedFieldOutputs<dim>>();
+
+      if (this->introspection().composition_type_exists(CompositionalFieldDescription::density)
+          && prescribed_field_out != nullptr)
         {
-          /* We separate the calculation of specific heat and thermal expansivity,
-           * because they may depend on cell-wise averaged values that are only
-           * available here.
-           */
-          double average_temperature(0.0);
-          double average_density(0.0);
-          for (unsigned int i = 0; i < in.position.size(); ++i)
-            {
-              average_temperature += in.temperature[i];
-              average_density += out.densities[i];
-            }
-          average_temperature /= in.position.size();
-          average_density /= in.position.size();
-
-          std::array<std::pair<double, unsigned int>,2> dH;
-          if (in.current_cell.state() == IteratorState::valid)
-            dH = enthalpy_derivative(in);
-
-          for (unsigned int i = 0; i < in.position.size(); ++i)
-            {
-              // Use the adiabatic pressure instead of the real one,
-              // to stabilize against pressure oscillations in phase transitions
-              const double pressure = this->get_adiabatic_conditions().pressure(in.position[i]);
-
-              // If all of the derivatives were computed successfully
-              if ((in.current_cell.state() == IteratorState::valid)
-                  && (dH[0].second > 0)
-                  && (dH[1].second > 0))
-                {
-                  // alpha = (1 - rho * dH/dp) / T
-                  out.thermal_expansion_coefficients[i] = (1 - average_density * dH[1].first) / average_temperature;
-                  // cp = dH/dT
-                  out.specific_heat[i] = dH[0].first;
-                }
-              else
-                {
-                  out.thermal_expansion_coefficients[i] = (1 - out.densities[i] * material_lookup[0]->dHdp(in.temperature[i],pressure)) / in.temperature[i];
-                  out.specific_heat[i] = material_lookup[0]->dHdT(in.temperature[i],pressure);
-                }
-            }
+          const unsigned int projected_density_index = this->introspection().find_composition_type(CompositionalFieldDescription::density);
+          prescribed_field_out->prescribed_field_outputs[q][projected_density_index] = out.densities[q];
         }
     }
+
 
 
     template <int dim>
@@ -558,23 +313,6 @@ namespace aspect
                              "in which the ASPECT source files were located when ASPECT was "
                              "compiled. This interpretation allows, for example, to reference "
                              "files located in the `data/' subdirectory of ASPECT. ");
-          prm.declare_entry ("Material file names", "pyr-ringwood88.txt",
-                             Patterns::List (Patterns::Anything()),
-                             "The file names of the material data (material "
-                             "data is assumed to be in order with the ordering "
-                             "of the compositional fields). Note that there are "
-                             "three options on how many files need to be listed "
-                             "here: 1. If only one file is provided, it is used "
-                             "for the whole model domain, and compositional fields "
-                             "are ignored. 2. If there is one more file name than the "
-                             "number of compositional fields, then the first file is "
-                             "assumed to define a `background composition' that is "
-                             "modified by the compositional fields. If there are "
-                             "exactly as many files as compositional fields, the fields are "
-                             "assumed to represent the fractions of different materials "
-                             "and the average property is computed as a sum of "
-                             "the value of the compositional field times the "
-                             "material property of that field.");
           prm.declare_entry ("Radial viscosity file name", "radial-visc.txt",
                              Patterns::Anything (),
                              "The file name of the radial viscosity data. ");
@@ -583,62 +321,62 @@ namespace aspect
                              "The file name of the lateral viscosity data. ");
           prm.declare_entry ("Use lateral average temperature for viscosity", "true",
                              Patterns::Bool (),
-                             "Whether to use to use the laterally averaged temperature "
+                             "Whether to use the laterally averaged temperature "
                              "instead of the adiabatic temperature as reference for the "
                              "viscosity calculation. This ensures that the laterally averaged "
                              "viscosities remain more or less constant over the model "
-                             "runtime. This behaviour might or might not be desired.");
+                             "runtime. This behavior might or might not be desired.");
           prm.declare_entry ("Number lateral average bands", "10",
                              Patterns::Integer (1),
                              "Number of bands to compute laterally averaged temperature within.");
-          prm.declare_entry ("Bilinear interpolation", "true",
-                             Patterns::Bool (),
-                             "Whether to use bilinear interpolation to compute "
-                             "material properties (slower but more accurate). ");
-          prm.declare_entry ("Latent heat", "false",
-                             Patterns::Bool (),
-                             "Whether to include latent heat effects in the "
-                             "calculation of thermal expansivity and specific heat. "
-                             "Following the approach of Nakagawa et al. 2009. ");
-          prm.declare_entry ("Reference viscosity", "1e23",
-                             Patterns::Double(0),
-                             "The reference viscosity that is used for pressure scaling. "
-                             "To understand how pressure scaling works, take a look at "
-                             "\\cite{KHB12}. In particular, the value of this parameter "
-                             "would not affect the solution computed by \\aspect{} if "
-                             "we could do arithmetic exactly; however, computers do "
-                             "arithmetic in finite precision, and consequently we need to "
-                             "scale quantities in ways so that their magnitudes are "
-                             "roughly the same. As explained in \\cite{KHB12}, we scale "
-                             "the pressure during some computations (never visible by "
-                             "users) by a factor that involves a reference viscosity. This "
-                             "parameter describes this reference viscosity."
-                             "\n\n"
-                             "For problems with a constant viscosity, you will generally want "
-                             "to choose the reference viscosity equal to the actual viscosity. "
-                             "For problems with a variable viscosity, the reference viscosity "
-                             "should be a value that adequately represents the order of "
-                             "magnitude of the viscosities that appear, such as an average "
-                             "value or the value one would use to compute a Rayleigh number."
-                             "\n\n"
-                             "Units: $Pa \\, s$");
           prm.declare_entry ("Minimum viscosity", "1e19",
-                             Patterns::Double(0),
+                             Patterns::Double (0.),
                              "The minimum viscosity that is allowed in the viscosity "
                              "calculation. Smaller values will be cut off.");
           prm.declare_entry ("Maximum viscosity", "1e23",
-                             Patterns::Double(0),
+                             Patterns::Double (0.),
                              "The maximum viscosity that is allowed in the viscosity "
                              "calculation. Larger values will be cut off.");
           prm.declare_entry ("Maximum lateral viscosity variation", "1e2",
-                             Patterns::Double(0),
+                             Patterns::Double (0.),
                              "The relative cutoff value for lateral viscosity variations "
                              "caused by temperature deviations. The viscosity may vary "
                              "laterally by this factor squared.");
-          prm.declare_entry ("Thermal conductivity", "4.7",
-                             Patterns::Double (0),
-                             "The value of the thermal conductivity $k$. "
-                             "Units: $W/m/K$.");
+          prm.declare_entry ("Composition viscosity prefactors", "1",
+                             Patterns::Anything (),
+                             "List of N prefactors that are used to modify the reference viscosity, "
+                             "where N is either equal to one or the number of chemical components "
+                             "in the simulation. If only one value is given, then all components "
+                             "use the same value. Units: \\si{\\pascal\\second}.");
+          prm.declare_entry ("Viscosity averaging scheme", "harmonic",
+                             Patterns::Selection("arithmetic|harmonic|geometric|maximum composition"),
+                             "Method to average viscosities over multiple compositional fields. "
+                             "One of arithmetic, harmonic, geometric or maximum composition.");
+
+          // Thermal conductivity parameters
+          ThermalConductivity::Constant<dim>::declare_parameters (prm);
+          prm.declare_entry ("Thermal conductivity formulation", "constant",
+                             Patterns::Selection("constant|p-T-dependent"),
+                             "Which law should be used to compute the thermal conductivity. "
+                             "The 'constant' law uses a constant value for the thermal "
+                             "conductivity. The 'p-T-dependent' formulation uses equations "
+                             "from Stackhouse et al. (2015): First-principles calculations "
+                             "of the lattice thermal conductivity of the lower mantle "
+                             "(https://doi.org/10.1016/j.epsl.2015.06.050), and Tosi et al. "
+                             "(2013): Mantle dynamics with pressure- and temperature-dependent "
+                             "thermal expansivity and conductivity "
+                             "(https://doi.org/10.1016/j.pepi.2013.02.004) to compute the "
+                             "thermal conductivity in dependence of temperature and pressure. "
+                             "The thermal conductivity parameter sets can be chosen in such a "
+                             "way that either the Stackhouse or the Tosi relations are used. "
+                             "The conductivity description can consist of several layers with "
+                             "different sets of parameters. Note that the Stackhouse "
+                             "parametrization is only valid for the lower mantle (bridgmanite).");
+          ThermalConductivity::TosiStackhouse<dim>::declare_parameters (prm);
+
+          // Table lookup parameters
+          EquationOfState::ThermodynamicTableLookup<dim>::declare_parameters(prm);
+
           prm.leave_subsection();
         }
         prm.leave_subsection();
@@ -655,39 +393,79 @@ namespace aspect
       {
         prm.enter_subsection("Steinberger model");
         {
-          data_directory = Utilities::expand_ASPECT_SOURCE_DIR(prm.get ("Data directory"));
-          material_file_names  = Utilities::split_string_list
-                                 (prm.get ("Material file names"));
-          radial_viscosity_file_name   = prm.get ("Radial viscosity file name");
-          lateral_viscosity_file_name  = prm.get ("Lateral viscosity file name");
+          data_directory                  = Utilities::expand_ASPECT_SOURCE_DIR(prm.get ("Data directory"));
+          radial_viscosity_file_name      = prm.get ("Radial viscosity file name");
+          lateral_viscosity_file_name     = prm.get ("Lateral viscosity file name");
           use_lateral_average_temperature = prm.get_bool ("Use lateral average temperature for viscosity");
-          n_lateral_slices = prm.get_integer("Number lateral average bands");
-          interpolation        = prm.get_bool ("Bilinear interpolation");
-          latent_heat          = prm.get_bool ("Latent heat");
-          reference_eta        = prm.get_double ("Reference viscosity");
-          min_eta              = prm.get_double ("Minimum viscosity");
-          max_eta              = prm.get_double ("Maximum viscosity");
-          max_lateral_eta_variation    = prm.get_double ("Maximum lateral viscosity variation");
-          thermal_conductivity_value = prm.get_double ("Thermal conductivity");
+          n_lateral_slices                = prm.get_integer("Number lateral average bands");
+          min_eta                         = prm.get_double ("Minimum viscosity");
+          max_eta                         = prm.get_double ("Maximum viscosity");
+          max_lateral_eta_variation       = prm.get_double ("Maximum lateral viscosity variation");
+          viscosity_averaging_scheme      = MaterialUtilities::parse_compositional_averaging_operation ("Viscosity averaging scheme",
+                                            prm);
+
+          // Thermal conductivity parameters
+          if (prm.get ("Thermal conductivity formulation") == "constant")
+            thermal_conductivity = std::make_unique<ThermalConductivity::Constant<dim>>();
+          else if (prm.get ("Thermal conductivity formulation") == "p-T-dependent")
+            {
+              thermal_conductivity = std::make_unique<ThermalConductivity::TosiStackhouse<dim>>();
+              if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(thermal_conductivity.get()))
+                sim->initialize_simulator (this->get_simulator());
+            }
+          else
+            AssertThrow(false, ExcMessage("Not a valid thermal conductivity formulation"));
+
+          thermal_conductivity->parse_parameters(prm);
+
+          // Parse the table lookup parameters
+          equation_of_state.initialize_simulator (this->get_simulator());
+          equation_of_state.parse_parameters(prm);
+
+          // Assign background field and do some error checking
+          const unsigned int n_chemical_composition_fields = this->introspection().get_number_of_fields_of_type(CompositionalFieldDescription::chemical_composition);
+          has_background_field = ((equation_of_state.number_of_lookups() == 1) ||
+                                  (equation_of_state.number_of_lookups() == n_chemical_composition_fields + 1));
+          AssertThrow ((equation_of_state.number_of_lookups() == 1) ||
+                       (equation_of_state.number_of_lookups() == n_chemical_composition_fields) ||
+                       (equation_of_state.number_of_lookups() == n_chemical_composition_fields + 1),
+                       ExcMessage("The Steinberger material model assumes that either there is a single material "
+                                  "in the simulation, or that all compositional fields of the type "
+                                  "chemical composition correspond to mass fractions of different materials. "
+                                  "There must either be one material lookup file, the same number of "
+                                  "material lookup files as compositional fields of type chemical composition, "
+                                  "or one additional file (if a background field is used). You have "
+                                  + Utilities::int_to_string(equation_of_state.number_of_lookups())
+                                  + " material data files, but there are "
+                                  + Utilities::int_to_string(n_chemical_composition_fields)
+                                  + " fields of type chemical composition."));
+
+          // Parse the Composition viscosity prefactors parameter
+          std::vector<std::string> chemical_field_names = this->introspection().chemical_composition_field_names();
+          std::vector<std::string> compositional_field_names = this->introspection().get_composition_names();
+
+          // If there is only one lookup, the list of Viscosity prefactors should have length one.
+          // The following if statement applies when defined fields of type chemical composition
+          // are not intended to be used as volume fractions of distinct materials.
+          if (equation_of_state.number_of_lookups() == 1)
+            {
+              chemical_field_names.clear();
+              compositional_field_names.clear();
+            }
+
+          if (has_background_field)
+            {
+              chemical_field_names.insert(chemical_field_names.begin(),"background");
+              compositional_field_names.insert(compositional_field_names.begin(),"background");
+            }
+
+          Utilities::MapParsing::Options options(chemical_field_names, "Composition viscosity prefactors");
+          options.list_of_allowed_keys = compositional_field_names;
+          viscosity_prefactors = Utilities::MapParsing::parse_map_to_double_array(prm.get("Composition viscosity prefactors"), options);
 
           prm.leave_subsection();
         }
         prm.leave_subsection();
-
-        // Do some error checking
-        AssertThrow ((material_file_names.size() == 1) ||
-                     (material_file_names.size() == this->n_compositional_fields()) ||
-                     (material_file_names.size() == this->n_compositional_fields() + 1),
-                     ExcMessage("This material model expects either one material data file, or as many files as compositional fields, "
-                                "or as many files as compositional fields plus one (in which case the first file "
-                                "is assumed to contain a background composition). This condition is not fulfilled. You "
-                                "prescribed " + Utilities::int_to_string(material_file_names.size()) + " material data files, but there are " +
-                                Utilities::int_to_string(this->n_compositional_fields()) + " compositional fields."));
-
-        if (latent_heat)
-          AssertThrow (material_file_names.size() == 1,
-                       ExcMessage("This formalism is currently only implemented for one material "
-                                  "table."));
 
         // Declare dependencies on solution variables
         this->model_dependence.viscosity = NonlinearDependence::temperature;
@@ -698,15 +476,20 @@ namespace aspect
       }
     }
 
+
+
     template <int dim>
     void
     Steinberger<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      if (out.template get_additional_output<SeismicAdditionalOutputs<dim> >() == nullptr)
+      equation_of_state.create_additional_named_outputs(out);
+
+      if (this->introspection().composition_type_exists(CompositionalFieldDescription::density)
+          && out.template get_additional_output<PrescribedFieldOutputs<dim>>() == nullptr)
         {
-          const unsigned int n_points = out.viscosities.size();
+          const unsigned int n_points = out.n_evaluation_points();
           out.additional_outputs.push_back(
-            std_cxx14::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_points));
+            std::make_unique<MaterialModel::PrescribedFieldOutputs<dim>> (n_points, this->n_compositional_fields()));
         }
     }
 
@@ -726,9 +509,9 @@ namespace aspect
                                    "2006 (``Models of large-scale viscous flow in the Earth's "
                                    "mantle with constraints from mineral physics and surface observations'', "
                                    "Geophys. J. Int., 167, 1461-1481, "
-                                   "\\url{http://dx.doi.org/10.1111/j.1365-246X.2006.03131.x}) and material "
+                                   "<http://dx.doi.org/10.1111/j.1365-246X.2006.03131.x>) and material "
                                    "data from a database generated by the thermodynamics code \\texttt{Perplex}, "
-                                   "see \\url{http://www.perplex.ethz.ch/}. "
+                                   "see <http://www.perplex.ethz.ch/>. "
                                    "The default example data builds upon the thermodynamic "
                                    "database by Stixrude 2011 and assumes a pyrolitic composition by "
                                    "Ringwood 1988 but is easily replaceable by other data files. ")

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -66,7 +66,7 @@ namespace aspect
     evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
              MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const Point<dim> position = in.position[i];
           const double temperature_deviation = in.temperature[i] - this->get_adiabatic_conditions().temperature(position);
@@ -105,7 +105,7 @@ namespace aspect
             out.reaction_terms[i][c] = 0.0;
 
           // fill seismic velocities outputs if they exist
-          if (SeismicAdditionalOutputs<dim> *seismic_out = out.template get_additional_output<SeismicAdditionalOutputs<dim> >())
+          if (SeismicAdditionalOutputs<dim> *seismic_out = out.template get_additional_output<SeismicAdditionalOutputs<dim>>())
             {
               if (seismic_vp_index != numbers::invalid_unsigned_int)
                 seismic_out->vp[i] = profile.get_data_component(profile_position,seismic_vp_index);
@@ -121,14 +121,6 @@ namespace aspect
         }
     }
 
-
-    template <int dim>
-    double
-    AsciiReferenceProfile<dim>::
-    reference_viscosity () const
-    {
-      return viscosity;
-    }
 
 
     template <int dim>
@@ -150,25 +142,25 @@ namespace aspect
         prm.enter_subsection("Ascii reference profile");
         {
           prm.declare_entry ("Thermal conductivity", "4.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Reference conductivity");
           prm.declare_entry ("Viscosity", "1e21",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Viscosity");
           prm.declare_entry ("Use TALA", "false",
                              Patterns::Bool (),
                              "Whether to use the TALA instead of the ALA "
                              "approximation.");
-          prm.declare_entry ("Thermal viscosity exponent", "0.0",
-                             Patterns::Double (0),
+          prm.declare_entry ("Thermal viscosity exponent", "0.",
+                             Patterns::Double (0.),
                              "The temperature dependence of viscosity. Dimensionless exponent.");
           prm.declare_entry ("Transition depths", "1.5e5, 4.1e5, 6.6e5",
-                             Patterns::List (Patterns::Double(0)),
+                             Patterns::List (Patterns::Double(0.)),
                              "A list of depths where the viscosity changes. Values must "
                              "monotonically increase. "
-                             "Units: $m$.");
-          prm.declare_entry ("Viscosity prefactors", "10, 0.1, 1, 10",
-                             Patterns::List (Patterns::Double(0)),
+                             "Units: \\si{\\meter}.");
+          prm.declare_entry ("Viscosity prefactors", "10., 0.1, 1., 10.",
+                             Patterns::List (Patterns::Double(0.)),
                              "A list of prefactors for the viscosity that determine the viscosity "
                              "profile. Each prefactor is applied in a depth range specified by the "
                              "list of `Transition depths', i.e. the first prefactor is applied above "
@@ -233,13 +225,13 @@ namespace aspect
     void
     AsciiReferenceProfile<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      if (out.template get_additional_output<SeismicAdditionalOutputs<dim> >() == nullptr
+      if (out.template get_additional_output<SeismicAdditionalOutputs<dim>>() == nullptr
           && seismic_vp_index != numbers::invalid_unsigned_int
           && seismic_vs_index != numbers::invalid_unsigned_int)
         {
-          const unsigned int n_points = out.viscosities.size();
+          const unsigned int n_points = out.n_evaluation_points();
           out.additional_outputs.push_back(
-            std_cxx14::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_points));
+            std::make_unique<MaterialModel::SeismicAdditionalOutputs<dim>> (n_points));
         }
     }
   }
@@ -277,9 +269,7 @@ namespace aspect
                                    "\n"
                                    "\n"
                                    "The viscosity $\\eta$ is computed as "
-                                   "\\begin{equation}"
-                                   "\\eta(z,T) = \\eta_r(z) \\eta_0 \\exp\\left(-A \\frac{T - T_{\\text{adi}}}{T_{\\text{adi}}}\\right),"
-                                   "\\end{equation}"
+                                   "$\\eta(z,T) = \\eta_r(z) \\eta_0 \\exp\\left(-A \\frac{T - T_{\\text{adi}}}{T_{\\text{adi}}}\\right)$, "
                                    "where $\\eta_r(z)$ is the depth-dependence, which is a "
                                    "piecewise constant function computed according to the "
                                    "list of ``Viscosity prefactors'' and ``Transition depths'', "

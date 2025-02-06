@@ -1,3 +1,23 @@
+/*
+  Copyright (C) 2022 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
 #include <aspect/material_model/simple.h>
 #include <aspect/boundary_velocity/interface.h>
 #include <aspect/postprocess/interface.h>
@@ -16,8 +36,6 @@ namespace aspect
 {
   namespace InclusionBenchmark
   {
-    using namespace dealii;
-
     namespace AnalyticSolutions
     {
       // based on http://geodynamics.org/hg/cs/AMR/Discontinuous_Stokes with permission
@@ -69,8 +87,8 @@ namespace aspect
       {
         public:
           FunctionInclusion (double eta_B) : Function<dim>(dim+2), eta_B_(eta_B) {}
-          virtual void vector_value (const Point< dim >   &p,
-                                     Vector< double >   &values) const
+          virtual void vector_value (const Point<dim>   &p,
+                                     Vector<double>   &values) const
           {
             double pos[2]= {p(0),p(1)};
             AnalyticSolutions::_Inclusion
@@ -161,7 +179,7 @@ namespace aspect
         virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
                               MaterialModel::MaterialModelOutputs<dim> &out) const
         {
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
               const Point<dim> &pos = in.position[i];
               const double r2 = ( pos[0] - 1.0 ) * ( pos[0] - 1.0 ) + ( pos[1] - 1.0 ) * ( pos[1] - 1.0 );
@@ -214,14 +232,6 @@ namespace aspect
 
 
         /**
-         * @name Reference quantities
-         * @{
-         */
-        virtual double reference_viscosity () const;
-        /**
-         * @}
-         */
-        /**
          * Returns the viscosity value in the inclusion
          */
         double get_eta_B() const;
@@ -232,15 +242,6 @@ namespace aspect
          */
         double eta_B;
     };
-
-    template <int dim>
-    double
-    InclusionMaterial<dim>::
-    reference_viscosity () const
-    {
-      return 1;
-    }
-
 
     template <int dim>
     bool
@@ -339,14 +340,14 @@ namespace aspect
     std::pair<std::string,std::string>
     InclusionPostprocessor<dim>::execute (TableHandler &statistics)
     {
-      std::unique_ptr<Function<dim> > ref_func;
+      std::unique_ptr<Function<dim>> ref_func;
       if (dynamic_cast<const InclusionMaterial<dim> *>(&this->get_material_model()) != nullptr)
         {
           const InclusionMaterial<dim> *
           material_model
             = dynamic_cast<const InclusionMaterial<dim> *>(&this->get_material_model());
 
-          ref_func = std_cxx14::make_unique<AnalyticSolutions::FunctionInclusion<dim>>(material_model->get_eta_B());
+          ref_func = std::make_unique<AnalyticSolutions::FunctionInclusion<dim>>(material_model->get_eta_B());
         }
       else
         {

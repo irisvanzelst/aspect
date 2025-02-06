@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -110,7 +110,7 @@ namespace aspect
               // specify Brent algorithm parameters
               const double a=273;
               const double b=3273;
-              typedef std::pair<double, double> Result;
+              using Result = std::pair<double, double>;
               // create fVs function to use in Brent minimization and calculate temperature
               auto bfunc = [ &,this] (double x)
               {
@@ -201,8 +201,8 @@ namespace aspect
       double pressure = depth/pressure_gradient;
       // declare other parameters
       double viscosity,viscosity_reduction_factor,peak_amplitude,peak_width,isothermal_volume_change;
-      double compressibility,pressure_dependent_density,integrated_thermal_expansivity,density,anharmonic_Vs;
-      double unrelaxed_compliance,loss_compliance,storage_compliance,attenuation,period,anelastic_Vs;
+      double compressibility,pressure_dependent_density,integrated_thermal_expansivity,density;
+      double unrelaxed_compliance,storage_compliance,period,anelastic_Vs;
       // begin calculation of Vs
       if (homologous_temperature<critical_homologous_temperature)
         {
@@ -226,9 +226,9 @@ namespace aspect
           // Vs is too high to give realistic temperature so viscosity, attenuation and unrelaxed compliance are reset
           viscosity=1e40;
           unrelaxed_compliance=1./(1e9*(mu0+(dmudP*pressure*1e-9)));
-          attenuation=1e-9;
+          // attenuation=1e-9;
         }
-      // evaluate Maxwell normalised shear wave period
+      // evaluate Maxwell normalized shear wave period
       double maxwell_relaxation_time=viscosity*unrelaxed_compliance;
       if (use_original_model == true)
         {
@@ -240,7 +240,7 @@ namespace aspect
           // calculate shear wave period incorporating depth dependence of Forsyth 1992
           period=(3*depth)/4200;
         }
-      double normalised_period=period/(2*M_PI*maxwell_relaxation_time);
+      double normalized_period=period/(2*M_PI*maxwell_relaxation_time);
       // determine peak amplitudes
       if (homologous_temperature < 0.91)
         {
@@ -281,7 +281,7 @@ namespace aspect
         {
           // create fdV function to use in Brent minimization and calculate isothermal_volume_change and density using
           // expressions in Grose & Afonso 2013
-          typedef std::pair<double, double> Result2;
+          using Result2 = std::pair<double, double>;
           auto vfunc = [ &,this] (double x)
           {
             return fdV(x, bulk_modulus, bulk_modulus_pressure_derivative, pressure);
@@ -290,23 +290,23 @@ namespace aspect
           isothermal_volume_change=r2.first;
           compressibility=isothermal_volume_change*std::exp((gruneisen_parameter+1)*(std::pow(isothermal_volume_change,-1)-1));
           pressure_dependent_density=reference_density*isothermal_volume_change;
-          integrated_thermal_expansivity=(2.832e-5*(temperature-273))+((0.758e-8/2)*(std::pow(temperature,2)-std::pow(273,2)));
+          integrated_thermal_expansivity=(2.832e-5*(temperature-273))+((0.758e-8/2)*(Utilities::fixed_power<2>(temperature)-Utilities::fixed_power<2>(273)));
           density=pressure_dependent_density*(1-(compressibility*integrated_thermal_expansivity));
         }
       // determine J1 term (real part of complex compliance)
-      storage_compliance=unrelaxed_compliance*(1+((background_amplitude*std::pow(normalised_period,background_slope))
+      storage_compliance=unrelaxed_compliance*(1+((background_amplitude*std::pow(normalized_period,background_slope))
                                                   /background_slope)+((std::sqrt(2*M_PI)/2)*peak_amplitude*peak_width*(1-
-                                                                      std::erf((std::log(peak_period/normalised_period))/(std::sqrt(2)*peak_width)))));
+                                                                      std::erf((std::log(peak_period/normalized_period))/(std::sqrt(2)*peak_width)))));
       // determine J2 term (imaginary part of complex compliance)
-      loss_compliance=unrelaxed_compliance*(M_PI/2)*(background_amplitude*(std::pow(normalised_period,background_slope))+\
-                                                     (peak_amplitude*std::exp(-1*(std::pow(std::log(peak_period/normalised_period),2)
-                                                                                  /(2*std::pow(peak_width,2))))))+(unrelaxed_compliance*normalised_period);
+      //double loss_compliance=unrelaxed_compliance*(M_PI/2)*(background_amplitude*(std::pow(normalized_period,background_slope))+
+      // (peak_amplitude*std::exp(-1*(Utilities::fixed_power<2>(std::log(peak_period/normalized_period))/
+      // (2*Utilities::fixed_power<2>(peak_width))))))+(unrelaxed_compliance*normalized_period);
       // calculate anharmonic Vs
-      anharmonic_Vs=1/(std::sqrt(density*unrelaxed_compliance)*1e3);
+      // anharmonic_Vs=1/(std::sqrt(density*unrelaxed_compliance)*1e3);
       // calculate Vs
       anelastic_Vs=1/(std::sqrt(density*storage_compliance)*1e3);
       // calculate attenuation
-      attenuation=loss_compliance/storage_compliance;
+      // attenuation=loss_compliance/storage_compliance;
       return anelastic_Vs;
     }
 
@@ -373,7 +373,7 @@ namespace aspect
                                               "Implementation of a model in which the initial temperature is calculated "
                                               "from files containing absolute shear wave velocity (Vs) data in ascii format. "
                                               "This plug-in allows you to select from a number of different models that"
-                                              "convert Vs into temperature, accounting for the anelastic behaviour of mantle material."
+                                              "convert Vs into temperature, accounting for the anelastic behavior of mantle material."
                                               "Note the required format of the "
                                               "input data: The first lines may contain any number of comments "
                                               "if they begin with `#', but one of these lines needs to "

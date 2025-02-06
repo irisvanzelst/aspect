@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,13 +25,148 @@
 #include <aspect/geometry_model/interface.h>
 #include <aspect/simulator_access.h>
 
-#include <deal.II/grid/manifold_lib.h>
-
 namespace aspect
 {
   namespace GeometryModel
   {
-    using namespace dealii;
+    namespace internal
+    {
+      /**
+       * A description of a manifold that describes a spherical shell with overlaid
+       * topography.
+       */
+      template <int dim>
+      class SphericalManifoldWithTopography : public aspect::SphericalManifold<dim>
+      {
+        public:
+          /**
+           * Constructor.
+           */
+          SphericalManifoldWithTopography(const InitialTopographyModel::Interface<dim> &topography,
+                                          const double inner_radius,
+                                          const double outer_radius);
+
+          /**
+           * Copy constructor.
+           */
+          SphericalManifoldWithTopography(const SphericalManifoldWithTopography<dim> &) = default;
+
+          /**
+           * Make a clone of this Manifold object.
+           */
+          virtual std::unique_ptr<Manifold<dim, dim>>
+          clone() const override;
+
+          /**
+           * Given a point in the undeformed spherical geometry, push it forward to the
+           * corresponding point in the sphere with surface topography.
+           */
+          Point<dim>
+          push_forward_from_sphere (const Point<dim> &p) const;
+
+          /**
+           * Given a point in the deformed spherical geometry with topography, pull it
+           * back to the corresponding point in the undeformed sphere.
+           */
+          Point<dim>
+          pull_back_to_sphere (const Point<dim> &p) const;
+
+          /**
+           * Given any two points in space, first project them on the surface
+           * of a sphere with unit radius, then connect them with a geodesic
+           * and find the intermediate point, and finally rescale the final
+           * radius so that the resulting one is the convex combination of the
+           * starting radii.
+           */
+          virtual Point<dim>
+          get_intermediate_point(const Point<dim> &p1,
+                                 const Point<dim> &p2,
+                                 const double      w) const override;
+
+          /**
+           * Compute the derivative of the get_intermediate_point() function
+           * with parameter w equal to zero.
+           */
+          virtual Tensor<1, dim>
+          get_tangent_vector(const Point<dim> &x1,
+                             const Point<dim> &x2) const override;
+
+          /**
+           * @copydoc Manifold::normal_vector()
+           *
+           * We fudge here, but for a good reason. What the function is supposed
+           * to compute is the normal vector to the surface. This *should* be the
+           * normal to the surface with topography, but instead we return the
+           * normal to the undeformed surface -- i.e., the radial direction. This
+           * is, in particular, used to compute no-flux boundary conditions,
+           * for which we want to impose a boundary
+           * condition that allows for plate-like motion -- that is, we need
+           * to allow *horizontal motion*, even if that is not tangential to
+           * the surface along the slopes of mountains or ocean trenches. Using
+           * the radial direction, i.e., the normal vector to the undeformed surface
+           * (= a radial vector) allows for exactly this.
+           */
+          virtual Tensor<1, dim>
+          normal_vector(
+            const typename Triangulation<dim, dim>::face_iterator &face,
+            const Point<dim> &p) const override;
+
+          /**
+           * Compute the normal vectors to the boundary at each vertex.
+           */
+          virtual void
+          get_normals_at_vertices(
+            const typename Triangulation<dim, dim>::face_iterator &face,
+            typename Manifold<dim, dim>::FaceVertexNormals &face_vertex_normals)
+          const override;
+
+
+          /**
+           * Compute a new set of points that interpolate between the given points @p
+           * surrounding_points. @p weights is a table with as many columns as @p
+           * surrounding_points.size(). The number of rows in @p weights must match
+           * the length of @p new_points.
+           *
+           * This function is optimized to perform on a collection
+           * of new points, by collecting operations that are not dependent on the
+           * weights outside of the loop over all new points.
+           *
+           * The implementation does not allow for @p surrounding_points and
+           * @p new_points to point to the same array, so make sure to pass different
+           * objects into the function.
+           */
+          virtual void
+          get_new_points(const ArrayView<const Point<dim>> &surrounding_points,
+                         const Table<2, double>                 &weights,
+                         ArrayView<Point<dim>> new_points) const override;
+
+          /**
+           * Return a point on the spherical manifold which is intermediate
+           * with respect to the surrounding points.
+           */
+          virtual Point<dim>
+          get_new_point(const ArrayView<const Point<dim>> &vertices,
+                        const ArrayView<const double>          &weights) const override;
+
+        private:
+          /**
+           * A pointer to the topography model.
+           */
+          const InitialTopographyModel::Interface<dim> *topo;
+
+          /**
+           * Inner and outer radii of the spherical shell.
+           */
+          const double R0, R1;
+
+          /**
+           * Return the topography of the surface directly above the point given
+           * by the coordinates stored in the argument.
+           */
+          double topography_for_point (const Point<dim> &x_y_z) const;
+      };
+
+    }
 
     /**
      * A class that describes the geometry as a spherical shell. To be more
@@ -50,7 +185,17 @@ namespace aspect
         /**
          * Constructor.
          */
-        SphericalShell();
+        SphericalShell() = default;
+
+        /**
+         * Initialization function. This function is called once at the
+         * beginning of the program after parse_parameters is run and after
+         * the SimulatorAccess (if applicable) is initialized.
+         * This function calls the initialize function of the manifold
+         * with a pointer to the initial topography model obtained
+         * from SimulatorAccess.
+         */
+        void initialize () override;
 
         /**
          * Generate a coarse mesh for the geometry described by this class.
@@ -130,6 +275,24 @@ namespace aspect
         get_symbolic_boundary_names_map () const override;
 
         /**
+         * Return the set of periodic boundaries as described in the input
+         * file.
+         */
+        std::set<std::pair<std::pair<types::boundary_id, types::boundary_id>, unsigned int>>
+        get_periodic_boundary_pairs () const override;
+
+        /**
+         * @copydoc Interface::adjust_positions_for_periodicity
+         *
+         * Apply a rotation to all points outside of the domain
+         * to account for periodicity.
+         */
+        void
+        adjust_positions_for_periodicity (Point<dim> &position,
+                                          const ArrayView<Point<dim>> &connected_positions = {},
+                                          const ArrayView<Tensor<1, dim>> &connected_velocities = {}) const override;
+
+        /**
          * @copydoc Interface::has_curved_elements()
          *
          * Return true because we have a curved boundary.
@@ -203,6 +366,14 @@ namespace aspect
         double
         opening_angle () const;
 
+        /**
+         * Collects periodic boundaries constraints for the given geometry,
+         * which will be added to the existing @p constraints.
+         */
+        void
+        make_periodicity_constraints(const DoFHandler<dim> &dof_handler,
+                                     AffineConstraints<double> &constraints) const override;
+
       private:
         /**
          * Specify the radial subdivision of the spherical shell
@@ -218,7 +389,7 @@ namespace aspect
         /**
          * Initial surface refinement for the custom mesh cases.
          */
-        int initial_lateral_refinement;
+        unsigned int initial_lateral_refinement;
 
         /**
          * Initial surface refinement for the custom mesh cases.
@@ -246,16 +417,33 @@ namespace aspect
         int n_cells_along_circumference;
 
         /**
-         * The manifold that describes the geometry.
-         */
-        const SphericalManifold<dim> spherical_manifold;
-
-        /**
          * Set the manifold ids on all cells (also boundaries) before
          * refinement to generate well shaped cells.
          */
         void set_manifold_ids (parallel::distributed::Triangulation<dim> &triangulation) const;
 
+        /**
+         * Flag whether the 2D quarter shell is periodic in phi.
+         */
+        bool periodic;
+
+        /**
+         * An object that describes the geometry. This pointer is
+         * initialized in the initialize() function, and serves as the manifold
+         * object that the triangulation is later given in create_coarse_mesh()
+         * where the triangulation clones it.
+         *
+         * The object is marked as 'const' to make it clear that it should not
+         * be modified once created. That is because the triangulation copies it,
+         * and modifying the current object will not have any impact on the
+         * manifold used by the triangulation.
+         */
+        std::unique_ptr<const internal::SphericalManifoldWithTopography<dim>> manifold;
+
+        /**
+         * Give a symbolic name to the manifold id to be used by this class.
+         */
+        static constexpr types::manifold_id my_manifold_id = 99;
     };
   }
 }

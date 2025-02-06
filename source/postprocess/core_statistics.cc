@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -47,7 +47,7 @@ namespace aspect
       std::ostringstream screen_text;
 
       const BoundaryTemperature::DynamicCore<dim> &dynamic_core =
-        this->get_boundary_temperature_manager().template get_matching_boundary_temperature_model<BoundaryTemperature::DynamicCore<dim> >();
+        this->get_boundary_temperature_manager().template get_matching_active_plugin<BoundaryTemperature::DynamicCore<dim>>();
 
       core_data = dynamic_core.get_core_data();
 
@@ -56,7 +56,7 @@ namespace aspect
       const std::string name = "CMB heat flux out of the core (TW)";
       statistics.add_value (name, -core_data.Q/1e12);
 
-      // also make sure that the other columns filled by the this object
+      // also make sure that the other columns filled by this object
       // all show up with sufficient accuracy and in scientific notation
       statistics.set_precision (name, 3);
       statistics.set_scientific (name, true);
@@ -69,14 +69,14 @@ namespace aspect
       const std::string name1 = "CMB Temperature (K)";
       statistics.add_value (name1, core_data.Ti);
 
-      // also make sure that the other columns filled by the this object
+      // also make sure that the other columns filled by this object
       // all show up with sufficient accuracy and in scientific notation
       statistics.set_precision (name1, 2);
       statistics.set_scientific (name1, false);
 
       const std::string name2 = "Inner core radius (km)";
       statistics.add_value (name2, core_data.Ri*1e-3);
-      // also make sure that the other columns filled by the this object
+      // also make sure that the other columns filled by this object
       // all show up with sufficient accuracy and in scientific notation
       statistics.set_precision (name2, 2);
       statistics.set_scientific (name2, false);
@@ -200,9 +200,15 @@ namespace aspect
     template <int dim>
     void CoreStatistics<dim>::save (std::map<std::string, std::string> &status_strings) const
     {
+      // Serialize into a stringstream. Put the following into a code
+      // block of its own to ensure the destruction of the 'oa'
+      // archive triggers a flush() on the stringstream so we can
+      // query the completed string below.
       std::ostringstream os;
-      aspect::oarchive oa (os);
-      oa << (*this);
+      {
+        aspect::oarchive oa (os);
+        oa << (*this);
+      }
 
       status_strings["CoreStatistics"] = os.str();
     }

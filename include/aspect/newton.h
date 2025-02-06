@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,8 +31,6 @@
 
 namespace aspect
 {
-  using namespace dealii;
-
   namespace MaterialModel
   {
     /**
@@ -49,11 +47,20 @@ namespace aspect
         MaterialModelDerivatives (const unsigned int n_points);
 
         /**
-         * The derivatives of the viscosities
+         * The derivatives of the viscosities with respect to pressure.
          */
         std::vector<double> viscosity_derivative_wrt_pressure;
-        std::vector<SymmetricTensor<2,dim> > viscosity_derivative_wrt_strain_rate;
 
+        /**
+         * The derivatives of the viscosities with respect to strain rate.
+         */
+        std::vector<SymmetricTensor<2,dim>> viscosity_derivative_wrt_strain_rate;
+
+        /**
+         * The weights used for calculating the averages of viscosity
+         * derivatives when material averaging is applied.
+         */
+        std::vector<double> viscosity_derivative_averaging_weights;
     };
   }
 
@@ -234,6 +241,12 @@ namespace aspect
         void
         execute (internal::Assembly::Scratch::ScratchBase<dim>  &scratch_base,
                  internal::Assembly::CopyData::CopyDataBase<dim> &data_base) const override;
+
+        /**
+         * Create additional material models outputs for computing viscoelastic strain rate when
+         * elasticity is enabled.
+         */
+        void create_additional_material_model_outputs(MaterialModel::MaterialModelOutputs<dim> &outputs) const override;
     };
 
     /**
@@ -318,6 +331,24 @@ namespace aspect
         void
         execute(internal::Assembly::Scratch::ScratchBase<dim>  &scratch_base,
                 internal::Assembly::CopyData::CopyDataBase<dim> &data_base) const override;
+    };
+
+    /**
+     * This class assembles the right-hand-side term of the Stokes equation
+     * that is caused by the variable density in the mass conservation equation.
+     * This class approximates this term as
+     * $ - \nabla \cdot \mathbf{u} = \frac{1}{\rho} \frac{\partial \rho}{\partial t} + \frac{1}{\rho} \nabla \rho \cdot \mathbf{u}$
+     * where the right-hand side velocity is explicitly taken from the last timestep,
+     * and the density is taken from a compositional field of the type 'density'.
+     */
+    template <int dim>
+    class NewtonStokesProjectedDensityFieldTerm : public Assemblers::Interface<dim>,
+      public SimulatorAccess<dim>
+    {
+      public:
+        void
+        execute(internal::Assembly::Scratch::ScratchBase<dim>   &scratch,
+                internal::Assembly::CopyData::CopyDataBase<dim> &data) const override;
     };
   }
 }

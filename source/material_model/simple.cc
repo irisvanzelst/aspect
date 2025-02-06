@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -38,7 +38,7 @@ namespace aspect
       const unsigned int n_compositions_for_eos = std::min(this->n_compositional_fields()+1, 2u);
       EquationOfStateOutputs<dim> eos_outputs (n_compositions_for_eos);
 
-      for (unsigned int i=0; i < in.position.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const double delta_temp = in.temperature[i]-reference_T;
           const double temperature_dependence
@@ -90,15 +90,6 @@ namespace aspect
     }
 
 
-    template <int dim>
-    double
-    Simple<dim>::
-    reference_viscosity () const
-    {
-      return eta;
-    }
-
-
 
     template <int dim>
     bool
@@ -120,39 +111,40 @@ namespace aspect
         {
           EquationOfState::LinearizedIncompressible<dim>::declare_parameters (prm, 1);
 
-          prm.declare_entry ("Reference temperature", "293",
-                             Patterns::Double (0),
+          prm.declare_entry ("Reference temperature", "293.",
+                             Patterns::Double (0.),
                              "The reference temperature $T_0$. The reference temperature is used "
-                             "in both the density and viscosity formulas. Units: $\\si{K}$.");
+                             "in both the density and viscosity formulas. Units: \\si{\\kelvin}.");
           prm.declare_entry ("Viscosity", "5e24",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The value of the constant viscosity $\\eta_0$. This viscosity may be "
-                             "modified by both temperature and compositional dependencies. Units: $kg/m/s$.");
+                             "modified by both temperature and compositional dependencies. "
+                             "Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Composition viscosity prefactor", "1.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "A linear dependency of viscosity on the first compositional field. "
                              "Dimensionless prefactor. With a value of 1.0 (the default) the "
                              "viscosity does not depend on the composition. See the general documentation "
                              "of this model for a formula that states the dependence of the "
                              "viscosity on this factor, which is called $\\xi$ there.");
           prm.declare_entry ("Thermal viscosity exponent", "0.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The temperature dependence of viscosity. Dimensionless exponent. "
                              "See the general documentation "
                              "of this model for a formula that states the dependence of the "
                              "viscosity on this factor, which is called $\\beta$ there.");
           prm.declare_entry("Maximum thermal prefactor","1.0e2",
-                            Patterns::Double (0),
+                            Patterns::Double (0.),
                             "The maximum value of the viscosity prefactor associated with temperature "
                             "dependence.");
           prm.declare_entry("Minimum thermal prefactor","1.0e-2",
-                            Patterns::Double (0),
+                            Patterns::Double (0.),
                             "The minimum value of the viscosity prefactor associated with temperature "
                             "dependence.");
           prm.declare_entry ("Thermal conductivity", "4.7",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The value of the thermal conductivity $k$. "
-                             "Units: $W/m/K$.");
+                             "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
         }
         prm.leave_subsection();
       }
@@ -247,9 +239,7 @@ namespace aspect
                                    "Specifying a value of 0.0 for the minimum or maximum values will disable pre-factor limiting."
                                    "\n\n"
                                    "The compositional pre-factor for the viscosity is defined as "
-                                   "\\begin{align}"
-                                   "  \\zeta(\\mathfrak c) &= \\xi^{c_0}"
-                                   "\\end{align} "
+                                   "$ \\zeta(\\mathfrak c) = \\xi^{c_0}$ "
                                    "if the model has compositional fields and equals one otherwise. $\\xi$ "
                                    "corresponds to the parameter ``Composition viscosity prefactor'' in the "
                                    "input file."
@@ -263,11 +253,13 @@ namespace aspect
                                    "medium despite the fact that the density follows the law "
                                    "$\\rho(T)=\\rho_0(1-\\alpha(T-T_{\\text{ref}}))$. "
                                    "\n\n"
-                                   "\\note{Despite its name, this material model is not exactly ``simple'', "
+                                   ":::{note}\n"
+                                   "Despite its name, this material model is not exactly ``simple'', "
                                    "as indicated by the formulas above. While it was originally intended "
                                    "to be simple, it has over time acquired all sorts of temperature "
                                    "and compositional dependencies that weren't initially intended. "
                                    "Consequently, there is now a ``simpler'' material model that now fills "
-                                   "the role the current model was originally intended to fill.}")
+                                   "the role the current model was originally intended to fill.\n"
+                                   ":::")
   }
 }

@@ -53,25 +53,35 @@ if test ! -d "$SRC/source" -o ! -d "$SRC/include" -o ! -f "$SRC/CMakeLists.txt" 
     echo "  run_clang_tidy.sh /path/to/ASPECT"
     exit 1
 fi
-echo "SRC-DIR=$SRC"
 
-# export compile commands (so that run-clang-tidy.py works)
-ARGS=("-D" "CMAKE_EXPORT_COMPILE_COMMANDS=ON" "$@")
-
-# for a list of checks, see /.clang-tidy
-cat "$SRC/.clang-tidy"
-
-if ! [ -x "$(command -v run-clang-tidy.py)" ] || ! [ -x "$(command -v clang++)" ]; then
-    echo "make sure clang, clang++, and run-clang-tidy.py (part of clang) are in the path"
+if ! [ -x "$(command -v run-clang-tidy)" ] || ! [ -x "$(command -v clang++)" ]; then
+    echo "Error: Either the 'run-clang-tidy.py' or the 'clang++' program could not be found."
+    echo "       Make sure 'clang', 'clang++', and 'run-clang-tidy.py' (part of clang) are in the path."
     exit 2
 fi
+
+
+
+echo "SRC-DIR=$SRC"
+
+# set cmake arguments:
+# - export compile commands (so that run-clang-tidy.py works)
+# - disable unity/precompiled headers (they confuse clang tidy)
+# - append user arguments if present
+ARGS=("-D" "CMAKE_EXPORT_COMPILE_COMMANDS=ON" "-D" "ASPECT_UNITY_BUILD=OFF" "-D" "ASPECT_PRECOMPILE_HEADERS=OFF" "$@")
+
+# for a list of checks, see /.clang-tidy
+echo "###################################"
+echo "The following flags will be used for clang-tidy:"
+cat "$SRC/.clang-tidy"
+echo "###################################"
 
 CC=clang CXX=clang++ cmake "${ARGS[@]}" "$SRC" || (echo "cmake failed!"; false) || exit 2
 
 # finally run it:
 # pipe away stderr (just contains nonsensical "x warnings generated")
 # pipe output to output.txt
-run-clang-tidy.py -p . -quiet -header-filter="$SRC/include/*" 2>error.txt >output.txt
+run-clang-tidy -p . -quiet -header-filter="$SRC/include/*" 2>error.txt >output.txt
 
 if grep -E -q '(warning|error): ' output.txt; then
     grep -E '(warning|error): ' output.txt
@@ -80,4 +90,3 @@ fi
 
 echo "OK"
 exit 0
-

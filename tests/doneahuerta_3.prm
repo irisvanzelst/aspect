@@ -1,5 +1,5 @@
 ############### Global parameters
-# This is the manufactured solution of Donea & Huerta, 
+# This is the manufactured solution of Donea & Huerta,
 # Finite element methods for flow problems,
 # Wiley, 2003. page 306
 
@@ -18,6 +18,7 @@ set Pressure normalization                 = volume
 
 subsection Geometry model
   set Model name = box
+
   subsection Box
     set X extent = 1
     set Y extent = 1
@@ -45,10 +46,6 @@ end
 # As above, there is no need to set anything for the
 # temperature boundary conditions.
 
-subsection Boundary temperature model
-  set List of model names = box
-end
-
 subsection Initial temperature model
   set Model name = function
 
@@ -61,7 +58,7 @@ end
 # The following parameters describe how often we want to refine
 # the mesh globally and adaptively, what fraction of cells should
 # be refined in each adaptive refinement step, and what refinement
-# indicator to use when refining the mesh adaptively. 
+# indicator to use when refining the mesh adaptively.
 
 subsection Mesh refinement
   set Initial adaptive refinement        = 0
@@ -72,13 +69,18 @@ end
 
 ############### Parameters describing what to do with the solution
 # The final section allows us to choose which postprocessors to
-# run at the end of each time step. 
+# run at the end of each time step.
 
 subsection Postprocess
   set List of postprocessors = visualization, velocity statistics, DoneaHuertaPostprocessor
+
   subsection Visualization
     set Interpolate output = false
-    set List of output variables = density, viscosity, strain rate, gravity
+    set List of output variables = material properties, strain rate, gravity
+
+    subsection Material properties
+      set List of material properties = density, viscosity
+    end
   end
 end
 

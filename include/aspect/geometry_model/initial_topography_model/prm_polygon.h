@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -29,8 +29,6 @@ namespace aspect
 {
   namespace InitialTopographyModel
   {
-    using namespace dealii;
-
     /**
      * A class that describes an initial topography for the geometry model,
      * by defining a set of polygons on the surface from the prm file. It
@@ -77,7 +75,7 @@ namespace aspect
         /**
          * The polygons and their points are stored in this vector.
          */
-        std::vector<std::vector<Point<2> > > point_lists;
+        std::vector<std::vector<Point<2>>> point_lists;
 
     };
   }

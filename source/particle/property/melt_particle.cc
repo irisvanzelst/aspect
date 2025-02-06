@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -39,21 +39,20 @@ namespace aspect
 
       template <int dim>
       void
-      MeltParticle<dim>::update_one_particle_property(const unsigned int data_position,
-                                                      const Point<dim> &,
-                                                      const Vector<double> &solution,
-                                                      const std::vector<Tensor<1,dim> > &,
-                                                      const ArrayView<double> &data) const
+      MeltParticle<dim>::update_particle_properties(const ParticleUpdateInputs<dim> &inputs,
+                                                    typename ParticleHandler<dim>::particle_iterator_range &particles) const
       {
-        AssertThrow(this->introspection().compositional_name_exists("porosity"),
-                    ExcMessage("Particle property melt particle only works if"
-                               "there is a compositional field called porosity."));
         const unsigned int porosity_idx = this->introspection().compositional_index_for_name("porosity");
 
-        if (solution[this->introspection().component_indices.compositional_fields[porosity_idx]] > threshold_for_melt_presence)
-          data[data_position] = 1.0;
-        else
-          data[data_position] =  0.0;
+        unsigned int p = 0;
+        for (auto &particle: particles)
+          {
+            if (inputs.solution[p][this->introspection().component_indices.compositional_fields[porosity_idx]] > threshold_for_melt_presence)
+              particle.get_properties()[this->data_position] = 1.0;
+            else
+              particle.get_properties()[this->data_position] = 0.0;
+            ++p;
+          }
       }
 
       template <int dim>
@@ -65,16 +64,19 @@ namespace aspect
 
       template <int dim>
       UpdateFlags
-      MeltParticle<dim>::get_needed_update_flags () const
+      MeltParticle<dim>::get_update_flags (const unsigned int component) const
       {
-        return update_values;
+        if (this->introspection().component_masks.compositions[component] == true)
+          return update_values;
+
+        return update_default;
       }
 
       template <int dim>
-      std::vector<std::pair<std::string, unsigned int> >
+      std::vector<std::pair<std::string, unsigned int>>
       MeltParticle<dim>::get_property_information() const
       {
-        std::vector<std::pair<std::string,unsigned int> > property_information (1,std::make_pair("melt_presence",1));
+        std::vector<std::pair<std::string,unsigned int>> property_information (1,std::make_pair("melt_presence",1));
         return property_information;
       }
 
@@ -82,21 +84,13 @@ namespace aspect
       void
       MeltParticle<dim>::declare_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
+        prm.enter_subsection("Melt particle");
         {
-          prm.enter_subsection("Particles");
-          {
-            prm.enter_subsection("Melt particle");
-            {
-              prm.declare_entry ("Threshold for melt presence", "1e-3",
-                                 Patterns::Double (0,1),
-                                 "The minimum porosity that has to be present at the position of a particle "
-                                 "for it to be considered a melt particle (in the sense that the melt presence "
-                                 "property is set to 1).");
-            }
-            prm.leave_subsection();
-          }
-          prm.leave_subsection();
+          prm.declare_entry ("Threshold for melt presence", "1e-3",
+                             Patterns::Double (0., 1.),
+                             "The minimum porosity that has to be present at the position of a particle "
+                             "for it to be considered a melt particle (in the sense that the melt presence "
+                             "property is set to 1).");
         }
         prm.leave_subsection();
       }
@@ -106,17 +100,13 @@ namespace aspect
       void
       MeltParticle<dim>::parse_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
+        AssertThrow(this->introspection().compositional_name_exists("porosity"),
+                    ExcMessage("Particle property melt particle only works if"
+                               "there is a compositional field called porosity."));
+
+        prm.enter_subsection("Melt particle");
         {
-          prm.enter_subsection("Particles");
-          {
-            prm.enter_subsection("Melt particle");
-            {
-              threshold_for_melt_presence = prm.get_double ("Threshold for melt presence");
-            }
-            prm.leave_subsection();
-          }
-          prm.leave_subsection();
+          threshold_for_melt_presence = prm.get_double ("Threshold for melt presence");
         }
         prm.leave_subsection();
       }
@@ -141,4 +131,3 @@ namespace aspect
     }
   }
 }
-

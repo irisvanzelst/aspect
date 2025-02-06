@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -29,7 +29,7 @@ namespace aspect
   {
     template <int dim>
     AsciiDataLayered<dim>::AsciiDataLayered ()
-    {}
+      = default;
 
 
     template <int dim>
@@ -103,18 +103,18 @@ namespace aspect
                                               "has to be `x', `y', `composition1', `composition2' etc. "
                                               "in a 2d model and `x', `y', `z', `composition1', "
                                               "`composition2' etc. in a 3d model; i.e. "
-                                              "the columns before the lcompositional field always contains "
+                                              "the columns before the compositional field always contains "
                                               "the position of the surface along the vertical direction. "
                                               "The first column needs to ascend first, "
                                               "followed by the second in order to assign the correct data "
                                               "to the prescribed coordinates. If you use a spherical model, "
                                               "then the assumed grid changes. `x' will be replaced by the "
-                                              "azimuth angle and `y' (if 3D) by the polar angle measured "
+                                              "azimuth angle and `y' (if 3d) by the polar angle measured "
                                               "positive from the north pole. The last column will be the "
                                               "distance of the point from the origin "
                                               "(i.e. radial position). The grid in this case will be "
                                               "a latitude-longitude grid. Note that the order "
-                                              "of spherical coordinates in 3D is `phi', `theta', `r', `T'"
+                                              "of spherical coordinates in 3d is `phi', `theta', `r', `T'"
                                               "and not `theta', `phi', `r', `T' as this is "
                                               "more consistent with other ASPECT plugins. Outside of the "
                                               "region defined by the grid, the plugin will use the value "

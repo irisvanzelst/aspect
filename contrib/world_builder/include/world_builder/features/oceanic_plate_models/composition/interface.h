@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,20 +17,19 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_builder_features_oceanic_plate_composition_interface_h
-#define _world_builder_features_oceanic_plate_composition_interface_h
+#ifndef WORLD_BUILDER_FEATURES_OCEANIC_PLATE_MODELS_COMPOSITION_INTERFACE_H
+#define WORLD_BUILDER_FEATURES_OCEANIC_PLATE_MODELS_COMPOSITION_INTERFACE_H
 
-#include <vector>
-#include <map>
 
-#include <world_builder/world.h>
-#include <world_builder/parameters.h>
-#include <world_builder/point.h>
+#include "world_builder/parameters.h"
+#include "world_builder/objects/natural_coordinate.h"
 
 
 namespace WorldBuilder
 {
   class World;
+  class Parameters;
+  template <unsigned int dim> class Point;
 
   /**
    * This class is an interface for the specific plate tectonic feature classes,
@@ -71,7 +70,7 @@ namespace WorldBuilder
              * declare and read in the world builder file into the parameters class
              */
             virtual
-            void parse_entries(Parameters &prm) = 0;
+            void parse_entries(Parameters &prm, const std::vector<Point<2>> &coordinates) = 0;
 
 
             /**
@@ -79,6 +78,7 @@ namespace WorldBuilder
              */
             virtual
             double get_composition(const Point<3> &position,
+                                   const Objects::NaturalCoordinate &position_in_natural_coordinates,
                                    const double depth,
                                    const unsigned int composition_number,
                                    double composition,
@@ -89,7 +89,7 @@ namespace WorldBuilder
              * registration of the object factory.
              */
             static void registerType(const std::string &name,
-                                     void ( *)(Parameters &, const std::string &),
+                                     void ( * /*declare_entries*/)(Parameters &, const std::string &),
                                      ObjectFactory *factory);
 
 
@@ -147,22 +147,22 @@ namespace WorldBuilder
          * register it. Because this is a library, we need some extra measures
          * to ensure that the static variable is actually initialized.
          */
-#define WB_REGISTER_FEATURE_CONTINENTAL_COMPOSITION_MODEL(klass,name) \
+#define WB_REGISTER_FEATURE_OCEANIC_PLATE_COMPOSITION_MODEL(klass,name) \
   class klass##Factory : public ObjectFactory { \
     public: \
       klass##Factory() \
       { \
         Interface::registerType(#name, klass::declare_entries, this); \
       } \
-      virtual std::unique_ptr<Interface> create(World *world) { \
+      std::unique_ptr<Interface> create(World *world) override final { \
         return std::unique_ptr<Interface>(new klass(world)); \
       } \
   }; \
   static klass##Factory global_##klass##Factory;
 
-      }
-    }
-  }
-}
+      } // namespace Composition
+    } // namespace OceanicPlateModels
+  } // namespace Features
+} // namespace WorldBuilder
 
 #endif

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,20 +17,19 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_builder_types_interface_h
-#define _world_builder_types_interface_h
+#ifndef WORLD_BUILDER_TYPES_INTERFACE_H
+#define WORLD_BUILDER_TYPES_INTERFACE_H
 
-#include <string>
-#include <vector>
+#include "rapidjson/pointer.h"
+#include "assert.h"
+
 #include <memory>
-#include <map>
-
-#include <rapidjson/document.h>
-#include <rapidjson/pointer.h>
+#include <iostream>
 
 namespace WorldBuilder
 {
   class Parameters;
+
   /**
    * This class is an interface for the specific plate tectonic feature classes,
    * such as continental plate, oceanic plate and subduction zone.
@@ -40,7 +39,7 @@ namespace WorldBuilder
 
     enum class type
     {
-      None,Bool,String,Double,Int,UnsignedInt,Array,Object,List,Point2D,Point3D,CoordinateSystem,PluginSystem,Segment,ConstantLayer
+      None,Bool,String,Double,Int,UnsignedInt,Array,Object,List,Point2D,Point3D,CoordinateSystem,PluginSystem,Segment,ConstantLayer,ValueAtPoints,OneOf
     };
 
     class Interface
@@ -69,19 +68,26 @@ namespace WorldBuilder
          * clone
          */
         virtual
-        std::unique_ptr<Interface> clone() const = 0;
+        std::unique_ptr<Interface> clone() const
+        {
+          return std::unique_ptr<Interface>(clone_impl());
+        }
 
         /**
          * read in the world builder file
          */
-        virtual
+
         type get_type() const;
 
 
       protected:
-        type type_name;
+        type type_name {type::None};
+
+
+        virtual
+        Interface *clone_impl() const = 0;
     };
-  }
-}
+  } // namespace Types
+} // namespace WorldBuilder
 
 #endif

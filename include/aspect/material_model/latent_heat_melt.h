@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2013 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2013 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -29,8 +29,6 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     /**
      * A material model that implements latent heat of melting for two
      * materials: peridotite and pyroxenite. The density and thermal
@@ -39,7 +37,9 @@ namespace aspect
      * @ingroup MaterialModels
      */
     template <int dim>
-    class LatentHeatMelt : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>, public MaterialModel::MeltFractionModel<dim>
+    class LatentHeatMelt : public MaterialModel::Interface<dim>,
+      public MaterialModel::MeltFractionModel<dim>,
+      public ::aspect::SimulatorAccess<dim>
     {
       public:
         /**
@@ -68,16 +68,6 @@ namespace aspect
          * or as $\nabla \cdot \mathbf{u}=0$ (incompressible Stokes).
          */
         bool is_compressible () const override;
-        /**
-         * @}
-         */
-
-        /**
-         * @name Reference quantities
-         * @{
-         */
-        double reference_viscosity () const override;
-
         /**
          * @}
          */

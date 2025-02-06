@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -37,14 +37,12 @@ namespace aspect
 
       template <int dim>
       void
-      Position<dim>::update_one_particle_property(const unsigned int data_position,
-                                                  const Point<dim> &position,
-                                                  const Vector<double> &,
-                                                  const std::vector<Tensor<1,dim> > &,
-                                                  const ArrayView<double> &data) const
+      Position<dim>::update_particle_properties(const ParticleUpdateInputs<dim> &/*inputs*/,
+                                                typename ParticleHandler<dim>::particle_iterator_range &particles) const
       {
-        for (unsigned int i = 0; i < dim; ++i)
-          data[data_position+i] = position[i];
+        for (auto &particle: particles)
+          for (unsigned int i = 0; i < dim; ++i)
+            particle.get_properties()[this->data_position+i] = particle.get_location()[i];
       }
 
       template <int dim>
@@ -55,10 +53,10 @@ namespace aspect
       }
 
       template <int dim>
-      std::vector<std::pair<std::string, unsigned int> >
+      std::vector<std::pair<std::string, unsigned int>>
       Position<dim>::get_property_information() const
       {
-        const std::vector<std::pair<std::string,unsigned int> > property_information (1,std::make_pair("position",dim));
+        const std::vector<std::pair<std::string,unsigned int>> property_information (1,std::make_pair("position",dim));
         return property_information;
       }
     }
@@ -79,4 +77,3 @@ namespace aspect
     }
   }
 }
-

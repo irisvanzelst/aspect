@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,27 +32,11 @@ namespace aspect
 // ------------------------------ Interface -----------------------------
 
     template <int dim>
-    Interface<dim>::~Interface ()
-    {}
-
-    template <int dim>
-    void
-    Interface<dim>::initialize ()
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::update ()
-    {}
-
-
-    template <int dim>
     void
     Interface<dim>::execute (Vector<float> &error_indicators) const
     {
-      for (unsigned int i=0; i<error_indicators.size(); ++i)
-        error_indicators[i] = 0;
+      for (float &error_indicator : error_indicators)
+        error_indicator = 0;
     }
 
 
@@ -62,107 +46,24 @@ namespace aspect
     {}
 
 
-    template <int dim>
-    void
-    Interface<dim>::declare_parameters (ParameterHandler &)
-    {}
-
-
-
-    template <int dim>
-    void
-    Interface<dim>::parse_parameters (ParameterHandler &)
-    {}
-
-
 
 // ------------------------------ Manager -----------------------------
-
-    template <int dim>
-    Manager<dim>::~Manager()
-    {}
-
-
-
-    template <int dim>
-    void
-    Manager<dim>::update ()
-    {
-      Assert (mesh_refinement_objects.size() > 0, ExcInternalError());
-
-      // call the update() functions of all refinement plugins.
-      unsigned int index = 0;
-      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
-           p = mesh_refinement_objects.begin();
-           p != mesh_refinement_objects.end(); ++p, ++index)
-        {
-          try
-            {
-              (*p)->update ();
-            }
-
-          // plugins that throw exceptions usually do not result in
-          // anything good because they result in an unwinding of the stack
-          // and, if only one processor triggers an exception, the
-          // destruction of objects often causes a deadlock. thus, if
-          // an exception is generated, catch it, print an error message,
-          // and abort the program
-          catch (std::exception &exc)
-            {
-              std::cerr << std::endl << std::endl
-                        << "----------------------------------------------------"
-                        << std::endl;
-              std::cerr << "Exception on MPI process <"
-                        << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
-                        << "> while running mesh refinement plugin <"
-                        << typeid(**p).name()
-                        << ">: " << std::endl
-                        << exc.what() << std::endl
-                        << "Aborting!" << std::endl
-                        << "----------------------------------------------------"
-                        << std::endl;
-
-              // terminate the program!
-              MPI_Abort (MPI_COMM_WORLD, 1);
-            }
-          catch (...)
-            {
-              std::cerr << std::endl << std::endl
-                        << "----------------------------------------------------"
-                        << std::endl;
-              std::cerr << "Exception on MPI process <"
-                        << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
-                        << "> while running mesh refinement plugin <"
-                        << typeid(**p).name()
-                        << ">: " << std::endl;
-              std::cerr << "Unknown exception!" << std::endl
-                        << "Aborting!" << std::endl
-                        << "----------------------------------------------------"
-                        << std::endl;
-
-              // terminate the program!
-              MPI_Abort (MPI_COMM_WORLD, 1);
-            }
-        }
-    }
-
-
 
     template <int dim>
     void
     Manager<dim>::execute (Vector<float> &error_indicators) const
     {
-      Assert (mesh_refinement_objects.size() > 0, ExcInternalError());
+      Assert (this->plugin_objects.size() > 0, ExcInternalError());
 
       // call the execute() functions of all plugins we have
       // here in turns. then normalize the output vector and
       // verify that its values are non-negative numbers
-      std::vector<Vector<float> > all_error_indicators (mesh_refinement_objects.size(),
+      std::vector<Vector<float>> all_error_indicators (this->plugin_objects.size(),
                                                         Vector<float>(error_indicators.size()));
       unsigned int index = 0;
-      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
-           p = mesh_refinement_objects.begin();
-           p != mesh_refinement_objects.end(); ++p, ++index)
+      for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
+           p = this->plugin_objects.begin();
+           p != this->plugin_objects.end(); ++p, ++index)
         {
           try
             {
@@ -233,7 +134,7 @@ namespace aspect
         {
           case plus:
           {
-            for (unsigned int i=0; i<mesh_refinement_objects.size(); ++i)
+            for (unsigned int i=0; i<this->plugin_objects.size(); ++i)
               error_indicators += all_error_indicators[i];
             break;
           }
@@ -241,7 +142,7 @@ namespace aspect
           case max:
           {
             error_indicators = all_error_indicators[0];
-            for (unsigned int i=1; i<mesh_refinement_objects.size(); ++i)
+            for (unsigned int i=1; i<this->plugin_objects.size(); ++i)
               {
                 Assert (error_indicators.size() == all_error_indicators[i].size(),
                         ExcInternalError());
@@ -262,18 +163,15 @@ namespace aspect
     void
     Manager<dim>::tag_additional_cells () const
     {
-      Assert (mesh_refinement_objects.size() > 0, ExcInternalError());
+      Assert (this->plugin_objects.size() > 0, ExcInternalError());
 
       // call the tag_additional_cells() functions of all
       // plugins we have here in turns.
-      unsigned int index = 0;
-      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
-           p = mesh_refinement_objects.begin();
-           p != mesh_refinement_objects.end(); ++p, ++index)
+      for (const auto &p : this->plugin_objects)
         {
           try
             {
-              (*p)->tag_additional_cells ();
+              p->tag_additional_cells ();
             }
 
           // plugins that throw exceptions usually do not result in
@@ -290,7 +188,7 @@ namespace aspect
               std::cerr << "Exception on MPI process <"
                         << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
                         << "> while running mesh refinement plugin <"
-                        << typeid(**p).name()
+                        << typeid(*p).name()
                         << ">: " << std::endl
                         << exc.what() << std::endl
                         << "Aborting!" << std::endl
@@ -308,7 +206,7 @@ namespace aspect
               std::cerr << "Exception on MPI process <"
                         << Utilities::MPI::this_mpi_process(MPI_COMM_WORLD)
                         << "> while running mesh refinement plugin <"
-                        << typeid(**p).name()
+                        << typeid(*p).name()
                         << ">: " << std::endl;
               std::cerr << "Unknown exception!" << std::endl
                         << "Aborting!" << std::endl
@@ -331,10 +229,10 @@ namespace aspect
     namespace
     {
       std::tuple
-      <void *,
-      void *,
-      aspect::internal::Plugins::PluginList<Interface<2> >,
-      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::PluginList<Interface<2>>,
+      aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -381,7 +279,7 @@ namespace aspect
                           "whether this normalization will happen.");
         prm.declare_entry("Refinement criteria scaling factors",
                           "",
-                          Patterns::List (Patterns::Double(0)),
+                          Patterns::List (Patterns::Double (0.)),
                           "A list of scaling factors by which every individual refinement "
                           "criterion will be multiplied by. If only a single refinement "
                           "criterion is selected (using the ``Strategy'' parameter, then "
@@ -414,8 +312,8 @@ namespace aspect
                           "If multiple mesh refinement criteria are computed for each cell "
                           "(by passing a list of more than element to the \\texttt{Strategy} "
                           "parameter in this section of the input file) "
-                          "then one will have to decide which one should win when deciding "
-                          "which cell to refine. The operation that selects from these competing "
+                          "then one will have to decide which criteria should win when deciding "
+                          "which cells to refine. The operation that determines how to combine these competing "
                           "criteria is the one that is selected here. The options are:\n\n"
                           "\\begin{itemize}\n"
                           "\\item \\texttt{plus}: Add the various error indicators together and "
@@ -445,13 +343,12 @@ namespace aspect
 
       // find out which plugins are requested and the various other
       // parameters we declare here
-      std::vector<std::string> plugin_names;
       prm.enter_subsection("Mesh refinement");
       {
-        plugin_names
+        this->plugin_names
           = Utilities::split_string_list(prm.get("Strategy"));
 
-        AssertThrow(Utilities::has_unique_entries(plugin_names),
+        AssertThrow(Utilities::has_unique_entries(this->plugin_names),
                     ExcMessage("The list of strings for the parameter "
                                "'Mesh refinement/Strategy' contains entries more than once. "
                                "This is not allowed. Please check your parameter file."));
@@ -461,13 +358,13 @@ namespace aspect
         scaling_factors
           = Utilities::string_to_double(
               Utilities::split_string_list(prm.get("Refinement criteria scaling factors")));
-        AssertThrow (scaling_factors.size() == plugin_names.size()
+        AssertThrow (scaling_factors.size() == this->plugin_names.size()
                      ||
                      scaling_factors.size() == 0,
                      ExcMessage ("The number of scaling factors given here must either be "
                                  "zero or equal to the number of chosen refinement criteria."));
         if (scaling_factors.size() == 0)
-          scaling_factors = std::vector<double> (plugin_names.size(), 1.0);
+          scaling_factors = std::vector<double> (this->plugin_names.size(), 1.0);
 
         if (prm.get("Refinement criteria merge operation") == "plus")
           merge_operation = plus;
@@ -480,20 +377,19 @@ namespace aspect
 
       // go through the list, create objects and let them parse
       // their own parameters
-      AssertThrow (plugin_names.size() >= 1,
+      AssertThrow (this->plugin_names.size() >= 1,
                    ExcMessage ("You need to provide at least one mesh refinement criterion in the input file!"));
-      for (unsigned int name=0; name<plugin_names.size(); ++name)
+      for (auto &plugin_name : this->plugin_names)
         {
-          mesh_refinement_objects.push_back (std::unique_ptr<Interface<dim> >
-                                             (std::get<dim>(registered_plugins)
-                                              .create_plugin (plugin_names[name],
-                                                              "Mesh refinement::Refinement criteria merge operation")));
+          this->plugin_objects.emplace_back (std::get<dim>(registered_plugins)
+                                             .create_plugin (plugin_name,
+                                                             "Mesh refinement::Refinement criteria merge operation"));
 
-          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*mesh_refinement_objects.back()))
+          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*this->plugin_objects.back()))
             sim->initialize_simulator (this->get_simulator());
 
-          mesh_refinement_objects.back()->parse_parameters (prm);
-          mesh_refinement_objects.back()->initialize ();
+          this->plugin_objects.back()->parse_parameters (prm);
+          this->plugin_objects.back()->initialize ();
         }
     }
 
@@ -503,7 +399,7 @@ namespace aspect
     Manager<dim>::register_mesh_refinement_criterion (const std::string &name,
                                                       const std::string &description,
                                                       void (*declare_parameters_function) (ParameterHandler &),
-                                                      Interface<dim> *(*factory_function) ())
+                                                      std::unique_ptr<Interface<dim>> (*factory_function) ())
     {
       std::get<dim>(registered_plugins).register_plugin (name,
                                                          description,
@@ -533,11 +429,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<MeshRefinement::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<MeshRefinement::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<MeshRefinement::Interface<2>>::PluginInfo> *
+      internal::Plugins::PluginList<MeshRefinement::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<MeshRefinement::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<MeshRefinement::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<MeshRefinement::Interface<3>>::PluginInfo> *
+      internal::Plugins::PluginList<MeshRefinement::Interface<3>>::plugins = nullptr;
     }
   }
 
@@ -548,5 +444,7 @@ namespace aspect
   template class Manager<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

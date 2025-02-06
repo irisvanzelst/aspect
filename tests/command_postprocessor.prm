@@ -4,10 +4,6 @@
 set Dimension = 2
 set End time                               = 0
 
-subsection Boundary temperature model
-  set List of model names = box
-end
-
 subsection Geometry model
   set Model name = box
 end
@@ -28,10 +24,6 @@ subsection Mesh refinement
   set Initial global refinement          = 2
   set Initial adaptive refinement        = 0
 end
-
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
 
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = 0,1,2,3

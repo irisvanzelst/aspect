@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,15 +17,14 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_builder_coordinate_systems_cartesian_h
-#define _world_builder_coordinate_systems_cartesian_h
+#ifndef WORLD_BUILDER_COORDINATE_SYSTEMS_CARTESIAN_H
+#define WORLD_BUILDER_COORDINATE_SYSTEMS_CARTESIAN_H
 
-#include <world_builder/utilities.h>
-#include <world_builder/coordinate_systems/interface.h>
-
+#include "world_builder/coordinate_systems/interface.h"
 
 namespace WorldBuilder
 {
+
   namespace CoordinateSystems
   {
     /**
@@ -39,7 +38,7 @@ namespace WorldBuilder
      * doesn't do anything with the coordinates, but is needed to have a common
      * interface for all the geometry models.
      */
-    class Cartesian : public Interface
+    class Cartesian final : public Interface
     {
       public:
         /**
@@ -50,7 +49,7 @@ namespace WorldBuilder
         /**
          * Destructor
          */
-        ~Cartesian();
+        ~Cartesian() override final;
 
         /**
          * declare and read in the world builder file into the parameters class
@@ -61,22 +60,20 @@ namespace WorldBuilder
         /**
          * declare and read in the world builder file into the parameters class
          */
-        virtual
-        void parse_entries(Parameters &prm);
+        void parse_entries(Parameters &prm) override final;
+
 
         /**
          * Returns what the natural coordinate system for this Coordinate System is.
          */
-        virtual
-        CoordinateSystem natural_coordinate_system() const;
+        CoordinateSystem natural_coordinate_system() const override final;
 
         /**
          * Returns what method should be used to go down with an angle into
          * the domain.
          * \sa DepthMethod
          */
-        virtual
-        DepthMethod depth_method() const;
+        DepthMethod depth_method() const override final;
 
         /**
          * Takes the Cartesian points (x,z or x,y,z) and returns standardized
@@ -85,30 +82,33 @@ namespace WorldBuilder
          * model it  will be (radius, longitude) in 2d and (radius, longitude,
          * latitude) in 3d.
          */
-        virtual
-        std::array<double,3> cartesian_to_natural_coordinates(const std::array<double,3> &position) const;
+        std::array<double,3> cartesian_to_natural_coordinates(const std::array<double,3> &position) const override final;
 
         /**
          * Undoes the action of cartesian_to_natural_coordinates, and turns the
          * coordinate system which is most 'natural' to the geometry model into
          * Cartesian coordinates.
          */
-        virtual
-        std::array<double,3> natural_to_cartesian_coordinates(const std::array<double,3> &position) const;
+        std::array<double,3> natural_to_cartesian_coordinates(const std::array<double,3> &position) const override final;
 
 
         /**
          * Computes the distance between two points which are on the same depth.
          * The input is two 3d points at that depth. It is implemented as the
          */
-        virtual
-        double distance_between_points_at_same_depth(const Point<3> &point_1, const Point<3> &point_2) const;
+        double distance_between_points_at_same_depth(const Point<3> &point_1, const Point<3> &point_2) const override final;
 
+        /**
+         * Returns the max model depth. This always returns infinity for Cartesian
+         * models.
+         */
+        virtual
+        double max_model_depth() const override final;
 
       private:
 
     };
-  }
-}
+  } // namespace CoordinateSystems
+} // namespace WorldBuilder
 
 #endif

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,28 +32,33 @@ namespace aspect
       DynamicTopography ()
         :
         DataPostprocessorScalar<dim> ("dynamic_topography",
-                                      update_quadrature_points)
+                                      update_quadrature_points),
+        Interface<dim>("m")
       {}
+
+
 
       template <int dim>
       void
       DynamicTopography<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
-        for (unsigned int q=0; q<computed_quantities.size(); ++q)
-          computed_quantities[q](0) = 0;
+        // Initialize everything to zero, so that we can ignore faces we are
+        // not interested in (namely, those not labeled as 'top' or 'bottom'
+        for (auto &quantity : computed_quantities)
+          quantity(0) = 0;
 
         const Postprocess::DynamicTopography<dim> &dynamic_topography =
-          this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::DynamicTopography<dim> >();
+          this->get_postprocess_manager().template get_matching_active_plugin<Postprocess::DynamicTopography<dim>>();
 
-        auto cell = input_data.template get_cell<DoFHandler<dim> >();
+        auto cell = input_data.template get_cell<dim>();
 
         // We only want to output dynamic topography at the top and bottom
         // boundary, so only compute it if the current cell has
         // a face at the top or bottom boundary.
         bool cell_at_top_or_bottom_boundary = false;
-        for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+        for (const unsigned int f : cell->face_indices())
           if (cell->at_boundary(f) &&
               (this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "top" ||
                this->get_geometry_model().translate_id_to_symbol_name (cell->face(f)->boundary_id()) == "bottom"))
@@ -96,7 +101,7 @@ namespace aspect
       std::list<std::string>
       DynamicTopography<dim>::required_other_postprocessors() const
       {
-        return std::list<std::string> (1, "dynamic topography");
+        return {"dynamic topography"};
       }
     }
   }
@@ -113,25 +118,10 @@ namespace aspect
       ASPECT_REGISTER_VISUALIZATION_POSTPROCESSOR(DynamicTopography,
                                                   "dynamic topography",
                                                   "A visualization output object that generates output "
-                                                  "for the dynamic topography at the top and bottom of the model space. The approach to determine the "
-                                                  "dynamic topography requires us to compute the stress tensor and "
-                                                  "evaluate the component of it in the direction in which "
-                                                  "gravity acts. In other words, we compute "
-                                                  "$\\sigma_{rr}={\\hat g}^T(2 \\eta \\varepsilon(\\mathbf u)-\\frac 13 (\\textrm{div}\\;\\mathbf u)I)\\hat g - p_d$ "
-                                                  "where $\\hat g = \\mathbf g/\\|\\mathbf g\\|$ is the direction of "
-                                                  "the gravity vector $\\mathbf g$ and $p_d=p-p_a$ is the dynamic "
-                                                  "pressure computed by subtracting the adiabatic pressure $p_a$ "
-                                                  "from the total pressure $p$ computed as part of the Stokes "
-                                                  "solve. From this, the dynamic "
-                                                  "topography is computed using the formula "
-                                                  "$h=\\frac{\\sigma_{rr}}{(\\mathbf g \\cdot \\mathbf n)  \\rho}$ where $\\rho$ "
-                                                  "is the density at the cell center. For the bottom surface we chose the convection "
-                                                  "that positive values are up (out) and negative values are in (down), analogous to "
-                                                  "the deformation of the upper surface. "
-                                                  "Note that this implementation takes "
-                                                  "the direction of gravity into account, which means that reversing the flow "
-                                                  "in backward advection calculations will not reverse the instantaneous topography "
-                                                  "because the reverse flow will be divided by the reverse surface gravity."
+                                                  "for the dynamic topography at the top and bottom of the model space. "
+                                                  "The actual computation of this topography is handled inside the "
+                                                  "'dynamic topography' postprocessor, please check its documentation "
+                                                  "for details about the numerical methods."
                                                   "\n\n"
                                                   "Strictly speaking, the dynamic topography is of course a "
                                                   "quantity that is only of interest at the surface. However, "
@@ -139,7 +129,14 @@ namespace aspect
                                                   "within which we produce data for visualization. You probably "
                                                   "only want to visualize whatever data this postprocessor generates "
                                                   "at the surface of your domain and simply ignore the rest of the "
-                                                  "data generated.")
+                                                  "data generated."
+                                                  "\n\n"
+                                                  "Alternatively, consider using the "
+                                                  "\"surface dynamic topography\" visualization postprocessor "
+                                                  "to only output the dynamic topography at the boundary of "
+                                                  "the domain."
+                                                  "\n\n"
+                                                  "Physical units: \\si{\\meter}.")
     }
   }
 }

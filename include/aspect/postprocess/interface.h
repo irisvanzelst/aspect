@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -38,8 +38,6 @@
 
 namespace aspect
 {
-  using namespace dealii;
-
   template <int dim> class Simulator;
   template <int dim> class SimulatorAccess;
 
@@ -68,27 +66,9 @@ namespace aspect
      * @ingroup Postprocessing
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Does nothing but is virtual so that derived classes
-         * destructors are also virtual.
-         */
-        virtual
-        ~Interface ();
-
-        /**
-         * Initialize function.
-         */
-        virtual void initialize ();
-
-        /**
-         * Update function. This should be called before each postprocessor
-         * is run and allows an opportunity to prepare/update temporary data
-         */
-        virtual void update ();
-
         /**
          * Execute this postprocessor. Derived classes will implement this
          * function to do whatever they want to do to evaluate the solution at
@@ -111,33 +91,6 @@ namespace aspect
         execute (TableHandler &statistics) = 0;
 
         /**
-         * Declare the parameters this class takes through input files.
-         * Derived classes should overload this function if they actually do
-         * take parameters; this class declares a fall-back function that does
-         * nothing, so that postprocessor classes that do not take any
-         * parameters do not have to do anything at all.
-         *
-         * This function is static (and needs to be static in derived classes)
-         * so that it can be called without creating actual objects (because
-         * declaring parameters happens before we read the input file and thus
-         * at a time when we don't even know yet which postprocessor objects
-         * we need).
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation in this class does nothing, so that
-         * derived classes that do not need any parameters do not need to
-         * implement it.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
-
-        /**
          * A function that is used to indicate to the postprocessor manager which
          * other postprocessor(s) the current one depends upon. The returned
          * list contains the names (as strings, as you would write them in
@@ -154,8 +107,10 @@ namespace aspect
          * we can ensure using the current function). To do so, a postprocessor
          * of course needs to be able to access these other postprocessors.
          * This can be done by deriving your postprocessor from
-         * SimulatorAccess, and then using the SimulatorAccess::find_postprocessor()
-         * function.
+         * SimulatorAccess, and then using the
+         * SimulatorAccess::get_postprocess_manager() function, followed
+         * by asking the resulting object via get_matching_active_plugin()
+         * for a specific postprocessor object.
          */
         virtual
         std::list<std::string>
@@ -215,7 +170,7 @@ namespace aspect
      * @ingroup Postprocessing
      */
     template <int dim>
-    class Manager : public ::aspect::SimulatorAccess<dim>
+    class Manager : public Plugins::ManagerBase<Interface<dim>>, public SimulatorAccess<dim>
     {
       public:
         /**
@@ -226,31 +181,26 @@ namespace aspect
          * The function returns a concatenation of the text returned by the
          * individual postprocessors.
          */
-        std::list<std::pair<std::string,std::string> >
+        std::list<std::pair<std::string,std::string>>
         execute (TableHandler &statistics);
-
-        /**
-         * Go through the list of all postprocessors that have been selected
-         * in the input file (and are consequently currently active) and see
-         * if one of them has the desired type specified by the template
-         * argument. If so, return a pointer to it. If no postprocessor is
-         * active that matches the given type, return a nullptr.
-         *
-         * @deprecated Use has_matching_postprocessor() and
-         * get_matching_postprocessor() instead.
-         */
-        template <typename PostprocessorType>
-        DEAL_II_DEPRECATED
-        PostprocessorType *
-        find_postprocessor () const;
 
         /**
          * Go through the list of all postprocessors that have been selected
          * in the input file (and are consequently currently active) and return
          * true if one of them has the desired type specified by the template
          * argument.
+         *
+         * This function can only be called if the given template type (the first template
+         * argument) is a class derived from the Interface class in this namespace.
+         *
+         * @deprecated Instead of this function, use the
+         *   Plugins::ManagerBase::has_matching_active_plugin() and
+         *   Plugins::ManagerBase::get_matching_active_plugin() functions of the base
+         *   class of the current class.
          */
-        template <typename PostprocessorType>
+        template <typename PostprocessorType,
+                  typename = typename std::enable_if_t<std::is_base_of<Interface<dim>,PostprocessorType>::value>>
+        DEAL_II_DEPRECATED
         bool
         has_matching_postprocessor () const;
 
@@ -258,11 +208,21 @@ namespace aspect
          * Go through the list of all postprocessors that have been selected
          * in the input file (and are consequently currently active) and see
          * if one of them has the type specified by the template
-         * argument or can be casted to that type. If so, return a reference
+         * argument or can be cast to that type. If so, return a reference
          * to it. If no postprocessor is active that matches the given type,
          * throw an exception.
+         *
+         * This function can only be called if the given template type (the first template
+         * argument) is a class derived from the Interface class in this namespace.
+         *
+         * @deprecated Instead of this function, use the
+         *   Plugins::ManagerBase::has_matching_active_plugin() and
+         *   Plugins::ManagerBase::get_matching_active_plugin() functions of the base
+         *   class of the current class.
          */
-        template <typename PostprocessorType>
+        template <typename PostprocessorType,
+                  typename = typename std::enable_if_t<std::is_base_of<Interface<dim>,PostprocessorType>::value>>
+        DEAL_II_DEPRECATED
         const PostprocessorType &
         get_matching_postprocessor () const;
 
@@ -280,7 +240,7 @@ namespace aspect
          * let these objects read their parameters as well.
          */
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
         /**
          * Write the data of this object to a stream for the purpose of
@@ -323,7 +283,7 @@ namespace aspect
         register_postprocessor (const std::string &name,
                                 const std::string &description,
                                 void (*declare_parameters_function) (ParameterHandler &),
-                                Interface<dim> *(*factory_function) ());
+                                std::unique_ptr<Interface<dim>> (*factory_function) ());
 
         /**
          * For the current plugin subsystem, write a connection graph of all of the
@@ -346,12 +306,6 @@ namespace aspect
                         << "Could not find entry <"
                         << arg1
                         << "> among the names of registered postprocessors.");
-      private:
-        /**
-         * A list of postprocessor objects that have been requested in the
-         * parameter file.
-         */
-        std::vector<std::unique_ptr<Interface<dim> > > postprocessors;
     };
 
 
@@ -365,7 +319,7 @@ namespace aspect
       // let all the postprocessors save their data in a map and then
       // serialize that
       std::map<std::string,std::string> saved_text;
-      for (const auto &p : postprocessors)
+      for (const auto &p : this->plugin_objects)
         p->save (saved_text);
 
       ar &saved_text;
@@ -384,60 +338,30 @@ namespace aspect
       std::map<std::string,std::string> saved_text;
       ar &saved_text;
 
-      for (auto &p : postprocessors)
+      for (auto &p : this->plugin_objects)
         p->load (saved_text);
     }
 
 
 
     template <int dim>
-    template <typename PostprocessorType>
-    inline
-    PostprocessorType *
-    Manager<dim>::find_postprocessor () const
-    {
-      for (auto &p : postprocessors)
-        if (PostprocessorType *x = dynamic_cast<PostprocessorType *> ( p.get()) )
-          return x;
-      return nullptr;
-    }
-
-
-
-    template <int dim>
-    template <typename PostprocessorType>
+    template <typename PostprocessorType, typename>
     inline
     bool
     Manager<dim>::has_matching_postprocessor () const
     {
-      for (const auto &p : postprocessors)
-        if (Plugins::plugin_type_matches<PostprocessorType>(*p))
-          return true;
-
-      return false;
+      return this->template has_matching_active_plugin<PostprocessorType>();
     }
 
 
 
     template <int dim>
-    template <typename PostprocessorType>
+    template <typename PostprocessorType, typename>
     inline
     const PostprocessorType &
     Manager<dim>::get_matching_postprocessor () const
     {
-      AssertThrow(has_matching_postprocessor<PostprocessorType> (),
-                  ExcMessage("You asked Postprocess::Manager::get_matching_postprocessor() for a "
-                             "postprocessor of type <" + boost::core::demangle(typeid(PostprocessorType).name()) + "> "
-                             "that could not be found in the current model. Activate this "
-                             "postprocessor in the input file."));
-
-      typename std::vector<std::unique_ptr<Interface<dim> > >::const_iterator postprocessor;
-      for (const auto &p : postprocessors)
-        if (Plugins::plugin_type_matches<PostprocessorType>(*p))
-          return Plugins::get_plugin_as_type<PostprocessorType>(*p);
-
-      // We will never get here, because we had the Assert above. Just to avoid warnings.
-      return Plugins::get_plugin_as_type<PostprocessorType>(*(*postprocessor));
+      return this->template get_matching_active_plugin<PostprocessorType>();
     }
 
 
@@ -453,10 +377,10 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_POSTPROCESSOR_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::Interface<2>,classname<2> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::Interface<2>,classname<2>> \
     dummy_ ## classname ## _2d (&aspect::Postprocess::Manager<2>::register_postprocessor, \
                                 name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::Interface<3>,classname<3> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::Postprocess::Interface<3>,classname<3>> \
     dummy_ ## classname ## _3d (&aspect::Postprocess::Manager<3>::register_postprocessor, \
                                 name, description); \
   }

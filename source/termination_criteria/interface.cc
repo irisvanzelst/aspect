@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,29 +32,10 @@ namespace aspect
 // ------------------------------ Interface -----------------------------
 
     template <int dim>
-    Interface<dim>::~Interface ()
-    {}
-
-    template <int dim>
-    void
-    Interface<dim>::initialize ()
-    {}
-
-    template <int dim>
-    void
-    Interface<dim>::declare_parameters (ParameterHandler &)
-    {}
-
-    template <int dim>
     double Interface<dim>::check_for_last_time_step (const double time_step) const
     {
       return time_step;
     }
-
-    template <int dim>
-    void
-    Interface<dim>::parse_parameters (ParameterHandler &)
-    {}
 
 
 
@@ -64,11 +45,9 @@ namespace aspect
     double Manager<dim>::check_for_last_time_step (const double time_step) const
     {
       double new_time_step = time_step;
-      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
-           p = termination_objects.begin();
-           p != termination_objects.end(); ++p)
+      for (const auto &p : this->plugin_objects)
         {
-          double current_time_step = (*p)->check_for_last_time_step (new_time_step);
+          double current_time_step = p->check_for_last_time_step (new_time_step);
 
           AssertThrow (current_time_step > 0,
                        ExcMessage("Time step must be greater than 0."));
@@ -81,7 +60,7 @@ namespace aspect
     }
 
     template <int dim>
-    std::pair<bool,bool>
+    bool
     Manager<dim>::execute () const
     {
       bool terminate_simulation = false;
@@ -89,10 +68,10 @@ namespace aspect
 
       // call the execute() functions of all plugins we have
       // here in turns.
-      std::list<std::string>::const_iterator  itn = termination_obj_names.begin();
-      for (typename std::list<std::unique_ptr<Interface<dim> > >::const_iterator
-           p = termination_objects.begin();
-           p != termination_objects.end(); ++p,++itn)
+      std::vector<std::string>::const_iterator  itn = this->plugin_names.begin();
+      for (typename std::list<std::unique_ptr<Interface<dim>>>::const_iterator
+           p = this->plugin_objects.begin();
+           p != this->plugin_objects.end(); ++p,++itn)
         {
           try
             {
@@ -157,8 +136,7 @@ namespace aspect
             }
         }
 
-      return std::make_pair (terminate_simulation,
-                             do_checkpoint_on_terminate);
+      return terminate_simulation;
     }
 
 
@@ -168,10 +146,10 @@ namespace aspect
     namespace
     {
       std::tuple
-      <void *,
-      void *,
-      aspect::internal::Plugins::PluginList<Interface<2> >,
-      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::PluginList<Interface<2>>,
+      aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -184,11 +162,6 @@ namespace aspect
       // choose from
       prm.enter_subsection("Termination criteria");
       {
-        // Whether to checkpoint the simulation right before termination
-        prm.declare_entry("Checkpoint on termination", "false",
-                          Patterns::Bool (),
-                          "Whether to checkpoint the simulation right before termination.");
-
         // construct a string for Patterns::MultipleSelection that
         // contains the names of all registered termination criteria
         const std::string pattern_of_names
@@ -221,38 +194,32 @@ namespace aspect
               ExcMessage ("No termination criteria plugins registered!?"));
 
       // first find out which plugins are requested
-      std::vector<std::string> plugin_names;
       prm.enter_subsection("Termination criteria");
       {
-        do_checkpoint_on_terminate = prm.get_bool("Checkpoint on termination");
-
-        plugin_names = Utilities::split_string_list(prm.get("Termination criteria"));
-        AssertThrow(Utilities::has_unique_entries(plugin_names),
+        this->plugin_names = Utilities::split_string_list(prm.get("Termination criteria"));
+        AssertThrow(Utilities::has_unique_entries(this->plugin_names),
                     ExcMessage("The list of strings for the parameter "
                                "'Termination criteria/Termination criteria' contains entries more than once. "
                                "This is not allowed. Please check your parameter file."));
 
         // as described, the end time plugin is always active
-        if (std::find (plugin_names.begin(), plugin_names.end(), "end time")
-            == plugin_names.end())
-          plugin_names.emplace_back("end time");
+        if (std::find (this->plugin_names.begin(), this->plugin_names.end(), "end time")
+            == this->plugin_names.end())
+          this->plugin_names.emplace_back("end time");
       }
       prm.leave_subsection();
 
       // go through the list, create objects, initialize them, and let them parse
       // their own parameters
-      for (unsigned int name=0; name<plugin_names.size(); ++name)
+      for (const auto &plugin_name : this->plugin_names)
         {
-          termination_objects.push_back (std::unique_ptr<Interface<dim> >
-                                         (std::get<dim>(registered_plugins)
-                                          .create_plugin (plugin_names[name],
-                                                          "Termination criteria::Termination criteria")));
-          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*termination_objects.back()))
+          this->plugin_objects.emplace_back (std::get<dim>(registered_plugins)
+                                             .create_plugin (plugin_name,
+                                                             "Termination criteria::Termination criteria"));
+          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*this->plugin_objects.back()))
             sim->initialize_simulator (this->get_simulator());
-          termination_objects.back()->parse_parameters (prm);
-          termination_objects.back()->initialize ();
-
-          termination_obj_names.push_back(plugin_names[name]);
+          this->plugin_objects.back()->parse_parameters (prm);
+          this->plugin_objects.back()->initialize ();
         }
     }
 
@@ -262,7 +229,7 @@ namespace aspect
     Manager<dim>::register_termination_criterion (const std::string &name,
                                                   const std::string &description,
                                                   void (*declare_parameters_function) (ParameterHandler &),
-                                                  Interface<dim> *(*factory_function) ())
+                                                  std::unique_ptr<Interface<dim>> (*factory_function) ())
     {
       std::get<dim>(registered_plugins).register_plugin (name,
                                                          description,
@@ -292,11 +259,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<TerminationCriteria::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<TerminationCriteria::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<TerminationCriteria::Interface<2>>::PluginInfo> *
+      internal::Plugins::PluginList<TerminationCriteria::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<TerminationCriteria::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<TerminationCriteria::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<TerminationCriteria::Interface<3>>::PluginInfo> *
+      internal::Plugins::PluginList<TerminationCriteria::Interface<3>>::plugins = nullptr;
     }
   }
 
@@ -307,5 +274,7 @@ namespace aspect
   template class Manager<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

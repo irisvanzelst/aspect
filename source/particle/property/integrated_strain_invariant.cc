@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -34,38 +34,43 @@ namespace aspect
         data.push_back(0.0);
       }
 
+
+
       template <int dim>
       void
-      IntegratedStrainInvariant<dim>::update_one_particle_property(const unsigned int data_position,
-                                                                   const Point<dim> &,
-                                                                   const Vector<double> &,
-                                                                   const std::vector<Tensor<1,dim> > &gradients,
-                                                                   const ArrayView<double> &data) const
+      IntegratedStrainInvariant<dim>::update_particle_properties(const ParticleUpdateInputs<dim> &inputs,
+                                                                 typename ParticleHandler<dim>::particle_iterator_range &particles) const
       {
 
+        unsigned int p = 0;
+        for (auto &particle: particles)
+          {
+            // Integrated strain invariant from prior time step
+            const auto data = particle.get_properties();
+            const double old_strain = data[this->data_position];
 
-        // Integrated strain invariant from prior time step
-        double old_strain = data[data_position];
+            // Current timestep
+            const double dt = this->get_timestep();
 
-        // Current timestep
-        const double dt = this->get_timestep();
+            // Velocity gradients
+            Tensor<2,dim> grad_u;
+            for (unsigned int d=0; d<dim; ++d)
+              grad_u[d] = inputs.gradients[p][this->introspection().component_indices.velocities[d]];
 
-        // Velocity gradients
-        Tensor<2,dim> grad_u;
-        for (unsigned int d=0; d<dim; ++d)
-          grad_u[d] = gradients[d];
+            // Calculate strain rate from velocity gradients
+            const SymmetricTensor<2,dim> strain_rate = symmetrize (grad_u);
 
-        // Calculate strain rate from velocity gradients
-        const SymmetricTensor<2,dim> strain_rate = symmetrize (grad_u);
+            // Calculate strain rate second invariant
+            const double edot_ii = std::sqrt(std::max(-second_invariant(deviator(strain_rate)), 0.));
 
-        // Calculate strain rate second invariant
-        const double edot_ii = std::sqrt(std::fabs(second_invariant(deviator(strain_rate))));
-
-        // New strain is the old strain plus dt*edot_ii
-        const double new_strain = old_strain + dt*edot_ii;
-        data[data_position] = new_strain;
-
+            // New strain is the old strain plus dt*edot_ii
+            const double new_strain = old_strain + dt*edot_ii;
+            data[this->data_position] = new_strain;
+            ++p;
+          }
       }
+
+
 
       template <int dim>
       UpdateTimeFlags
@@ -74,18 +79,25 @@ namespace aspect
         return update_time_step;
       }
 
-      template <int dim>
-      UpdateFlags
-      IntegratedStrainInvariant<dim>::get_needed_update_flags () const
-      {
-        return update_gradients;
-      }
+
 
       template <int dim>
-      std::vector<std::pair<std::string, unsigned int> >
+      UpdateFlags
+      IntegratedStrainInvariant<dim>::get_update_flags (const unsigned int component) const
+      {
+        if (this->introspection().component_masks.velocities[component] == true)
+          return update_gradients;
+
+        return update_default;
+      }
+
+
+
+      template <int dim>
+      std::vector<std::pair<std::string, unsigned int>>
       IntegratedStrainInvariant<dim>::get_property_information() const
       {
-        const std::vector<std::pair<std::string,unsigned int> > property_information (1,std::make_pair("integrated strain invariant",1));
+        const std::vector<std::pair<std::string,unsigned int>> property_information (1,std::make_pair("integrated strain invariant",1));
         return property_information;
       }
     }
@@ -111,4 +123,3 @@ namespace aspect
     }
   }
 }
-

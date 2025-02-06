@@ -1,7 +1,7 @@
 /**
  * @page changes_between_1.0_and_1.1 Changes between version 1.0 and version 1.1
  *
- * <p> This is the list of changes made after the release of Aspect version
+ * <p> This is the list of changes made after the release of ASPECT version
  * 1.0 for version 1.1. All entries are signed with the names of the author.
  * </p>
  *
@@ -19,7 +19,7 @@
  * (Timo Heister, 2014/05/29)
  *
  * <li> Changed: The adiabatic reference profile is now defined in a plugin
- * architecture as well. Currently, only the old funtionality of having a
+ * architecture as well. Currently, only the old functionality of having a
  * constant profile, which is computed before the first timestep, is included.
  * However, now there is the possibility for more simple or more realistic
  * user-written plugins (like an analytic function, or a profile that is
@@ -69,7 +69,7 @@
  * (Timo Heister, 2014/05/27)
  *
  * <li> Fixed: The GPlates plugin now correctly handles meshes created by
- * GPlates 1.4 and later. Previous Aspect versions may only read in files
+ * GPlates 1.4 and later. Previous ASPECT versions may only read in files
  * created by GPlates 1.3.
  * <br>
  * (Rene Gassmoeller, 2014/05/23)
@@ -136,7 +136,7 @@
  * (Juliane Dannberg, 2014/05/21)
  *
  * <li> New: There is now a simple compressible material model with constant
- * compressibility resulting in an exponential dependeny of density on
+ * compressibility resulting in an exponential dependency of density on
  * pressure and a linear dependence on temperature deviation from the
  * adiabatic profile. All other material properties are constant.
  * <br>
@@ -183,7 +183,7 @@
  * <br>
  * (Jacqueline Austermann, 2014/05/19)
  *
- * <li>Fixed: The GPlates cookbook in Aspect-1.0 contained a bug that
+ * <li>Fixed: The GPlates cookbook in ASPECT-1.0 contained a bug that
  * prevented it from using the GPlates plugin. This is fixed now.
  * <br>
  * (Rene Gassmoeller, 2014/05/18)

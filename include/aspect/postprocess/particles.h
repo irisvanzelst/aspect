@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -24,10 +24,14 @@
 #include <aspect/postprocess/interface.h>
 
 #include <aspect/simulator_access.h>
+#include <aspect/particle/property/interface.h>
 
 #include <deal.II/particles/particle_handler.h>
 #include <deal.II/base/data_out_base.h>
+
+#include <thread>
 #include <tuple>
+
 
 namespace aspect
 {
@@ -42,12 +46,12 @@ namespace aspect
        * dimension of zero (the dimension of the particle / point), and a space dimension
        * of dim (the dimension in which this zero-dimensional particle lives).
        */
-      template<int dim>
+      template <int dim>
       class ParticleOutput : public dealii::DataOutInterface<0,dim>
       {
         public:
           /**
-           * This function prepares the data for writing. It reads the data from @p particle_hander and their
+           * This function prepares the data for writing. It reads the data from @p particle_handler and their
            * property information from @p property_information, and builds a list of patches that is stored
            * internally until the destructor is called. This function needs to be called before one of the
            * write function of the base class can be called to write the output data.
@@ -61,35 +65,30 @@ namespace aspect
           /**
            * Implementation of the corresponding function of the base class.
            */
-          const std::vector<DataOutBase::Patch<0,dim> > &
+          const std::vector<DataOutBase::Patch<0,dim>> &
           get_patches () const override;
 
           /**
            * Implementation of the corresponding function of the base class.
            */
-          std::vector< std::string >
+          std::vector<std::string>
           get_dataset_names () const override;
 
           /**
            * Implementation of the corresponding function of the base class.
            */
-#if DEAL_II_VERSION_GTE(9,1,0)
           std::vector<
           std::tuple<unsigned int,
               unsigned int,
               std::string,
-              DataComponentInterpretation::DataComponentInterpretation> >
+              DataComponentInterpretation::DataComponentInterpretation>>
               get_nonscalar_data_ranges () const override;
-#else
-          std::vector<std::tuple<unsigned int, unsigned int, std::string> >
-          get_vector_data_ranges() const override;
-#endif
 
           /**
            * Output information that is filled by build_patches() and
            * written by the write function of the base class.
            */
-          std::vector<DataOutBase::Patch<0,dim> > patches;
+          std::vector<DataOutBase::Patch<0,dim>> patches;
 
           /**
            * A list of field names for all data components stored in patches.
@@ -99,17 +98,12 @@ namespace aspect
           /**
            * Store which of the data fields are vectors.
            */
-#if DEAL_II_VERSION_GTE(9,1,0)
           std::vector<
           std::tuple<unsigned int,
               unsigned int,
               std::string,
-              DataComponentInterpretation::DataComponentInterpretation> >
+              DataComponentInterpretation::DataComponentInterpretation>>
               vector_datasets;
-#else
-          std::vector<std::tuple<unsigned int, unsigned int, std::string> >
-          vector_datasets;
-#endif
       };
     }
 
@@ -219,36 +213,38 @@ namespace aspect
         std::vector<std::string> output_formats;
 
         /**
-         * A list of pairs (time, pvtu_filename) that have so far been written
-         * and that we will pass to DataOutInterface::write_pvd_record
-         * to create a master file that can make the association
+         * A map between particle manager name and list of pairs of
+         * (time, pvtu_filename) that have so far been written.
+         * We will pass these lists to DataOutInterface::write_pvd_record
+         * to create a description file that can make the association
          * between simulation time and corresponding file name (this
          * is done because there is no way to store the simulation
-         * time inside the .pvtu or .vtu files).
+         * time inside the .pvtu or .vtu files). We store one list
+         * per particle manager, because each particle manager will
+         * have its own output directory and description file.
          */
-        std::vector<std::pair<double,std::string> > times_and_pvtu_file_names;
+        std::map<std::string,std::vector<std::pair<double,std::string>>> times_and_pvtu_file_names;
 
         /**
-         * A corresponding variable that we use for the .visit files created
-         * by DataOutInterface::write_visit_record. The second part of a
-         * pair contains all files that together form a time step.
-         */
-        std::vector<std::pair<double,std::vector<std::string> > > times_and_vtu_file_names;
-
-        /**
-         * A list of list of filenames, sorted by timestep, that correspond to
-         * what has been created as output. This is used to create a master
+         * A map between particle manager name and list of list of
+         * filenames that corresponds to
+         * what has been created as output. This list is sorted by
+         * filename and is used to create a descriptive
          * .visit file for the entire simulation.
+         * We store one list per particle manager, because each particle
+         * manager will have its own output directory and description file.
          */
-        std::vector<std::vector<std::string> > output_file_names_by_timestep;
+        std::map<std::string,std::vector<std::vector<std::string>>> output_file_names_by_timestep;
 
         /**
-         * A set of data related to XDMF file sections describing the HDF5
-         * heavy data files created. These contain things such as the
-         * dimensions and names of data written at all steps during the
-         * simulation.
+         * A map between particle manager name and a list of data for
+         * the XDMF file sections describing the HDF5 files created.
+         * These XDMF data contain things such as the dimensions
+         * and names of data written at all steps during the simulation.
+         * We store one list per particle manager, because each particle
+         * manager will have its own output directory and description file.
          */
-        std::vector<XDMFEntry>  xdmf_entries;
+        std::map<std::string,std::vector<XDMFEntry>>  xdmf_entries;
 
         /**
          * VTU file output supports grouping files from several CPUs into one
@@ -279,7 +275,7 @@ namespace aspect
          * Handle to a thread that is used to write data in the background.
          * The writer() function runs on this background thread.
          */
-        Threads::Thread<void> background_thread;
+        std::thread background_thread;
 
         /**
          * Stores the particle property fields which are excluded from output
@@ -295,29 +291,34 @@ namespace aspect
          * of these arguments and deletes them at the end of its work.
          */
         static
-        void writer (const std::string filename,
-                     const std::string temporary_filename,
-                     const std::string *file_contents);
+        void writer (const std::string &filename,
+                     const std::string &temporary_filename,
+                     const std::string &file_contents);
 
         /**
-         * Write the various master record files. The master files are used by
+         * Write the various descriptive record files. These files are used by
          * visualization programs to identify which of the output files in a
          * directory, possibly one file written by each processor, belong to a
          * single time step and/or form the different time steps of a
          * simulation. For Paraview, this is a <code>.pvtu</code> file per
-         * time step and a <code>.pvd</code> for all time steps. For Visit it
+         * time step and a <code>.pvd</code> for all time steps. For VisIt it
          * is a <code>.visit</code> file per time step and one for all time
          * steps.
          *
          * @param data_out The DataOut object that was used to write the
          * solutions.
+         * @param description_file_prefix The stem of the filename to be written.
+         * @param solution_file_directory The directory where the solution files
+         * are written.
          * @param solution_file_prefix The stem of the filename to be written.
          * @param filenames List of filenames for the current output from all
          * processors.
          */
-        void write_master_files (const internal::ParticleOutput<dim> &data_out,
-                                 const std::string &solution_file_prefix,
-                                 const std::vector<std::string> &filenames);
+        void write_description_files (const internal::ParticleOutput<dim> &data_out,
+                                      const std::string &description_file_prefix,
+                                      const std::string &solution_file_directory,
+                                      const std::string &solution_file_prefix,
+                                      const std::vector<std::string> &filenames);
     };
   }
 }

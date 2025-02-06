@@ -3,7 +3,7 @@
 # the single particle in this test follows:
 # x(t) = 0.5*t^2 + 0.1 * t, which results to:
 # x(1) = 0.6, for a particle starting at x(0)=0
-# Because the position is a polynom of second order, and we use
+# Because the position is a polynomial of second order, and we use
 # a second-order time-accurate integrator (rk2), the particle arrives
 # at the exact end position.
 
@@ -12,30 +12,29 @@ set Start time                             = 0
 set End time                               = 1
 set Use years in output instead of seconds = false
 set CFL number                             = 1.0
+set Nonlinear solver scheme                = single Advection, no Stokes
 
 subsection Geometry model
   set Model name = box
+
   subsection Box
     set X extent = 1
     set Y extent = 1
   end
 end
 
-
-subsection Prescribed Stokes solution  
+subsection Prescribed Stokes solution
   set Model name = function
+
   subsection Velocity function
     set Variable names = x,y,t
     set Function expression = 0.1+t;0
   end
 end
 
-set Nonlinear solver scheme                = single Advection, no Stokes
-
 subsection Initial temperature model
   set Model name = function
 end
-
 
 subsection Gravity model
   set Model name = vertical
@@ -45,11 +44,9 @@ subsection Gravity model
   end
 end
 
-
 subsection Material model
   set Model name = simple
 end
-
 
 subsection Mesh refinement
   set Initial global refinement                = 0
@@ -68,20 +65,22 @@ subsection Postprocess
   end
 
   subsection Particles
-    set Number of particles = 1
     set Time between data output = 1
     set Data output format = ascii
+  end
+end
 
-    set Particle generator name = uniform box
-    set Integration scheme = rk2
+subsection Particles
+  set Particle generator name = uniform box
+  set Integration scheme = rk2
 
-    subsection Generator
-      subsection Uniform box
-        set Minimum x = 0.0
-        set Maximum x = 0.1
-        set Minimum y = 0.5
-        set Maximum y = 0.55
-      end
+  subsection Generator
+    subsection Uniform box
+      set Minimum x = 0.0
+      set Maximum x = 0.1
+      set Minimum y = 0.5
+      set Maximum y = 0.55
+      set Number of particles = 1
     end
   end
 end

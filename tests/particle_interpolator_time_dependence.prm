@@ -6,9 +6,8 @@
 
 set Dimension                              = 2
 set Start time                             = 0
-set End time                               = 1
+set End time                               = 0.015 # 1 for complete run
 set Use years in output instead of seconds = false
-
 
 subsection Geometry model
   set Model name = box
@@ -18,7 +17,6 @@ subsection Geometry model
     set Y extent = 1
   end
 end
-
 
 subsection Boundary temperature model
   set Fixed temperature boundary indicators   = bottom, top
@@ -30,16 +28,13 @@ subsection Boundary temperature model
   end
 end
 
-
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = left, right, bottom, top
 end
 
-
 subsection Gravity model
   set Model name = vertical
 end
-
 
 subsection Initial temperature model
   set Model name = function
@@ -49,7 +44,6 @@ subsection Initial temperature model
     set Function expression = (1-z)
   end
 end
-
 
 subsection Material model
   set Model name = simple
@@ -64,18 +58,15 @@ subsection Material model
   end
 end
 
-
 subsection Discretization
   set Use discontinuous composition discretization = true
 end
-
 
 subsection Mesh refinement
   set Initial adaptive refinement        = 0
   set Initial global refinement          = 5
   set Time steps between mesh refinement = 0
 end
-
 
 subsection Postprocess
   set List of postprocessors = particles, velocity statistics, composition statistics, temperature statistics, visualization
@@ -87,20 +78,15 @@ subsection Postprocess
   end
 
   subsection Particles
-    set Number of particles        = 20000
     set Time between data output = 0.03
     set Data output format       = none
-    set List of particle properties = initial composition
-    set Update ghost particles   = true
   end
 end
-
 
 subsection Compositional fields
   set Number of fields = 2
   set Compositional field methods = particles
 end
-
 
 subsection Initial composition model
   set Model name = function
@@ -108,5 +94,15 @@ subsection Initial composition model
   subsection Function
     set Variable names      = x,y
     set Function expression = if(y<0.2*x, 1, 0) ; if(y>0.8, 1, 0)
+  end
+end
+
+subsection Particles
+  set List of particle properties = initial composition
+
+  subsection Generator
+    subsection Random uniform
+      set Number of particles        = 20000
+    end
   end
 end

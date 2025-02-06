@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -29,12 +29,21 @@ namespace aspect
     namespace VisualizationPostprocessors
     {
       template <int dim>
-      std::pair<std::string, Vector<float> *>
+      ErrorIndicator<dim>::
+      ErrorIndicator ()
+        :
+        CellDataVectorCreator<dim>("")
+      {}
+
+
+
+      template <int dim>
+      std::pair<std::string, std::unique_ptr<Vector<float>>>
       ErrorIndicator<dim>::execute() const
       {
-        std::pair<std::string, Vector<float> *>
+        std::pair<std::string, std::unique_ptr<Vector<float>>>
         return_value ("error_indicator",
-                      new Vector<float>(this->get_triangulation().n_active_cells()));
+                      std::make_unique<Vector<float>>(this->get_triangulation().n_active_cells()));
         this->get_refinement_criteria(*return_value.second);
 
         return return_value;
@@ -56,7 +65,14 @@ namespace aspect
                                                   "A visualization output object that generates output "
                                                   "showing the estimated error or other mesh refinement "
                                                   "indicator as a spatially variable function with one "
-                                                  "value per cell.")
+                                                  "value per cell."
+                                                  "\n\n"
+                                                  "Physical units: None. (Strictly speaking, errors have "
+                                                  "physical units of course, but because error "
+                                                  "\\textit{indicators} can be computed from different "
+                                                  "solution components and other input, we consider "
+                                                  "error indicators unitless.)")
+
     }
   }
 }

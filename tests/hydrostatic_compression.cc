@@ -1,3 +1,23 @@
+/*
+  Copyright (C) 2022 - 2024 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
 #include <aspect/material_model/interface.h>
 #include <aspect/boundary_velocity/interface.h>
 #include <aspect/simulator_access.h>
@@ -25,24 +45,19 @@ namespace aspect
         return true;
       }
 
-      virtual double reference_viscosity () const
-      {
-        return 1.0;
-      }
-
       virtual void evaluate(const typename MaterialModel::Interface<dim>::MaterialModelInputs &in,
                             typename MaterialModel::Interface<dim>::MaterialModelOutputs &out) const
       {
         const double alpha = -0.2;     // T0 = 100
 
-        for (unsigned int i=0; i<in.position.size(); ++i)
+        for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
           {
             const double x = in.position[i](0);
             const double z = in.position[i](1);
             const double p = in.pressure[i];
             const double T = in.temperature[i];
             out.viscosities[i] = 1.0;
-            out.densities[i] = exp(alpha*T)*p;
+            out.densities[i] = std::exp(alpha*T)*p;
             out.thermal_expansion_coefficients[i] = -alpha;
             out.specific_heat[i] = 1.0;
             out.thermal_conductivities[i] = 1.0;
@@ -66,8 +81,8 @@ namespace aspect
         const double alpha = -0.2;
 
         Tensor<1,dim> gravity;
-        gravity[0] = -(0.1e1 + 0.2e1 * alpha * (double) pi * cos((double) (2 * pi * x)) * cos((double) (pi * z))) / exp(alpha * (T0 + sin((double) (2 * pi * x)) * cos((double) (pi * z))));
-        gravity[1] = -(0.1e1 - alpha * sin((double) (2 * pi * x)) * (double) pi * sin((double) (pi * z))) / exp(alpha * (T0 + sin((double) (2 * pi * x)) * cos((double) (pi * z))));
+        gravity[0] = -(0.1e1 + 0.2e1 * alpha * (double) pi * std::cos((double) (2 * pi * x)) * std::cos((double) (pi * z))) / std::exp(alpha * (T0 + std::sin((double) (2 * pi * x)) * std::cos((double) (pi * z))));
+        gravity[1] = -(0.1e1 - alpha * std::sin((double) (2 * pi * x)) * (double) pi * std::sin((double) (pi * z))) / std::exp(alpha * (T0 + std::sin((double) (2 * pi * x)) * std::cos((double) (pi * z))));
 
 
         return gravity;
@@ -80,8 +95,8 @@ namespace aspect
   {
     public:
       RefFunction () : Function<dim>(dim+2) {}
-      virtual void vector_value (const Point< dim >   &p,
-                                 Vector< double >   &values) const
+      virtual void vector_value (const Point<dim>   &p,
+                                 Vector<double>   &values) const
       {
         double x = p(0);
         double z = p(1);
@@ -89,8 +104,8 @@ namespace aspect
         const double u1 = 1.0;
         const double w1 = 0.5;
 
-        values[0] = -2.0*u1*pi*sin((double) (2*pi*x)) + u1*cos((double) (2*pi*x)) - w1*(pi*pi+1.0)*cos((double) (pi*z));
-        values[1] = -w1*pi*sin(pi*z)+w1*cos(pi*z)-u1*(4*pi*pi+1)*cos(2*pi*x);
+        values[0] = -2.0*u1*pi*std::sin((double) (2*pi*x)) + u1*std::cos((double) (2*pi*x)) - w1*(pi*pi+1.0)*std::cos((double) (pi*z));
+        values[1] = -w1*pi*std::sin(pi*z)+w1*std::cos(pi*z)-u1*(4*pi*pi+1)*std::cos(2*pi*x);
         values[2] = 0.5-z;
       }
   };
@@ -168,8 +183,8 @@ namespace aspect
       execute (internal::Assembly::Scratch::ScratchBase<dim>   &scratch_base,
                internal::Assembly::CopyData::CopyDataBase<dim> &data_base) const
       {
-        internal::Assembly::Scratch::StokesSystem<dim> &scratch = dynamic_cast<internal::Assembly::Scratch::StokesSystem<dim>& > (scratch_base);
-        internal::Assembly::CopyData::StokesSystem<dim> &data = dynamic_cast<internal::Assembly::CopyData::StokesSystem<dim>& > (data_base);
+        internal::Assembly::Scratch::StokesSystem<dim> &scratch = dynamic_cast<internal::Assembly::Scratch::StokesSystem<dim>&> (scratch_base);
+        internal::Assembly::CopyData::StokesSystem<dim> &data = dynamic_cast<internal::Assembly::CopyData::StokesSystem<dim>&> (data_base);
 
         const Introspection<dim> &introspection = this->introspection();
         const FiniteElement<dim> &fe = this->get_fe();
@@ -208,15 +223,15 @@ namespace aspect
             Tensor<1,dim> force_u;
             const double force_p = 0.0;
 
-            force_u[0]= -0.32e2 / 0.3e1 * u1 * pow(pi, 0.3e1) * sin(0.2e1 * pi * x)
-                        + 0.16e2 / 0.3e1 * u1 * pi * pi * cos(0.2e1 * pi * x)
-                        - w1 * (pi * pi + 0.1e1) * pi * pi * cos(pi * z)
-                        + (0.5e0 - z) * (0.1e1 + 0.2e1 * alpha * pi * cos(0.2e1 * pi * x) * cos(pi * z));
+            force_u[0]= -0.32e2 / 0.3e1 * u1 * std::pow(pi, 0.3e1) * std::sin(0.2e1 * pi * x)
+                        + 0.16e2 / 0.3e1 * u1 * pi * pi * std::cos(0.2e1 * pi * x)
+                        - w1 * (pi * pi + 0.1e1) * pi * pi * std::cos(pi * z)
+                        + (0.5e0 - z) * (0.1e1 + 0.2e1 * alpha * pi * std::cos(0.2e1 * pi * x) * std::cos(pi * z));
 
-            force_u[1]= -0.4e1 / 0.3e1 * w1 * pow(pi, 0.3e1) * sin(pi * z)
-                        + 0.4e1 / 0.3e1 * w1 * pi * pi * cos(pi * z)
-                        - 0.4e1 * u1 * (0.4e1 * pi * pi + 0.1e1) * pi * pi * cos(0.2e1 * pi * x)
-                        - 0.1e1 + (0.5e0 - z) * (0.1e1 - alpha * sin(0.2e1 * pi * x) * pi * sin(pi * z));
+            force_u[1]= -0.4e1 / 0.3e1 * w1 * std::pow(pi, 0.3e1) * std::sin(pi * z)
+                        + 0.4e1 / 0.3e1 * w1 * pi * pi * std::cos(pi * z)
+                        - 0.4e1 * u1 * (0.4e1 * pi * pi + 0.1e1) * pi * pi * std::cos(0.2e1 * pi * x)
+                        - 0.1e1 + (0.5e0 - z) * (0.1e1 - alpha * std::sin(0.2e1 * pi * x) * pi * std::sin(pi * z));
 
 
             for (unsigned int i=0, i_stokes=0; i_stokes<stokes_dofs_per_cell; /*increment at end of loop*/)
@@ -261,7 +276,7 @@ namespace aspect
   {
 
     Assemblers::Interface<dim> *assembler = new ForceAssembler<dim>();
-    assemblers.stokes_system.push_back(std::unique_ptr<Assemblers::Interface<dim> >(assembler));
+    assemblers.stokes_system.push_back(std::unique_ptr<Assemblers::Interface<dim>>(assembler));
   }
 }
 

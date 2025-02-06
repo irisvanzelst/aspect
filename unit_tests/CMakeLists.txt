@@ -1,5 +1,5 @@
 ################### top matter ################
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.13.4)
 
 PROJECT(unittests CXX)
 

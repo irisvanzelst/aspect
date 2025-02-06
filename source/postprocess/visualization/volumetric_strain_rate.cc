@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2017 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2017 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,15 +32,17 @@ namespace aspect
       VolumetricStrainRate ()
         :
         DataPostprocessorScalar<dim> ("volumetric_strain_rate",
-                                      update_gradients | update_quadrature_points)
+                                      update_gradients | update_quadrature_points),
+        Interface<dim>("1/s")
       {}
+
 
 
       template <int dim>
       void
       VolumetricStrainRate<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         const unsigned int n_quadrature_points = input_data.solution_values.size();
         Assert (computed_quantities.size() == n_quadrature_points,    ExcInternalError());
@@ -58,6 +60,11 @@ namespace aspect
             const double div_u = trace(grad_u);
             computed_quantities[q](0) = div_u;
           }
+
+        // average the values if requested
+        const auto &viz = this->get_postprocess_manager().template get_matching_active_plugin<Postprocess::Visualization<dim>>();
+        if (!viz.output_pointwise_stress_and_strain())
+          average_quantities(computed_quantities);
       }
     }
   }
@@ -80,7 +87,9 @@ namespace aspect
                                                   "\\textrm{trace}\\; \\varepsilon(\\mathbf u)$. "
                                                   "This should be zero (in some average sense) in incompressible "
                                                   "convection models, but can be non-zero in compressible models and "
-                                                  "models with melt transport.")
+                                                  "models with melt transport."
+                                                  "\n\n"
+                                                  "Physical units: \\si{\\per\\second}.")
     }
   }
 }

@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -26,11 +26,8 @@ namespace aspect
   {
     namespace Utilities
     {
-      using namespace dealii;
-
-      template<>
-      double compute_fluid_fraction<2> (const Tensor<1, 2> normal,
-                                        const double d)
+      double compute_fluid_fraction (const Tensor<1, 2> normal,
+                                     const double d)
       {
         const int dim = 2;
 
@@ -53,7 +50,7 @@ namespace aspect
           {
             return 1.0;
           }
-        const double dtest = d / norm1; // Threshold value for changes in compuation behavior
+        const double dtest = d / norm1; // Threshold value for changes in computation behavior
         // Normalized parameter indicating the "slope" (positive and finite)
         // Chosen due to resulting in simple formulas
         // Equal to the absolute value of the smaller vector entry in the 1-norm normalized normal vector
@@ -69,9 +66,10 @@ namespace aspect
         return 0.5 + dtest / (1.0 - mpos);
       }
 
-      template<>
-      double compute_interface_location<2> (const Tensor<1, 2> normal,
-                                            const double vol)
+
+
+      double compute_interface_location (const Tensor<1, 2> normal,
+                                         const double vol)
       {
         const int dim = 2;
 
@@ -102,22 +100,22 @@ namespace aspect
           }
         else if (vol < 0.5 * mpos / (1 - mpos))
           {
-            return norm1 * (-0.5 + sqrt (2.0*vol * mpos * (1 - mpos)));
+            return norm1 * (-0.5 + std::sqrt (2.0*vol * mpos * (1 - mpos)));
           }
         else if (vol > 1.0 - 0.5 * mpos / (1 - mpos))
           {
-            return norm1 * (0.5 - sqrt (2.0*(1.0 - vol) * mpos * (1 - mpos)));
+            return norm1 * (0.5 - std::sqrt (2.0*(1.0 - vol) * mpos * (1 - mpos)));
           }
         else
           {
             return norm1 * (1 - mpos) * (vol - 0.5);
           }
-
       }
 
-      template<>
-      double compute_fluid_fraction<3> (const Tensor<1, 3> normal,
-                                        const double d)
+
+
+      double compute_fluid_fraction (const Tensor<1, 3> normal,
+                                     const double d)
       {
         // Calculations done by Scardovelli and Zaleski in
         // doi:10.1006/jcph.2000.6567,
@@ -128,7 +126,7 @@ namespace aspect
         //Simplify calculation by reducing to case of d<=0
         if (d>0.0)
           {
-            return 1.0-compute_fluid_fraction<dim>(-normal, -d);
+            return 1.0-compute_fluid_fraction(-normal, -d);
           }
 
         //Get 1-Norm
@@ -211,9 +209,10 @@ namespace aspect
         return 0.5*(2.0*dtest+1.0-m12)/nnormal[2];
       }
 
-      template<>
-      double compute_interface_location<3> (const Tensor<1, 3, double> normal,
-                                            const double vol)
+
+
+      double compute_interface_location (const Tensor<1, 3, double> normal,
+                                         const double vol)
       {
         // Calculations done by Scardovelli and Zaleski in
         // doi:10.1006/jcph.2000.6567,
@@ -222,7 +221,7 @@ namespace aspect
         // Simplify to vol<0.5 case
         if (vol>0.5)
           {
-            return -compute_interface_location<dim>(-normal, 1.0-vol);
+            return -compute_interface_location(-normal, 1.0-vol);
           }
 
         //Get 1-Norm
@@ -292,7 +291,7 @@ namespace aspect
         const double v2 = v1 + 0.5*(m2-m1)/m3;
         if (vol<v2)
           {
-            return 0.5*(-1+m1+sqrt(m1*m1+8*m2*m3*(vol-v1)));
+            return 0.5*(-1+m1+std::sqrt(m1*m1+8*m2*m3*(vol-v1)));
           }
 
         // Case 3 of Scardovelli and Zaleski
@@ -312,8 +311,8 @@ namespace aspect
             const double a0 = 6*mprod*vol-m1*m1*m1-m2*m2*m2;
             const double np0 = a2*a2/9.0-a1/3.0;
             const double q0 = (a1*a2-3.0*a0)/6.0-a2*a2*a2/27.0;
-            const double theta = acos(q0/sqrt(np0*np0*np0))/3.0;
-            return sqrt(np0)*(sqrt(3.0)*sin(theta)-cos(theta))-a2/3.0;
+            const double theta = std::acos(q0/std::sqrt(np0*np0*np0))/3.0;
+            return std::sqrt(np0)*(std::sqrt(3.0)*std::sin(theta)-std::cos(theta))-a2/3.0;
           }
 
         // Case 4
@@ -325,29 +324,30 @@ namespace aspect
             double a0 = 6*mprod*vol-m1*m1*m1-m2*m2*m2-m3*m3*m3;
             double np0 = a2*a2/9.0-a1/3.0;
             double q0 = (a1*a2-3.0*a0)/6.0-a2*a2*a2/27.0;
-            double theta = acos(q0/sqrt(np0*np0*np0))/3.0;
-            return sqrt(np0)*(sqrt(3.0)*sin(theta)-cos(theta))-a2/3.0;
+            double theta = std::acos(q0/std::sqrt(np0*np0*np0))/3.0;
+            return std::sqrt(np0)*(std::sqrt(3.0)*std::sin(theta)-std::cos(theta))-a2/3.0;
           }
 
         return -0.5+m1*vol+0.5*m12;
       }
 
-      template<>
-      void xFEM_Heaviside<2>(const unsigned int degree,
-                             const Tensor<1, 2> normal,
-                             const double d,
-                             const std::vector<Point<2>> &points,
-                             std::vector<double> &values)
+
+
+      void xFEM_Heaviside(const unsigned int degree,
+                          const Tensor<1, 2> normal,
+                          const double d,
+                          const std::vector<Point<2>> &points,
+                          std::vector<double> &values)
       {
         const int basis_count=4;
         std::vector<double> coeffs(basis_count);
 
-        const double n_xp = fabs(normal[0]), n_yp = fabs(normal[1]);
+        const double n_xp = std::fabs(normal[0]), n_yp = std::fabs(normal[1]);
         const double sign_n_x = (((normal[0]) > 0) - ((normal[0]) < 0)),
                      sign_n_y = (((normal[1]) > 0) - ((normal[1]) < 0));
 
         const double norm1 = n_xp + n_yp;
-        const double triangle_break = 0.5*fabs(n_xp-n_yp);
+        const double triangle_break = 0.5*std::fabs(n_xp-n_yp);
 
         const unsigned int max_degree = 1;
 
@@ -359,7 +359,7 @@ namespace aspect
         // fpdx=\int pH(d-n\cdot x)dx$ for all polynomials $p$ less than or
         // equal to the given degree
         //
-        // The funcitons for the correct values were calculated and exported using sympy
+        // The functions for the correct values were calculated and exported using sympy
         if (d<-0.5*norm1)
           {
             for (unsigned int i =0; i < basis_count; ++i)
@@ -401,7 +401,7 @@ namespace aspect
             //Trapezoid Y
             coeffs[0]=(d + 0.5*n_xp)/n_xp; // 1
             coeffs[1]=-0.5*n_yp/n_xp*sign_n_y; // 2*y - 1
-            coeffs[2]=0.25*(12.0*pow(d, 2) - 3.0*n_xp*n_xp + n_yp*n_yp)/(n_xp*n_xp)*sign_n_x; // 2*x - 1
+            coeffs[2]=0.25*(12.0*dealii::Utilities::fixed_power<2>(d) - 3.0*n_xp*n_xp + n_yp*n_yp)/(n_xp*n_xp)*sign_n_x; // 2*x - 1
             coeffs[3]=-3.0*d*n_yp/(n_xp*n_xp)*sign_n_x*sign_n_y; // (2*x - 1)*(2*y - 1)
           }
         else
@@ -430,32 +430,34 @@ namespace aspect
           }
       }
 
-      template<>
-      void xFEM_Heaviside<3>(const unsigned int /*degree*/,
-                             const Tensor<1, 3> /*normal*/,
-                             const double /*d*/,
-                             const std::vector<Point<3>> &/*points*/,
-                             std::vector<double> &/*values*/)
+
+
+      void xFEM_Heaviside(const unsigned int /*degree*/,
+                          const Tensor<1, 3> /*normal*/,
+                          const double /*d*/,
+                          const std::vector<Point<3>> &/*points*/,
+                          std::vector<double> &/*values*/)
       {
         AssertThrow(false, ExcNotImplemented());
       }
 
-      template<>
-      void xFEM_Heaviside_derivative_d<2>(const unsigned int degree,
-                                          const Tensor<1, 2> normal,
-                                          const double d,
-                                          const std::vector<Point<2>> &points,
-                                          std::vector<double> &values)
+
+
+      void xFEM_Heaviside_derivative_d(const unsigned int degree,
+                                       const Tensor<1, 2> normal,
+                                       const double d,
+                                       const std::vector<Point<2>> &points,
+                                       std::vector<double> &values)
       {
         const int basis_count=4;
         std::vector<double> coeffs(basis_count);
 
-        const double n_xp = fabs(normal[0]), n_yp = fabs(normal[1]);
+        const double n_xp = std::fabs(normal[0]), n_yp = std::fabs(normal[1]);
         const double sign_n_x = (((normal[0]) > 0) - ((normal[0]) < 0)),
                      sign_n_y = (((normal[1]) > 0) - ((normal[1]) < 0));
 
         const double norm1 = n_xp + n_yp;
-        const double triangle_break = 0.5L*fabs(n_xp-n_yp);
+        const double triangle_break = 0.5L*std::fabs(n_xp-n_yp);
 
         const int max_degree = 1;
 
@@ -468,7 +470,7 @@ namespace aspect
         // fpdx=\int pH(d-n\cdot x)dx$ for all polynomials $p$ less than or
         // equal to the given degree
         //
-        // The funcitons for the correct values were calculated and exported using sympy
+        // The functions for the correct values were calculated and exported using sympy
         if (d<-0.5*norm1)
           {
             for (int i =0; i < basis_count; ++i)
@@ -537,18 +539,20 @@ namespace aspect
           }
       }
 
-      template<>
-      void xFEM_Heaviside_derivative_d<3>(const unsigned int /*degree*/,
-                                          const Tensor<1, 3> /*normal*/,
-                                          const double /*d*/,
-                                          const std::vector<Point<3>> &/*points*/,
-                                          std::vector<double> &/*values*/)
+
+
+      void xFEM_Heaviside_derivative_d(const unsigned int /*degree*/,
+                                       const Tensor<1, 3> /*normal*/,
+                                       const double /*d*/,
+                                       const std::vector<Point<3>> &/*points*/,
+                                       std::vector<double> &/*values*/)
       {
         AssertThrow(false, ExcNotImplemented());
       }
 
 
-      template<int dim>
+
+      template <int dim>
       double compute_interface_location_newton(const unsigned int degree,
                                                const Tensor<1, dim> normal,
                                                const double volume_fraction,
@@ -559,7 +563,7 @@ namespace aspect
       {
         double norm1=0.0;
         for (int i=0; i<dim; ++i)
-          norm1+=fabs(normal[i]);
+          norm1+=std::fabs(normal[i]);
         double d_l=-0.5L*norm1, d_h=0.5L*norm1;
         double f_l=0.0, f_h=1.0;
         double d_guess= d_l + (volume_fraction-f_l)*(d_h-d_l)/(f_h-f_l);
@@ -582,7 +586,7 @@ namespace aspect
               }
 
             // Break if within tolerance
-            if (fabs(f_guess-volume_fraction)<epsilon)
+            if (std::fabs(f_guess-volume_fraction)<epsilon)
               {
                 break;
               }
@@ -598,7 +602,7 @@ namespace aspect
                 f_l = f_guess;
               }
 
-            if (fabs(df_guess)<epsilon)
+            if (std::fabs(df_guess)<epsilon)
               {
                 d_guess = (volume_fraction-f_l)/(f_h-f_l)*(d_h-d_l);
               }
@@ -616,7 +620,7 @@ namespace aspect
         return d_guess;
       }
 
-      template<int dim>
+      template <int dim>
       double compute_fluid_volume(const unsigned int degree,
                                   const Tensor<1, dim> normal,
                                   const double d,
@@ -634,7 +638,7 @@ namespace aspect
         return fluid_volume;
       }
 
-      template<int dim>
+      template <int dim>
       double calculate_volume_flux(const unsigned int dir,
                                    const double time_direction_derivative,
                                    const Tensor<1, dim> normal,
@@ -680,6 +684,8 @@ namespace aspect
                                             const std::vector<double> &weights);
 
       ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
     }
   }
 }

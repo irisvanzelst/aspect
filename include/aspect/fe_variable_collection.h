@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -28,8 +28,6 @@
 
 namespace aspect
 {
-  using namespace dealii;
-
   /**
    * A structure to describe everything necessary to define a single variable
    * of the finite element system in isolation. It groups the FiniteElement<dim> with other
@@ -66,7 +64,7 @@ namespace aspect
      * component.
      */
     VariableDeclaration(const std::string &name,
-                        const std::shared_ptr<FiniteElement<dim> > &fe,
+                        const std::shared_ptr<FiniteElement<dim>> &fe,
                         const unsigned int multiplicity,
                         const unsigned int n_blocks);
 
@@ -74,11 +72,6 @@ namespace aspect
      * Default constructor.
      */
     VariableDeclaration();
-
-    /**
-     * Copy constructor.
-     */
-    VariableDeclaration(const VariableDeclaration &other);
 
     /**
      * Return the total number of components of this variable.
@@ -93,7 +86,7 @@ namespace aspect
     /**
      * The FiniteElement space.
      */
-    std::shared_ptr<FiniteElement<dim> > fe;
+    std::shared_ptr<FiniteElement<dim>> fe;
 
     /**
      * The multiplicity used in FESystem: how many copies of @p fe are there?
@@ -190,18 +183,25 @@ namespace aspect
        * Construct object from a vector of variables (identical to calling
        * initialize()).
        */
-      FEVariableCollection(const std::vector<VariableDeclaration<dim> > &variable_definitions);
+      FEVariableCollection(const std::vector<VariableDeclaration<dim>> &variable_definitions);
 
       /**
        * Fill this object with the given list of @p variables.
        */
-      void initialize(const std::vector<VariableDeclaration<dim> > &variable_definitions);
+      void initialize(const std::vector<VariableDeclaration<dim>> &variable_definitions);
 
       /**
        * Return the variable with name @p name. Throws an exception if this
-       * variable does not exist.
+       * variable does not exist. If more than one variable with the same name
+       * exists, return the first one. Use variables_with_name() if you want
+       * to access all of them.
        */
       const FEVariable<dim> &variable(const std::string &name) const;
+
+      /**
+       * Return a vector of pointers of all variables with name @p name.
+       */
+      std::vector<const FEVariable<dim>*> variables_with_name(const std::string &name) const;
 
       /**
        * Returns true if the variable with @p name exists in the list of
@@ -212,7 +212,7 @@ namespace aspect
       /**
        * Return the list of all variables.
        */
-      const std::vector<FEVariable<dim> > &get_variables() const;
+      const std::vector<FEVariable<dim>> &get_variables() const;
 
       /**
        * Return the total number of components in the system.
@@ -246,7 +246,7 @@ namespace aspect
       /**
        * A std::vector that contains a collection of variables.
        */
-      std::vector<FEVariable<dim> > variables;
+      std::vector<FEVariable<dim>> variables;
 
       /**
        * Total number of components of all variables, returned by n_components().

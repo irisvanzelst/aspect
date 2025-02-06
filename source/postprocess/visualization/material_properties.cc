@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -36,8 +36,13 @@ namespace aspect
       MaterialProperties<dim>::
       MaterialProperties ()
         :
-        DataPostprocessor<dim> ()
+        DataPostprocessor<dim> (),
+        // What quantities are output depends on parameters, and so do the physical units.
+        // There is nothing useful we can provide here at this point.
+        Interface<dim>("")
       {}
+
+
 
       template <int dim>
       std::vector<std::string>
@@ -46,20 +51,22 @@ namespace aspect
       {
         std::vector<std::string> solution_names;
 
-        for (unsigned int i=0; i<property_names.size(); ++i)
-          if (property_names[i] == "reaction terms")
+        for (const auto &property_name : property_names)
+          if (property_name == "reaction terms")
             {
               for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                 solution_names.push_back (this->introspection().name_for_compositional_index(c) + "_change");
             }
           else
             {
-              solution_names.push_back(property_names[i]);
+              solution_names.push_back(property_name);
               std::replace(solution_names.back().begin(),solution_names.back().end(),' ', '_');
             }
 
         return solution_names;
       }
+
+
 
       template <int dim>
       std::vector<DataComponentInterpretation::DataComponentInterpretation>
@@ -67,9 +74,9 @@ namespace aspect
       get_data_component_interpretation () const
       {
         std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation;
-        for (unsigned int i=0; i<property_names.size(); ++i)
+        for (const auto &property_name : property_names)
           {
-            if (property_names[i] == "reaction terms")
+            if (property_name == "reaction terms")
               {
                 for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
                   interpretation.push_back (DataComponentInterpretation::component_is_scalar);
@@ -81,6 +88,8 @@ namespace aspect
         return interpretation;
       }
 
+
+
       template <int dim>
       UpdateFlags
       MaterialProperties<dim>::
@@ -89,15 +98,19 @@ namespace aspect
         return update_gradients | update_values  | update_quadrature_points;
       }
 
+
+
       template <int dim>
       void
       MaterialProperties<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         const unsigned int n_quadrature_points = input_data.solution_values.size();
-        Assert (computed_quantities.size() == n_quadrature_points,    ExcInternalError());
-        Assert (input_data.solution_values[0].size() == this->introspection().n_components,           ExcInternalError());
+        Assert (computed_quantities.size() == n_quadrature_points,
+                ExcInternalError());
+        Assert (input_data.solution_values[0].size() == this->introspection().n_components,
+                ExcInternalError());
 
         MaterialModel::MaterialModelInputs<dim> in(input_data,
                                                    this->introspection());
@@ -106,15 +119,40 @@ namespace aspect
 
         this->get_material_model().evaluate(in, out);
 
+        // We want to output material properties as they are used in the
+        // program during assembly. To do so, some of the material averaging
+        // modes require a quadrature object -- but we do not have this,
+        // all we have is the mapped quadrature points. As a consequence,
+        // only do the averaging for those modes that do not require a
+        // functional quadrature object. This means that we only
+        // do the wrong thing for the Q1 averaging where the difference
+        // between input and output of the averaging operation is generally
+        // small and probably not visible anyway.
+        //
+        // The average() function checks whether any quadrature object
+        // it uses has the correct size. So passing an invalid object
+        // in the following code carries little risk if the list of
+        // averaging modes that require a quadrature object expands:
+        // Every time we generate graphical output for a model that
+        // uses this kind of averaging, we will trigger an exception.
+        if (this->get_parameters().material_averaging != MaterialModel::MaterialAveraging::AveragingOperation::project_to_Q1
+            &&
+            this->get_parameters().material_averaging != MaterialModel::MaterialAveraging::AveragingOperation::project_to_Q1_only_viscosity)
+          MaterialModel::MaterialAveraging::average (this->get_parameters().material_averaging,
+                                                     input_data.template get_cell<dim>(),
+                                                     Quadrature<dim>(),
+                                                     this->get_mapping(),
+                                                     in.requested_properties,
+                                                     out);
+
         std::vector<double> melt_fractions(n_quadrature_points);
         if (std::find(property_names.begin(), property_names.end(), "melt fraction") != property_names.end())
           {
-            AssertThrow(Plugins::plugin_type_matches<const MaterialModel::MeltFractionModel<dim>> (this->get_material_model()),
+            AssertThrow(MaterialModel::MeltFractionModel<dim>::is_melt_fraction_model(this->get_material_model()),
                         ExcMessage("You are trying to visualize the melt fraction, but the material"
                                    "model you use does not actually compute a melt fraction."));
-
-            Plugins::get_plugin_as_type<const MaterialModel::MeltFractionModel<dim>> (this->get_material_model()).
-                                                                                  melt_fractions(in, melt_fractions);
+            MaterialModel::MeltFractionModel<dim>::as_melt_fraction_model(this->get_material_model())
+            .melt_fractions(in, melt_fractions);
           }
 
         for (unsigned int q=0; q<n_quadrature_points; ++q)
@@ -166,6 +204,8 @@ namespace aspect
           }
       }
 
+
+
       template <int dim>
       void
       MaterialProperties<dim>::declare_parameters (ParameterHandler &prm)
@@ -199,6 +239,7 @@ namespace aspect
         }
         prm.leave_subsection();
       }
+
 
 
       template <int dim>
@@ -240,16 +281,26 @@ namespace aspect
       ASPECT_REGISTER_VISUALIZATION_POSTPROCESSOR(MaterialProperties,
                                                   "material properties",
                                                   "A visualization output object that generates output "
-                                                  "for the material properties given by the material model."
-                                                  "There are a number of other visualization postprocessors "
-                                                  "that offer to write individual material properties. However, "
-                                                  "they all individually have to evaluate the material model. "
-                                                  "This is inefficient if one wants to output more than just "
-                                                  "one or two of the fields provided by the material model. "
+                                                  "for the material properties given by the material model. "
                                                   "The current postprocessor allows to output a (potentially "
                                                   "large) subset of all of the information provided by "
                                                   "material models at once, with just a single material model "
-                                                  "evaluation per output point.")
+                                                  "evaluation per output point. "
+                                                  "Although individual properties can still be listed in the "
+                                                  "``List of output variables'', this visualization plugin "
+                                                  "is called internally to avoid duplicated evaluations of "
+                                                  "the material model. "
+                                                  "\n\n"
+                                                  "In almost all places inside \\aspect{}, the program "
+                                                  "can use ``averaged'' material properties, for example for "
+                                                  "the assembly of matrices and right hand side vectors. To "
+                                                  "accurately reflect the material parameters used internally, "
+                                                  "this visualization postprocessor averages in the same way "
+                                                  "as is used to do the assembly, and consequently the "
+                                                  "graphical output will reflect not pointwise properties, "
+                                                  "but averaged properties."
+                                                  "\n\n"
+                                                  "Physical units: Various.")
     }
   }
 }

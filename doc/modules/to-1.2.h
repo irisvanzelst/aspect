@@ -1,7 +1,7 @@
 /**
  * @page changes_between_1.1_and_1.2 Changes between version 1.1 and version 1.2
  *
- * <p> This is the list of changes made after the release of Aspect version
+ * <p> This is the list of changes made after the release of ASPECT version
  * 1.1 for version 1.2. All entries are signed with the names of the author.
  * </p>
  *
@@ -17,7 +17,7 @@
  * were placed at an averaged location of the vertices of the mother cell,
  * leading to a certain degree of distortion of cells. It also led to a
  * situation where not all cells are equally shaped due to this distortion.
- * The new mesh, in contrast, is completely symmetric. Addtionally, a higher
+ * The new mesh, in contrast, is completely symmetric. Additionally, a higher
  * order mapping to represent curved faces is now also used for the interior
  * cells using the manifold description of the shell/sphere.
  * <br>
@@ -48,7 +48,7 @@
  * <br>
  * (Ryan Grove, 2014/12/09)
  *
- * <li> Changed: The behaviour when one changed the visualization
+ * <li> Changed: The behavior when one changed the visualization
  * output_interval during a checkpoint restart was previously undefined, and
  * working in slightly unexpected ways like never writing output for the first
  * timestep after the restart. This now works as one would expect, e.g. every
@@ -118,7 +118,7 @@
  * spherical shell. However, remembering these numerical indicators when
  * writing or reading input files is a hassle and error prone.
  * <br>
- * Given this problem, there is now functionality in Aspect so that geometry
+ * Given this problem, there is now functionality in ASPECT so that geometry
  * models can (and, for the existing models, do) provide symbolic names for
  * each of the boundary parts. These symbolic names can then be used in the
  * input files wherever it was previously necessary to use numbers.

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,21 +17,24 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_feature_types_bool_h
-#define _world_feature_types_bool_h
+#ifndef WORLD_BUILDER_TYPES_BOOL_H
+#define WORLD_BUILDER_TYPES_BOOL_H
 
-#include <world_builder/types/interface.h>
+
+#include "world_builder/types/interface.h"
 
 
 namespace WorldBuilder
 {
+  class Parameters;
+
   namespace Types
   {
 
     /**
      * This class represents a bool value with documentation
      */
-    class Bool : public Interface
+    class Bool final: public Interface
     {
       public:
         /**
@@ -40,31 +43,35 @@ namespace WorldBuilder
         Bool(const bool default_value);
 
         /**
-         * Destructor
+         * Copy constructor
          */
-        ~Bool();
+        Bool(Bool const &other);
 
         /**
-         * Clone. The caller of clone is responsible for the lifetime of it,
-         * so return a unique pionter.
+         * Destructor
          */
-        virtual
-        std::unique_ptr<Interface> clone() const;
+        ~Bool() override final;
+
 
         /**
          * Todo
          */
-        virtual
         void write_schema(Parameters &prm,
                           const std::string &name,
-                          const std::string &documentation) const;
+                          const std::string &documentation) const override final;
 
         bool default_value;
+
+      protected:
+        Bool *clone_impl() const override final
+        {
+          return new Bool(*this);
+        };
 
       private:
 
     };
-  }
-}
+  } // namespace Types
+} // namespace WorldBuilder
 
 #endif

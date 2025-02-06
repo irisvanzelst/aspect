@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,48 +32,17 @@ namespace aspect
 {
   namespace InitialTemperature
   {
-    template <int dim>
-    Interface<dim>::~Interface ()
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::initialize ()
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::
-    declare_parameters (dealii::ParameterHandler &)
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::parse_parameters (dealii::ParameterHandler &)
-    {}
-
-
-
     // ------------------------------ Manager -----------------------------
     // -------------------------------- Deal with registering initial_temperature models and automating
     // -------------------------------- their setup and selection at run time
 
-    template <int dim>
-    Manager<dim>::~Manager()
-    {}
-
-
-
     namespace
     {
       std::tuple
-      <void *,
-      void *,
-      aspect::internal::Plugins::PluginList<Interface<2> >,
-      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::PluginList<Interface<2>>,
+      aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -82,7 +51,7 @@ namespace aspect
     Manager<dim>::register_initial_temperature (const std::string &name,
                                                 const std::string &description,
                                                 void (*declare_parameters_function) (ParameterHandler &),
-                                                Interface<dim> *(*factory_function) ())
+                                                std::unique_ptr<Interface<dim>> (*factory_function) ())
     {
       std::get<dim>(registered_plugins).register_plugin (name,
                                                          description,
@@ -99,29 +68,29 @@ namespace aspect
       // parameters we declare here
       prm.enter_subsection ("Initial temperature model");
       {
-        model_names
+        this->plugin_names
           = Utilities::split_string_list(prm.get("List of model names"));
 
-        AssertThrow(Utilities::has_unique_entries(model_names),
+        AssertThrow(Utilities::has_unique_entries(this->plugin_names),
                     ExcMessage("The list of strings for the parameter "
                                "'Initial temperature model/List of model names' contains entries more than once. "
                                "This is not allowed. Please check your parameter file."));
 
         const std::string model_name = prm.get ("Model name");
 
-        AssertThrow (model_name == "unspecified" || model_names.size() == 0,
+        AssertThrow (model_name == "unspecified" || this->plugin_names.size() == 0,
                      ExcMessage ("The parameter 'Model name' is only used for reasons"
                                  "of backwards compatibility and can not be used together with "
                                  "the new functionality 'List of model names'. Please add your "
                                  "initial temperature model to the list instead."));
 
         if (!(model_name == "unspecified"))
-          model_names.push_back(model_name);
+          this->plugin_names.push_back(model_name);
 
         // create operator list
         const std::vector<std::string> model_operator_names =
           Utilities::possibly_extend_from_1_to_N (Utilities::split_string_list(prm.get("List of model operators")),
-                                                  model_names.size(),
+                                                  this->plugin_names.size(),
                                                   "List of model operators");
         model_operators = Utilities::create_model_operator_list(model_operator_names);
       }
@@ -129,21 +98,21 @@ namespace aspect
 
       // go through the list, create objects and let them parse
       // their own parameters
-      for (unsigned int i=0; i<model_names.size(); ++i)
+      for (auto &model_name : this->plugin_names)
         {
           // create initial temperature objects
-          initial_temperature_objects.push_back (std::unique_ptr<Interface<dim> >
-                                                 (std::get<dim>(registered_plugins)
-                                                  .create_plugin (model_names[i],
-                                                                  "Initial temperature model::Model names")));
+          this->plugin_objects.emplace_back (std::get<dim>(registered_plugins)
+                                             .create_plugin (model_name,
+                                                             "Initial temperature model::Model names"));
 
-          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*initial_temperature_objects.back()))
+          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(&*this->plugin_objects.back()))
             sim->initialize_simulator (this->get_simulator());
 
-          initial_temperature_objects.back()->parse_parameters (prm);
-          initial_temperature_objects.back()->initialize ();
+          this->plugin_objects.back()->parse_parameters (prm);
+          this->plugin_objects.back()->initialize ();
         }
     }
+
 
 
     template <int dim>
@@ -153,13 +122,11 @@ namespace aspect
       double temperature = 0.0;
       int i = 0;
 
-      for (typename std::list<std::unique_ptr<InitialTemperature::Interface<dim> > >::const_iterator initial_temperature_object = initial_temperature_objects.begin();
-           initial_temperature_object != initial_temperature_objects.end();
-           ++initial_temperature_object)
+      for (const auto &initial_temperature_object : this->plugin_objects)
         {
           temperature = model_operators[i](temperature,
-                                           (*initial_temperature_object)->initial_temperature(position));
-          i++;
+                                           initial_temperature_object->initial_temperature(position));
+          ++i;
         }
       return temperature;
     }
@@ -169,15 +136,15 @@ namespace aspect
     const std::vector<std::string> &
     Manager<dim>::get_active_initial_temperature_names () const
     {
-      return model_names;
+      return this->plugin_names;
     }
 
 
     template <int dim>
-    const std::list<std::unique_ptr<Interface<dim> > > &
+    const std::list<std::unique_ptr<Interface<dim>>> &
     Manager<dim>::get_active_initial_temperature_conditions () const
     {
-      return initial_temperature_objects;
+      return this->plugin_objects;
     }
 
 
@@ -255,11 +222,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<InitialTemperature::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<InitialTemperature::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<InitialTemperature::Interface<2>>::PluginInfo> *
+      internal::Plugins::PluginList<InitialTemperature::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<InitialTemperature::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<InitialTemperature::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<InitialTemperature::Interface<3>>::PluginInfo> *
+      internal::Plugins::PluginList<InitialTemperature::Interface<3>>::plugins = nullptr;
     }
   }
 
@@ -274,5 +241,7 @@ namespace aspect
   get_valid_model_names_pattern<dim> ();
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

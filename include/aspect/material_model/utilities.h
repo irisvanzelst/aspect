@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,10 +31,31 @@
 namespace aspect
 {
   template <int dim> class SimulatorAccess;
+  namespace Utilities
+  {
+    /**
+    * Because many places in ASPECT assume that all functions in the namespace
+    * <code>dealii::Utilities</code> are available without qualification as
+    * <code>Utilities::function</code>, just as all the function in the
+    * namespace <code>aspect::Utilities</code>, we make sure all these functions
+    * are available inside <code>aspect::Utilities</code>. This is maybe not
+    * the cleanest solution, but it is most compatible with a lot of existing
+    * code, and also allows to migrate ASPECT functions into deal.II when
+    * useful without introducing incompatibilities.
+    *
+    * We need to do this in every header that introduces something into the
+    * namespace <code>aspect::Utilities</code>, because it needs to happen
+    * no matter which header files of ASPECT are included.
+    */
+    using namespace dealii::Utilities;
 
+    template <int dim>
+    class StructuredDataLookup;
+  }
   namespace MaterialModel
   {
-    using namespace dealii;
+    template <int dim> class MaterialModelOutputs;
+    template <int dim> struct EquationOfStateOutputs;
 
     /**
      * A namespace in which we define utility functions that
@@ -89,10 +110,10 @@ namespace aspect
                   const double pressure) const;
 
             /**
-            * Computes the derivative of enthalpy for pressure, using the
-            * resolution of the read-in table to compute a finite-difference
-            * approximation of the derivative.
-            */
+             * Computes the derivative of enthalpy for pressure, using the
+             * resolution of the read-in table to compute a finite-difference
+             * approximation of the derivative.
+             */
             double
             dHdp (const double temperature,
                   const double pressure) const;
@@ -105,7 +126,7 @@ namespace aspect
              * the dHdT and dHdp functions. The third argument represents
              * the number of substeps taken to compute this average. A number
              * larger than one means the temperature-pressure range that is spanned
-             * by the first two input arguments is seperated into @p n_substeps
+             * by the first two input arguments is separated into @p n_substeps
              * equally spaced pressure-temperature steps, the derivatives are
              * computed for each substep and then averaged.
              */
@@ -119,11 +140,52 @@ namespace aspect
                     const double pressure) const;
 
             /**
+             * Returns the index that indicates the phase with the largest volume
+             * fraction at a given temperature and pressure.
+             */
+            unsigned int
+            dominant_phase (const double temperature,
+                            const double pressure) const;
+
+            /**
+             * Returns whether a lookup has a column that indicates which is the
+             * phase with the largest volume fraction is this material.
+             */
+            bool
+            has_dominant_phase() const;
+
+            /**
+             * Returns a vector of all the column names in the lookup file
+             * that start with the character string vol_fraction_
+             */
+            std::vector<std::string>
+            phase_volume_column_names() const;
+
+            /**
+             * Returns the volume fraction of the phase_idth phase
+             * at a given temperature and pressure.
+             */
+            double
+            phase_volume_fraction(const int phase_id,
+                                  const double temperature,
+                                  const double pressure) const;
+
+            /**
              * Returns the size of the data tables in pressure (first entry)
              * and temperature (second entry) dimensions.
              */
             std::array<double,2>
             get_pT_steps() const;
+
+
+            /**
+             * Get the list of names of all of the dominant phases
+             * in a given lookup table as given by the phase column.
+             * The names of the phases are stored in the order they
+             * first appear in the table.
+             */
+            const std::vector<std::string> &
+            get_dominant_phase_names() const;
 
           protected:
             /**
@@ -138,6 +200,16 @@ namespace aspect
                    const double pressure,
                    const Table<2, double> &values,
                    const bool interpol) const;
+
+            /**
+             * Access that data value of the property that is stored in table
+             * @p values at pressure @p pressure and temperature @p temperature
+             * using the closest point value.
+             */
+            unsigned int
+            value (const double temperature,
+                   const double pressure,
+                   const Table<2, unsigned int> &values) const;
 
             /**
              * Find the position in a data table given a temperature.
@@ -155,6 +227,16 @@ namespace aspect
             dealii::Table<2,double> vp_values;
             dealii::Table<2,double> vs_values;
             dealii::Table<2,double> enthalpy_values;
+            dealii::Table<2,unsigned int> dominant_phase_indices;
+
+            /**
+             * The vector of column names corresponding to each phase,
+             * and a vector of tables containing the volume fractions of
+             * each phase at a given temperature and pressure.
+             * The ordering of both vectors is the same.
+             */
+            std::vector<std::string> phase_column_names;
+            std::vector<dealii::Table<2,double>> phase_volume_fractions;
 
             double delta_press;
             double min_press;
@@ -164,7 +246,11 @@ namespace aspect
             double max_temp;
             unsigned int n_temperature;
             unsigned int n_pressure;
+            unsigned int n_phases;
+            unsigned int n_columns;
             bool interpolation;
+            bool has_dominant_phase_column;
+            std::vector<std::string> dominant_phase_names;
         };
 
         /**
@@ -177,7 +263,7 @@ namespace aspect
             HeFESToReader(const std::string &material_filename,
                           const std::string &derivatives_filename,
                           const bool interpol,
-                          const MPI_Comm &comm);
+                          const MPI_Comm comm);
         };
 
         /**
@@ -189,32 +275,134 @@ namespace aspect
           public:
             PerplexReader(const std::string &filename,
                           const bool interpol,
-                          const MPI_Comm &comm);
+                          const MPI_Comm comm);
+        };
+
+        /**
+         * This class reads in an entropy-pressure material table and looks up material
+         * properties for the given entropy and pressure.
+         */
+        class EntropyReader
+        {
+          public:
+
+            /**
+             * Read the table.
+             */
+            void
+            initialize(const MPI_Comm comm,
+                       const std::string &data_directory,
+                       const std::string &material_file_name);
+
+            /**
+             * Returns the specific heat for a given entropy and pressure.
+             */
+            double
+            specific_heat(const double entropy,
+                          const double pressure) const;
+
+            /**
+             * Returns the density for a given entropy and pressure.
+             */
+            double
+            density(const double entropy,
+                    const double pressure) const;
+
+            /**
+             * Returns the thermal_expansivity for a given entropy and pressure.
+             */
+            double
+            thermal_expansivity(const double entropy,
+                                const double pressure) const;
+
+            /**
+             * Returns the temperature for a given entropy and pressure.
+             */
+            double
+            temperature(const double entropy,
+                        const double pressure) const;
+
+            /**
+             * Returns the seismic p wave velocity for a given entropy and pressure.
+             */
+            double
+            seismic_vp(const double entropy,
+                       const double pressure) const;
+
+            /**
+             * Returns the seismic s wave velocity for a given entropy and pressure.
+             */
+            double
+            seismic_vs(const double entropy,
+                       const double pressure) const;
+
+            /**
+             * Returns density gradient for a given entropy and pressure.
+             */
+            Tensor<1, 2>
+            density_gradient(const double entropy,
+                             const double pressure) const;
+
+          private:
+            /**
+             * The StructuredDataLookup object that stores the material data.
+             */
+            std::unique_ptr<Utilities::StructuredDataLookup<2>> material_lookup;
         };
       }
 
-
-
       /**
-       * For multicomponent material models: Given a vector of of compositional
-       * fields of length N, this function returns a vector of volume fractions
-       * of length N+1, corresponding to the volume fraction of a ``background
-       * material'' as the first entry, and volume fractions for each of the input
+       * For multicomponent material models: Given a vector of compositional
+       * field values of length N, of which M indices correspond to mass or
+       * volume fractions, this function returns a vector of fractions
+       * of length M+1, corresponding to the fraction of a ``background
+       * material'' as the first entry, and fractions for each of the input
        * fields as the following entries. The returned vector will sum to one.
        * If the sum of the compositional_fields is greater than
-       * one, we assume that there is no background mantle (i.e., that field value
+       * one, we assume that there is no background field (i.e., that field value
        * is zero). Otherwise, the difference between the sum of the compositional
-       * fields and 1.0 is assumed to be the amount of background mantle.
-       * Optionally, one can input a component mask that determines which of the
-       * compositional fields to use during the computation (e.g. because
-       * some fields contain non-volumetric quantities like strain,
-       * porosity, or trace elements). By default, all fields are included.
+       * fields and 1.0 is assumed to be the amount of the background field.
+       * This function makes no assumptions about the units of the
+       * compositional field values; for example, they could correspond to
+       * mass or volume fractions.
        */
       std::vector<double>
-      compute_volume_fractions(const std::vector<double> &compositional_fields,
-                               const ComponentMask &field_mask = ComponentMask());
+      compute_only_composition_fractions(const std::vector<double> &compositional_fields,
+                                         const std::vector<unsigned int> &indices_to_use);
 
+      /**
+       * For multicomponent material models: Given a vector of compositional
+       * field values of length N, this function returns a vector of fractions
+       * of length N+1, corresponding to the fraction of a ``background
+       * material'' as the first entry, and fractions for each of the input
+       * fields as the following entries. The returned vector will sum to one.
+       * If the sum of the compositional_fields is greater than
+       * one, we assume that there is no background field (i.e., that field value
+       * is zero). Otherwise, the difference between the sum of the compositional
+       * fields and 1.0 is assumed to be the amount of the background field.
+       * Optionally, one can input a component mask that determines which of the
+       * compositional fields to use during the computation (e.g. because
+       * some fields contain unrelated quantities (like strain,
+       * porosity, or trace elements). By default, all fields are included.
+       * This function makes no assumptions about the units of the
+       * compositional field values; for example, they could correspond to
+       * mass or volume fractions.
+       */
+      std::vector<double>
+      compute_composition_fractions(const std::vector<double> &compositional_fields,
+                                    const ComponentMask &field_mask = ComponentMask());
 
+      /**
+       * Given a vector of component masses,
+       * and another of the corresponding densities, calculate the volumes
+       * of each component. If return_as_fraction is true, the returned vector
+       * will sum to one. If the input vectors have a length of one, the
+       * returned volume fraction is one.
+       */
+      std::vector<double>
+      compute_volumes_from_masses(const std::vector<double> &masses,
+                                  const std::vector<double> &densities,
+                                  const bool return_as_fraction);
 
       /**
        * For multicomponent material models:
@@ -269,6 +457,72 @@ namespace aspect
                             const CompositionalAveragingOperation &average_type);
 
 
+
+      /**
+       * This function computes averages of multicomponent thermodynamic properties
+       * that are stored in a vector of EquationOfStateOutputs.
+       * Each @p eos_outputs contains the thermodynamic properties for
+       * all materials at a given evaluation point.
+       * The averaged properties are:
+       * density, isothermal compressibility, thermal_expansivity,
+       * the specific entropy derivatives with respect to pressure and temperature
+       * and the specific heat capacity. The first three of these properties
+       * are averaged by volume fraction, and the second three
+       * (the specific properties) are averaged by mass fraction.
+       * These averages are used to fill the corresponding attributes of
+       * a MaterialModelOutputs object.
+       */
+      template <int dim>
+      void
+      fill_averaged_equation_of_state_outputs(const EquationOfStateOutputs<dim> &eos_outputs,
+                                              const std::vector<double> &mass_fractions,
+                                              const std::vector<double> &volume_fractions,
+                                              const unsigned int i,
+                                              MaterialModelOutputs<dim> &out);
+
+
+
+      /**
+       * Utilities for material models with multiple phases
+       */
+      namespace PhaseUtilities
+      {
+        /**
+         * Enumeration for selecting which averaging scheme to use when
+         * averaging the properties of different phases.
+         * Select between arithmetic and logarithmic.
+         */
+        enum PhaseAveragingOperation
+        {
+          arithmetic,
+          logarithmic
+        };
+      }
+
+      /**
+       * Material models compute output quantities such as the viscosity, the
+       * density, etc. For some models, these values may depend on the phase in
+       * addition to the composition, and more than one phase field might have
+       * nonzero values at a given quadrature point. This means that properties
+       * for each composition have to be averaged based on the fractions of each
+       * phase field present. This function performs this type of averaging.
+       * The averaging is based on the choice in @p operation. Averaging is conducted
+       * over the phase functions given in @p phase_function_values, with
+       * @p parameter_values containing values of all individual phases. Unlike the average_value
+       * function defined for compositions, averaging in this function is calculated based
+       * on phase functions and the change of variables on the trajectory of phase boundaries.
+       * Thus on a single phase boundary, values of variables change gradually from one phase
+       * to the other. The values of the phase function used to average the properties varies
+       * between 0 and 1.
+       */
+      double phase_average_value (const std::vector<double> &phase_function_values,
+                                  const std::vector<unsigned int> &n_phase_transitions_per_composition,
+                                  const std::vector<double> &parameter_values,
+                                  const unsigned int composition_index,
+                                  const PhaseUtilities::PhaseAveragingOperation operation = PhaseUtilities::arithmetic);
+
+
+
       /**
        * A data structure with all inputs for the
        * PhaseFunction::phase_function_value() and
@@ -278,20 +532,217 @@ namespace aspect
       struct PhaseFunctionInputs
       {
         /**
-        * Constructor. Initializes the various variables of this
-        * structure with the input values.
-        */
+         * Constructor. Initializes the various variables of this
+         * structure with the input values.
+         */
         PhaseFunctionInputs(const double temperature,
                             const double pressure,
                             const double depth,
                             const double pressure_depth_derivative,
-                            const unsigned int phase_index);
+                            const unsigned int phase_transition_index);
 
         double temperature;
         double pressure;
         double depth;
         double pressure_depth_derivative;
-        unsigned int phase_index;
+
+        /**
+         * This parameter determines which phase function of all the stored
+         * functions to compute. Phase functions are numbered consecutively,
+         * starting at 0 and the interpretation of their output is up to the
+         * calling side. For example the first phase function could be used to
+         * indicate a viscosity jump in the first compositional field,
+         * while the second function indicates a density jump in all
+         * compositions. None of this is known to the PhaseFunction object,
+         * which only has information that there are two phase functions
+         * and what their properties are.
+         */
+        unsigned int phase_transition_index;
+      };
+
+      /**
+       * A class that bundles functionality to look up the dominant phase in
+       * tables for each respective composition and export the values
+       * of phase functions. The class can handle arbitrary numbers of
+       * dominant phases for each composition, but the calling side
+       * has to determine how to use the return values of this object
+       * (e.g. in terms of density or viscosity).
+       */
+      template <int dim>
+      class PhaseFunctionDiscrete: public ::aspect::SimulatorAccess<dim>
+      {
+        public:
+
+          /**
+           * The initialization process loads the contents of the material files
+           * for the respective compositions.
+           */
+          void initialize();
+
+          /**
+           * Percentage of material that has already undergone the phase
+           * transition to the higher-pressure material. For this class
+           * this function only returns 1.0 or 0.0, depending on whether
+           * the selected phase transition has been crossed or not.
+           */
+          double compute_value (const PhaseFunctionInputs<dim> &in) const;
+
+          /**
+           * No valid implementation exists for this function, as the derivative of a
+           * discrete function is undefined at locations of phase jumps. This function raises an
+           * error to ensure that a phase derivative request is not made for this phase function.
+           */
+          double compute_derivative () const;
+
+          /**
+           * Return the total number of phase transitions.
+           */
+          unsigned int n_phase_transitions () const;
+
+          /**
+           * Return the total number of phases.
+           */
+          unsigned int n_phases () const;
+
+          /**
+           * Return the total number of phases over all chemical compositions.
+           */
+          unsigned int n_phases_over_all_chemical_compositions () const;
+
+          /**
+           * Return how many phase transitions there are for each chemical composition.
+           */
+          const std::vector<unsigned int> &
+          n_phase_transitions_for_each_chemical_composition () const;
+
+          /**
+           * Return how many phases there are for each chemical composition.
+           */
+          const std::vector<unsigned int> &
+          n_phases_for_each_chemical_composition () const;
+
+          /**
+           * Return how many phase transitions there are for each composition.
+           * Note, that most likely you only need the number of phase transitions
+           * for each chemical composition, so use the function above instead.
+           * This function is only kept for backward compatibility.
+           */
+          const std::vector<unsigned int> &
+          n_phase_transitions_for_each_composition () const;
+
+          /**
+           * Return how many phases there are for each composition.
+           * Note, that most likely you only need the number of phase transitions
+           * for each chemical composition, so use the function above instead.
+           * This function is only kept for backward compatibility.
+           */
+          const std::vector<unsigned int> &
+          n_phases_for_each_composition () const;
+
+          /**
+           * Declare the parameters this class takes through input files.
+           * Note that this class does not declare its own subsection,
+           * i.e. the parameters will be declared in the subsection that
+           * was active before calling this function.
+           */
+          static
+          void
+          declare_parameters (ParameterHandler &prm);
+
+          /**
+           * Read the parameters this class declares from the parameter file.
+           * Note that this class does not declare its own subsection,
+           * i.e. the parameters will be parsed from the subsection that
+           * was active before calling this function.
+           */
+          void
+          parse_parameters (ParameterHandler &prm);
+
+
+        private:
+          /**
+          * Directory path where data files are stored.
+          */
+          std::string data_directory;
+
+          /**
+           * List of file names containing material data for each composition.
+          */
+          std::vector<std::string> material_file_names;
+
+          /**
+          * Minimum temperature values for each composition in the P-T table.
+          */
+          std::vector<double> minimum_temperature;
+
+          /**
+          * Maximum temperature values for each composition in the P-T table.
+          */
+          std::vector<double> maximum_temperature;
+
+          /**
+          * Temperature intervals used for each composition in the P-T table.
+          */
+          std::vector<double> interval_temperature;
+
+          /**
+          * Minimum pressure values for each composition in the P-T table.
+          */
+          std::vector<double> minimum_pressure;
+
+          /**
+          * Maximum pressure values for each composition in the P-T table.
+          */
+          std::vector<double> maximum_pressure;
+
+          /**
+          * Pressure intervals used for each composition in the P-T table.
+          */
+          std::vector<double> interval_pressure;
+
+          /**
+           * List of pointers to objects that read and process data we get from
+           * material data files. There is one pointer/object per lookup file.
+           */
+          std::vector<std::unique_ptr<Utilities::StructuredDataLookup<2>>> material_lookup;
+
+          /**
+           * List of phase indicators of the most dominant phases in the material data files
+           * to construct the different phase transitions in this class. For a description of
+           * the use of the phase indicators, please see the documentation of the input parameter
+           * 'Phase transition indicators' in the function declare_parameters().
+           */
+          std::vector<unsigned int> transition_indicators;
+
+          /**
+           * A vector that stores how many phase transitions there are for each compositional field.
+           */
+          std::unique_ptr<std::vector<unsigned int>> n_phase_transitions_per_composition;
+
+          /**
+           * A vector that stores how many phases there are for each compositional field.
+           */
+          std::vector<unsigned int> n_phases_per_composition;
+
+          /**
+           * A vector that stores how many phase transitions there are for each chemical compositional field.
+           */
+          std::vector<unsigned int> n_phase_transitions_per_chemical_composition;
+
+          /**
+           * A vector that stores how many phases there are for each chemical compositional field.
+           */
+          std::vector<unsigned int> n_phases_per_chemical_composition;
+
+          /**
+           * Total number of phases over all compositional fields
+           */
+          unsigned int n_phases_total;
+
+          /**
+           * Total number of phases over all compositional fields
+           */
+          unsigned int n_phases_total_chemical_compositions;
       };
 
       /**
@@ -324,10 +775,55 @@ namespace aspect
           unsigned int n_phase_transitions () const;
 
           /**
-           * Return the Clapeyron slope (dp/dT of the transition) for
-           * phase transition number @p phase_index.
+           * Return the total number of phases.
            */
-          double get_transition_slope (const unsigned int phase_index) const;
+          unsigned int n_phases () const;
+
+          /**
+           * Return the total number of phases over all chemical compositions.
+           */
+          unsigned int n_phases_over_all_chemical_compositions () const;
+
+          /**
+           * Return the Clapeyron slope (dp/dT of the transition) for
+           * phase transition number @p phase_transition_index.
+           */
+          double get_transition_slope (const unsigned int phase_transition_index) const;
+
+          /**
+           * Return the depth for phase transition number @p phase_transition_index.
+           */
+          double get_transition_depth (const unsigned int phase_transition_index) const;
+
+          /**
+           * Return how many phase transitions there are for each chemical composition.
+           */
+          const std::vector<unsigned int> &
+          n_phase_transitions_for_each_chemical_composition () const;
+
+          /**
+           * Return how many phases there are for each chemical composition.
+           */
+          const std::vector<unsigned int> &
+          n_phases_for_each_chemical_composition () const;
+
+          /**
+           * Return how many phase transitions there are for each composition.
+           * Note, that most likely you only need the number of phase transitions
+           * for each chemical composition, so use the function above instead.
+           * This function is only kept for backward compatibility.
+           */
+          const std::vector<unsigned int> &
+          n_phase_transitions_for_each_composition () const;
+
+          /**
+           * Return how many phases there are for each composition.
+           * Note, that most likely you only need the number of phase transitions
+           * for each chemical composition, so use the function above instead.
+           * This function is only kept for backward compatibility.
+           */
+          const std::vector<unsigned int> &
+          n_phases_for_each_composition () const;
 
           /**
            * Declare the parameters this class takes through input files.
@@ -351,8 +847,8 @@ namespace aspect
 
         private:
           /**
-           * List of depth (or pressure), width and Clapeyron slopes
-           * for the different phase transitions
+           * List of depth (or pressure), width, Clapeyron slopes and
+           * limits of temperature for the different phase transitions
            */
           std::vector<double> transition_depths;
           std::vector<double> transition_pressures;
@@ -360,6 +856,8 @@ namespace aspect
           std::vector<double> transition_widths;
           std::vector<double> transition_pressure_widths;
           std::vector<double> transition_slopes;
+          std::vector<double> transition_temperature_upper_limits;
+          std::vector<double> transition_temperature_lower_limits;
 
           /**
            * Whether to define the phase transitions based on depth, or pressure.
@@ -372,7 +870,32 @@ namespace aspect
           /**
            * A vector that stores how many phase transitions there are for each compositional field.
            */
-          std::shared_ptr<std::vector<unsigned int> > n_phase_transitions_per_composition;
+          std::unique_ptr<std::vector<unsigned int>> n_phase_transitions_per_composition;
+
+          /**
+           * A vector that stores how many phases there are for each compositional field.
+           */
+          std::vector<unsigned int> n_phases_per_composition;
+
+          /**
+           * A vector that stores how many phase transitions there are for each chemical compositional field.
+           */
+          std::vector<unsigned int> n_phase_transitions_per_chemical_composition;
+
+          /**
+           * A vector that stores how many phases there are for each chemical compositional field.
+           */
+          std::vector<unsigned int> n_phases_per_chemical_composition;
+
+          /**
+           * Total number of phases over all compositional fields
+           */
+          unsigned int n_phases_total;
+
+          /**
+           * Total number of phases over all compositional fields
+           */
+          unsigned int n_phases_total_chemical_compositions;
       };
     }
   }

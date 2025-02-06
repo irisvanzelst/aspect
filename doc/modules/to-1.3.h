@@ -1,7 +1,7 @@
 /**
  * @page changes_between_1.2_and_1.3 Changes between version 1.2 and version 1.3
  *
- * <p> This is the list of changes made after the release of Aspect version
+ * <p> This is the list of changes made after the release of ASPECT version
  * 1.2 for version 1.3. All entries are signed with the names of the author.
  * </p>
  *
@@ -60,7 +60,7 @@
  * (Timo Heister, 2015/04/15)
  *
  * <li> Fixed: To make the right-hand side of the Stokes equation compatible
- * to the matrix we need to apply a correction for inbalanced in-/outflow
+ * to the matrix we need to apply a correction for imbalanced in-/outflow
  * across the model boundaries. This correction was accidentally applied twice
  * in the first iteration of the iterated IMPES solver. This does not change
  * the results, because subsequent iterations will do it correctly, but it
@@ -124,7 +124,7 @@
  * The plugin works for box and shell geometries and allows for time-dependent
  * or constant boundary conditions. The data files must provide data for the
  * whole model domain and the plugin interpolates the data from a structured
- * grid to Aspect's mesh linearly.
+ * grid to ASPECT's mesh linearly.
  * <br>
  * (Eva Bredow, Rene Gassmoeller, 2015/02/03)
  *
@@ -138,7 +138,7 @@
  * <br>
  * (Rene Gassmoeller, 2015/02/02)
  *
- * <li> Fixed: There was a small bug in ASPECT 1.2 that only occured in the
+ * <li> Fixed: There was a small bug in ASPECT 1.2 that only occurred in the
  * adiabatic initial temperature plugin, when no temperature was prescribed at
  * any boundary, the model was compressible and a bottom thermal boundary
  * layer was included. This is fixed now.

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,20 +31,14 @@ namespace aspect
 {
   namespace AdiabaticConditions
   {
-    using namespace dealii;
-
     /**
-     * A model in which the adiabatic profile is
-     * calculated by solving the hydrostatic equations for
-     * pressure and temperature in depth.
-     * The gravity is assumed to be in depth direction
-     * and the composition is either given by the initial
-     * composition at reference points or computed
-     * as a reference depth-function.
-     * All material parameters are computed by the
-     * material model plugin. The surface conditions are
-     * either constant or changing over time as prescribed
-     * by an user-provided function.
+     * A model in which the adiabatic profile is calculated by solving the
+     * hydrostatic equations for pressure and temperature in depth. The
+     * gravity is assumed to be in depth direction and the composition is
+     * either given by the initial composition at reference points or computed
+     * as a reference depth-function. All material parameters are computed by
+     * the material model plugin. The surface conditions are either constant
+     * or changing over time as prescribed by an user-provided function.
      */
     template <int dim>
     class ComputeProfile : public Interface<dim>
@@ -166,7 +160,7 @@ namespace aspect
          * Function object that computes the reference composition profile
          * if the reference_composition variable is set to function.
          */
-        std::unique_ptr<Functions::ParsedFunction<1> > composition_function;
+        std::unique_ptr<Functions::ParsedFunction<1>> composition_function;
 
         /**
          * Whether to use the surface_conditions_function to determine surface
@@ -177,10 +171,18 @@ namespace aspect
         bool use_surface_condition_function;
 
         /**
-         * ParsedFunction: If provided in the inpute file it prescribes
+         * ParsedFunction: If provided in the input file it prescribes
          * (surface pressure(t), surface temperature(t)).
          */
         Functions::ParsedFunction<1> surface_condition_function;
+
+        /**
+         * A shared pointer to the initial composition object
+         * that ensures that the current object can continue
+         * to access the initial composition object beyond the
+         * first time step.
+         */
+        std::shared_ptr<const aspect::InitialComposition::Manager<dim>> initial_composition_manager;
 
         /**
          * Internal helper function. Returns the reference property at a

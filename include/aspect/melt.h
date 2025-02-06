@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,8 +30,6 @@
 
 namespace aspect
 {
-  using namespace dealii;
-
   namespace MaterialModel
   {
     /**
@@ -45,7 +43,7 @@ namespace aspect
       public:
         /**
          * Constructor. When the MeltInputs are created,
-         * all properties are initialized with signalingNaNs.
+         * all properties are initialized with signaling NaNs.
          * This means that individual heating or material models
          * can all attach the plugins they need, and in a later
          * step they will all be filled together (using the fill
@@ -62,7 +60,7 @@ namespace aspect
          * An approximation for the fluid (melt) velocities
          * at the given positions.
          */
-        std::vector<Tensor<1,dim> > fluid_velocities;
+        std::vector<Tensor<1,dim>> fluid_velocities;
 
         /**
          * Fill the compaction pressures and fluid velocities.
@@ -76,15 +74,16 @@ namespace aspect
     class MeltOutputs : public AdditionalMaterialOutputs<dim>
     {
       public:
+        /**
+         * Constructor. When the MeltOutputs are created,
+         * all properties are initialized with signaling NaNs.
+         * This means that after the call to the material model
+         * it can be checked if the material model actually
+         * computed the values, by checking if the individual
+         * values are finite (using std::isfinite).
+         */
         MeltOutputs (const unsigned int n_points,
-                     const unsigned int /*n_comp*/)
-        {
-          compaction_viscosities.resize(n_points);
-          fluid_viscosities.resize(n_points);
-          permeabilities.resize(n_points);
-          fluid_densities.resize(n_points);
-          fluid_density_gradients.resize(n_points, Tensor<1,dim>());
-        }
+                     const unsigned int n_comp);
 
         /**
          * Compaction viscosity values $\xi$ at the given positions.
@@ -114,7 +113,7 @@ namespace aspect
          * required for compressible models to describe volume changes
          * of melt in dependence of pressure, temperature etc.
          */
-        std::vector<Tensor<1,dim> > fluid_density_gradients;
+        std::vector<Tensor<1,dim>> fluid_density_gradients;
 
         /**
          * Do the requested averaging operation for the melt outputs.
@@ -129,11 +128,24 @@ namespace aspect
     /**
      * Base class for material models that implement a melt fraction function.
      * This is used to compute some statistics about the melt fraction.
+     *
+     * This class is used as a "mix-in" class: Concrete material models will
+     * be derived from MaterialModel::Interface (and consequently have to
+     * implement the `virtual` functions of that class) *and also* from the
+     * current class (and consequently have to implement the `virtual` function
+     * of the current class). The inheritance from MaterialModel::Interface is
+     * typically via the MaterialModel::MeltInterface intermediate class.
      */
     template <int dim>
     class MeltFractionModel
     {
       public:
+        /**
+         * Destructor. Does nothing but is virtual so that derived classes
+         * destructors are also virtual.
+         */
+        virtual ~MeltFractionModel () = default;
+
         /**
          * Compute the equilibrium melt fractions for the given input conditions.
          * @p in and @p melt_fractions need to have the same size.
@@ -146,12 +158,54 @@ namespace aspect
                                      std::vector<double> &melt_fractions) const = 0;
 
         /**
-         * Destructor. Does nothing but is virtual so that derived classes
-         * destructors are also virtual.
+         * Return whether an object provided as argument is of a class that is
+         * derived from the current MeltFractionModel class. (Many of these models
+         * will be derived from MaterialModel::Interface and *also* be derived
+         * from MeltFractionModel; only the latter derivation is of interest to
+         * this function.
          */
-        virtual ~MeltFractionModel ()
-        {};
+        template <typename ModelType>
+        static
+        bool is_melt_fraction_model (const ModelType &model_object);
+
+        /**
+         * Return a reference to the MeltFractionModel base class of
+         * the object. This function will throw an exception unless
+         * is_melt_fraction_model() returns `true` for the given argument.
+         */
+        template <typename ModelType>
+        static
+        const MeltFractionModel<dim> &
+        as_melt_fraction_model (const ModelType &model_object);
     };
+
+
+
+    template <int dim>
+    template <typename ModelType>
+    inline
+    bool
+    MeltFractionModel<dim>::is_melt_fraction_model (const ModelType &model_object)
+    {
+      return (dynamic_cast<const MeltFractionModel<dim>*>(&model_object)
+              != nullptr);
+    }
+
+
+    template <int dim>
+    template <typename ModelType>
+    inline
+    const MeltFractionModel<dim> &
+    MeltFractionModel<dim>::as_melt_fraction_model (const ModelType &model_object)
+    {
+      Assert (is_melt_fraction_model(model_object) == true,
+              ExcMessage ("This function can only be called for model objects "
+                          "whose types are derived from MeltFractionModel."));
+
+      return dynamic_cast<const MeltFractionModel<dim>&>(model_object);
+    }
+
+
 
     /**
      * Base class for material models to be used with melt transport enabled.
@@ -261,7 +315,7 @@ namespace aspect
      * the case of melt migration on a single cell.
      */
     template <int dim>
-    class MeltAdvectionSystem : public MeltInterface<dim>
+    class MeltAdvectionSystem : public MeltInterface<dim>, public Assemblers::AdvectionStabilizationInterface<dim>
     {
       public:
         void
@@ -392,7 +446,7 @@ namespace aspect
        * to set up the introspection object.
        */
       void edit_finite_element_variables(const Parameters<dim> &parameters,
-                                         std::vector<VariableDeclaration<dim> > &variables);
+                                         std::vector<VariableDeclaration<dim>> &variables);
 
       /**
        * Determine, based on the run-time parameters of the current simulation,
@@ -420,12 +474,18 @@ namespace aspect
        * The fluid velocity is computed by solving a mass matrix problem, and the
        * solid pressure is computed algebraically.
        *
+       * @param system_matrix The system matrix with an already set up sparsity
+       * pattern that will be used by this function to compute the melt variables.
        * @param solution The existing solution vector that contains the values
        * for porosity, compaction pressure, fluid pressure and solid velocity
        * obtained by solving the Stokes and advection system, and that will be
        * updated with the computed values for fluid velocity and solid pressure.
+       * @param system_rhs The right-hand side vector that will be used by
+       * this function to compute the melt variables.
        */
-      void compute_melt_variables(LinearAlgebra::BlockVector &solution);
+      void compute_melt_variables(LinearAlgebra::BlockSparseMatrix &system_matrix,
+                                  LinearAlgebra::BlockVector &solution,
+                                  LinearAlgebra::BlockVector &system_rhs) const;
 
       /**
        * Return whether this object refers to the porosity field.
@@ -447,7 +507,7 @@ namespace aspect
        * This reverts the system of equations we solve back to the Stokes
        * system without melt transport for these cells.
        */
-      void add_current_constraints(ConstraintMatrix &constraints);
+      void add_current_constraints(AffineConstraints<double> &constraints);
 
       /**
        * Returns the entry of the private variable is_melt_cell_vector for the
@@ -484,7 +544,7 @@ namespace aspect
        * initialization can be done together with the other objects related to melt
        * transport.
        */
-      const std::unique_ptr<aspect::BoundaryFluidPressure::Interface<dim> > boundary_fluid_pressure;
+      const std::unique_ptr<aspect::BoundaryFluidPressure::Interface<dim>> boundary_fluid_pressure;
 
       /**
        * is_melt_cell_vector[cell->active_cell_index()] says whether we want to
@@ -501,7 +561,7 @@ namespace aspect
        * which depend on the solution of the porosity field, later after
        * we have computed this solution.
        */
-      ConstraintMatrix current_constraints;
+      AffineConstraints<double> current_constraints;
 
   };
 

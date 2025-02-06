@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -29,15 +29,15 @@ namespace aspect
   namespace BoundaryHeatFlux
   {
     template <int dim>
-    std::vector<Tensor<1,dim> >
+    std::vector<Tensor<1,dim>>
     Function<dim>::
     heat_flux (const types::boundary_id /*boundary_indicator*/,
                const MaterialModel::MaterialModelInputs<dim> &material_model_inputs,
                const MaterialModel::MaterialModelOutputs<dim> &/*material_model_outputs*/,
-               const std::vector<Tensor<1,dim> > &normal_vectors) const
+               const std::vector<Tensor<1,dim>> &normal_vectors) const
     {
-      const unsigned int n_evaluation_points = material_model_inputs.position.size();
-      std::vector<Tensor<1,dim> > heat_flux(normal_vectors);
+      const unsigned int n_evaluation_points = material_model_inputs.n_evaluation_points();
+      std::vector<Tensor<1,dim>> heat_flux(normal_vectors);
 
       for (unsigned int i=0; i<n_evaluation_points; ++i)
         {
@@ -101,7 +101,7 @@ namespace aspect
                              "A selection that determines the assumed coordinate "
                              "system for the function variables. Allowed values "
                              "are `cartesian', `spherical', and `depth'. `spherical' coordinates "
-                             "are interpreted as r,phi or r,phi,theta in 2D/3D "
+                             "are interpreted as r,phi or r,phi,theta in 2d/3d "
                              "respectively with theta being the polar angle. `depth' "
                              "will create a function, in which only the first "
                              "parameter is non-zero, which is interpreted to "
@@ -159,7 +159,8 @@ namespace aspect
                                              "that is elaborated in the parameters in section "
                                              "``Boundary heat flux model|Function''. The format of these "
                                              "functions follows the syntax understood by the "
-                                             "muparser library, see Section~\\ref{sec:muparser-format}."
+                                             "muparser library, see "
+                                             "{ref}\\`sec:run-aspect:parameters-overview:muparser-format\\`."
                                              "\n\n"
                                              "The formula you describe in the mentioned "
                                              "section is a scalar value for the heat flux that is assumed "

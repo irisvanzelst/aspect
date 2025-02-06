@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,16 +17,17 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_feature_types_segment_h
-#define _world_feature_types_segment_h
+#ifndef WORLD_BUILDER_TYPES_SEGMENT_H
+#define WORLD_BUILDER_TYPES_SEGMENT_H
 
-#include <world_builder/types/interface.h>
-#include <world_builder/point.h>
-#include <world_builder/types/plugin_system.h>
+
+#include "world_builder/types/plugin_system.h"
 
 
 namespace WorldBuilder
 {
+  class Parameters;
+
   namespace Types
   {
 
@@ -40,11 +41,12 @@ namespace WorldBuilder
          * A constructor
          */
         Segment(const double default_length,
-                const WorldBuilder::Point<2> default_thickness,
-                const WorldBuilder::Point<2> default_top_truncation,
-                const WorldBuilder::Point<2> default_angle,
-                const Types::Interface &temperature_pugin_system,
-                const Types::Interface &composition_pugin_system);
+                const WorldBuilder::Point<2> &default_thickness,
+                const WorldBuilder::Point<2> &default_top_truncation,
+                const WorldBuilder::Point<2> &default_angle,
+                const Types::Interface &temperature_plugin_system,
+                const Types::Interface &composition_plugin_system,
+                const Types::Interface &grains_plugin_system_);
 
         /**
          * A constructor for the load_entry function
@@ -55,35 +57,22 @@ namespace WorldBuilder
                 std::string description);
 
         /**
-         * A constructor for the clone and set_entry function
+         * Copy constructor
          */
-        Segment(const double default_length,
-                const WorldBuilder::Point<2> default_thickness,
-                const WorldBuilder::Point<2> default_top_truncation,
-                const WorldBuilder::Point<2> default_angle,
-                const std::unique_ptr<Types::Interface> &temperature_pugin_system_,
-                const std::unique_ptr<Types::Interface> &composition_pugin_system_);
+        Segment(Segment const &other);
 
 
         /**
          * Destructor
          */
-        ~Segment();
-
-        /**
-         * Clone. The caller of clone is responsible for the lifetime of it,
-         * so return a unique pionter.
-         */
-        virtual
-        std::unique_ptr<Interface> clone() const;
+        ~Segment() override;
 
         /**
          * Todo
          */
-        virtual
         void write_schema(Parameters &prm,
                           const std::string &name,
-                          const std::string &documentation) const;
+                          const std::string &documentation) const override final;
 
 
         double value_length;
@@ -93,68 +82,19 @@ namespace WorldBuilder
         WorldBuilder::Point<2> default_top_truncation;
         WorldBuilder::Point<2> value_angle;
         WorldBuilder::Point<2> default_angle;
-        std::unique_ptr<Types::Interface> temperature_pugin_system;
-        std::unique_ptr<Types::Interface> composition_pugin_system;
+        std::unique_ptr<Types::Interface> temperature_plugin_system;
+        std::unique_ptr<Types::Interface> composition_plugin_system;
+        std::unique_ptr<Types::Interface> grains_plugin_system;
 
+      protected:
+        Segment *clone_impl() const override final
+        {
+          return new Segment(*this);
+        };
       private:
 
     };
-  }
-
-  namespace Objects
-  {
-
-    /**
-      * This class represents an actual segment
-      */
-    template <class A, class B>
-    class Segment : public Types::Interface
-    {
-      public:
-
-        /**
-         * A constructor for the clone and set_entry function
-         */
-        Segment(const double default_length,
-                const WorldBuilder::Point<2> default_thickness,
-                const WorldBuilder::Point<2> default_top_truncation,
-                const WorldBuilder::Point<2> default_angle,
-                const std::vector<std::shared_ptr<A> > &temperature_systems,
-                const std::vector<std::shared_ptr<B> > &composition_systems);
-
-        /**
-         * Destructor
-         */
-        ~Segment();
-
-        /**
-         * Clone. The caller of clone is responsible for the lifetime of it,
-         * so return a unique pionter.
-         */
-        virtual
-        std::unique_ptr<Interface> clone() const;
-
-        /**
-         * Todo
-         */
-        virtual
-        void write_schema(Parameters &prm,
-                          const std::string &name,
-                          const std::string &documentation) const;
-
-
-        double value_length;
-        double default_length;
-        WorldBuilder::Point<2> value_thickness;
-        WorldBuilder::Point<2> value_top_truncation;
-        WorldBuilder::Point<2> value_angle;
-        std::vector<std::shared_ptr<A> > temperature_systems;
-        std::vector<std::shared_ptr<B> > composition_systems;
-
-      private:
-
-    };
-  }
-}
+  } // namespace Types
+} // namespace WorldBuilder
 
 #endif

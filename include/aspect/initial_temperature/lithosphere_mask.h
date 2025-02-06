@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,8 +31,6 @@ namespace aspect
 {
   namespace InitialTemperature
   {
-    using namespace dealii;
-
     namespace LABDepth
     {
       template <int dim>
@@ -53,7 +51,7 @@ namespace aspect
 
           /**
            * Return LAB depth as a function of position (latitude and longitude). This
-          * function returns either a constant value or values from a text file,
+           * function returns either a constant value or values from a text file,
            * depending on the input parameters. Text files are read in
            * two dimensions so the third column (depth) is treated as data.
            */
@@ -75,9 +73,9 @@ namespace aspect
 
         private:
           /**
-           * Reads in file containing input data in ascii format.
+           * Reads in file containing input data.
            */
-          Utilities::AsciiDataLookup<2> lab_depths;
+          Utilities::StructuredDataLookup<2> lab_depths;
 
           /**
            * Directory in which the LAB depth file is present.
@@ -130,10 +128,10 @@ namespace aspect
         initialize () override;
 
         /**
-          * Return the initial temperature as a function of position. For the
-          * current class, this function uses the given lithosphere temperature
-          * above the lithosphere-asthenosphere boundary and nans below.
-          */
+         * Return the initial temperature as a function of position. For the
+         * current class, this function uses the given lithosphere temperature
+         * above the lithosphere-asthenosphere boundary and nans below.
+         */
         double
         initial_temperature (const Point<dim> &position) const override;
 

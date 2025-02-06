@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,52 +33,41 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     template <int dim>
     class LatentHeatEnthalpy : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
         void
-        initialize()
+        initialize() override
         {
           const std::string datadirectory = Utilities::expand_ASPECT_SOURCE_DIR("$ASPECT_SOURCE_DIR/data/material-model/latent-heat-enthalpy-test/");
           const std::string material_file_names  = "testdata.txt";
 
-          material_lookup = std_cxx14::make_unique<MaterialModel::MaterialUtilities::Lookup::PerplexReader>(datadirectory+material_file_names,
+          material_lookup = std::make_unique<MaterialModel::MaterialUtilities::Lookup::PerplexReader>(datadirectory+material_file_names,
                             true,
                             this->get_mpi_communicator());
         }
 
-        double
-        reference_viscosity () const
-        {
-          return 8.44e21;
-        }
-
         bool
-        is_compressible () const
+        is_compressible () const override
         {
           return false;
         }
 
         void
-        evaluate(const typename Interface<dim>::MaterialModelInputs &in, typename Interface<dim>::MaterialModelOutputs &out) const
+        evaluate(const typename Interface<dim>::MaterialModelInputs &in, typename Interface<dim>::MaterialModelOutputs &out) const override
         {
           const double reference_rho              = 3400;
           const double density_jump               = 115.6;
-          const double reference_T                = 1000;
           const double eta                        = 8.44e21;
           const double k_value                    = 2.38;
-          const double reference_specific_heat    = 1000;
-          const double thermal_alpha              = 0;
 
           double dHdT = 0.0;
           double dHdp = 0.0;
 
           if (in.current_cell.state() == IteratorState::valid)
             {
-              const QTrapez<dim> quadrature_formula;
+              const QTrapezoid<dim> quadrature_formula;
               const unsigned int n_q_points = quadrature_formula.size();
 
               FEValues<dim> fe_values (this->get_mapping(),
@@ -87,8 +76,8 @@ namespace aspect
                                        update_values);
 
               std::vector<double> temperatures(n_q_points), pressures(n_q_points);
-              std::vector<std::vector<double> > compositions (quadrature_formula.size(),std::vector<double> (this->n_compositional_fields()));
-              std::vector<std::vector<double> > composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
+              std::vector<std::vector<double>> compositions (quadrature_formula.size(),std::vector<double> (this->n_compositional_fields()));
+              std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
 
               fe_values.reinit (in.current_cell);
 
@@ -141,9 +130,9 @@ namespace aspect
                 }
             }
 
-          for (unsigned int i=0; i<in.position.size(); ++i)
+          for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
             {
-              if (in.strain_rate.size() > 0)
+              if (in.requests_property(MaterialProperties::viscosity))
                 out.viscosities[i] = eta;
 
               out.densities[i] = material_lookup->density(in.temperature[i],in.pressure[i]);

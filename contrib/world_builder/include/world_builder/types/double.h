@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,21 +17,24 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_feature_types_double_h
-#define _world_feature_types_double_h
+#ifndef WORLD_BUILDER_TYPES_DOUBLE_H
+#define WORLD_BUILDER_TYPES_DOUBLE_H
 
-#include <world_builder/types/interface.h>
+
+#include "world_builder/types/interface.h"
 
 
 namespace WorldBuilder
 {
+  class Parameters;
+
   namespace Types
   {
 
     /**
      * This class represents a double value with documentation
      */
-    class Double : public Interface
+    class Double final: public Interface
     {
       public:
         /**
@@ -40,31 +43,34 @@ namespace WorldBuilder
         Double(const double default_value);
 
         /**
-         * Destructor
+         * Copy constructor
          */
-        ~Double();
+        Double(Double const &other);
 
         /**
-         * Clone. The caller of clone is responsible for the lifetime of it,
-         * so return a unique pionter.
+         * Destructor
          */
-        virtual
-        std::unique_ptr<Interface> clone() const;
+        ~Double() override final;
 
         /**
          * Todo
          */
-        virtual
         void write_schema(Parameters &prm,
                           const std::string &name,
-                          const std::string &documentation) const;
+                          const std::string &documentation) const override final;
 
         double default_value;
+
+      protected:
+        Double *clone_impl() const override final
+        {
+          return new Double(*this);
+        };
 
       private:
 
     };
-  }
-}
+  } // namespace Types
+} // namespace WorldBuilder
 
 #endif

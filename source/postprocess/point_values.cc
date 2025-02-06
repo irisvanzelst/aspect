@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -26,7 +26,7 @@
 #include <aspect/global.h>
 #include <deal.II/numerics/vector_tools.h>
 
-#include <math.h>
+#include <cmath>
 
 namespace aspect
 {
@@ -40,8 +40,8 @@ namespace aspect
       // initialize this to a nonsensical value; set it to the actual time
       // the first time around we get to check it
       last_output_time (std::numeric_limits<double>::quiet_NaN()),
-      evaluation_points_cartesian (std::vector<Point<dim> >() ),
-      point_values (std::vector<std::pair<double, std::vector<Vector<double> > > >() ),
+      evaluation_points_cartesian (std::vector<Point<dim>>() ),
+      point_values (std::vector<std::pair<double, std::vector<Vector<double>>>>() ),
       use_natural_coordinates (false)
     {}
 
@@ -57,10 +57,10 @@ namespace aspect
 
       // see if output is requested at this time
       if (this->get_time() < last_output_time + output_interval)
-        return std::pair<std::string,std::string>();
+        return {"", ""};
 
       // evaluate the solution at all of our evaluation points
-      std::vector<Vector<double> >
+      std::vector<Vector<double>>
       current_point_values (evaluation_points_cartesian.size(),
                             Vector<double> (this->introspection().n_components));
 
@@ -112,63 +112,65 @@ namespace aspect
         }
 
       // finally push these point values all onto the list we keep
-      point_values.push_back (std::make_pair (this->get_time(),
-                                              current_point_values));
+      point_values.emplace_back (this->get_time(), current_point_values);
 
       // now write all of the data to the file of choice. start with a pre-amble that
       // explains the meaning of the various fields
       const std::string filename = (this->get_output_directory() +
                                     "point_values.txt");
-      std::ofstream f (filename.c_str());
-      f << ("# <time> "
-            "<evaluation_point_x> "
-            "<evaluation_point_y> ")
-        << (dim == 3 ? "<evaluation_point_z> " : "")
-        << ("<velocity_x> "
-            "<velocity_y> ")
-        << (dim == 3 ? "<velocity_z> " : "")
-        << "<pressure> <temperature>";
-      for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
-        f << " <" << this->introspection().name_for_compositional_index(c) << ">";
-      f << '\n';
 
-      for (std::vector<std::pair<double, std::vector<Vector<double> > > >::iterator
-           time_point = point_values.begin();
-           time_point != point_values.end();
-           ++time_point)
+      if (Utilities::MPI::this_mpi_process(this->get_mpi_communicator()) == 0)
         {
-          Assert (time_point->second.size() == evaluation_points_cartesian.size(),
-                  ExcInternalError());
-          for (unsigned int i=0; i<evaluation_points_cartesian.size(); ++i)
+
+          std::ofstream f (filename);
+          f << ("# <time> "
+                "<evaluation_point_x> "
+                "<evaluation_point_y> ")
+            << (dim == 3 ? "<evaluation_point_z> " : "")
+            << ("<velocity_x> "
+                "<velocity_y> ")
+            << (dim == 3 ? "<velocity_z> " : "")
+            << "<pressure> <temperature>";
+          for (unsigned int c=0; c<this->n_compositional_fields(); ++c)
+            f << " <" << this->introspection().name_for_compositional_index(c) << '>';
+          f << '\n';
+
+          for (const auto &time_point : point_values)
             {
-              f << /* time = */ time_point->first / (this->convert_output_to_years() ? year_in_seconds : 1.)
-                << ' '
-                << /* location = */ evaluation_points_cartesian[i] << ' ';
-
-              for (unsigned int c=0; c<time_point->second[i].size(); ++c)
+              Assert (time_point.second.size() == evaluation_points_cartesian.size(),
+                      ExcInternalError());
+              for (unsigned int i=0; i<evaluation_points_cartesian.size(); ++i)
                 {
-                  // output a data element. internally, we store all point
-                  // values in the same format in which they were computed,
-                  // but we convert velocities to meters per year if so
-                  // requested
-                  if ((this->introspection().component_masks.velocities[c] == false)
-                      ||
-                      (this->convert_output_to_years() == false))
-                    f << time_point->second[i][c];
-                  else
-                    f << time_point->second[i][c] * year_in_seconds;
+                  f << /* time = */ time_point.first / (this->convert_output_to_years() ? year_in_seconds : 1.)
+                    << ' '
+                    << /* location = */ evaluation_points_cartesian[i] << ' ';
 
-                  f << (c != time_point->second[i].size()-1 ? ' ' : '\n');
+                  for (unsigned int c=0; c<time_point.second[i].size(); ++c)
+                    {
+                      // output a data element. internally, we store all point
+                      // values in the same format in which they were computed,
+                      // but we convert velocities to meters per year if so
+                      // requested
+                      if ((this->introspection().component_masks.velocities[c] == false)
+                          ||
+                          (this->convert_output_to_years() == false))
+                        f << time_point.second[i][c];
+                      else
+                        f << time_point.second[i][c] * year_in_seconds;
+
+                      f << (c != time_point.second[i].size()-1 ? ' ' : '\n');
+                    }
                 }
+
+              // have an empty line between time steps
+              f << '\n';
             }
 
-          // have an empty line between time steps
-          f << '\n';
+          AssertThrow (f, ExcMessage("Writing data to <" + filename +
+                                     "> did not succeed in the `point values' "
+                                     "postprocessor."));
         }
 
-      AssertThrow (f, ExcMessage("Writing data to <" + filename +
-                                 "> did not succeed in the `point values' "
-                                 "postprocessor."));
 
       // Update time
       set_last_output_time (this->get_time());
@@ -188,8 +190,8 @@ namespace aspect
       {
         prm.enter_subsection("Point values");
         {
-          prm.declare_entry ("Time between point values output", "0",
-                             Patterns::Double (0),
+          prm.declare_entry ("Time between point values output", "0.",
+                             Patterns::Double (0.),
                              "The time interval between each generation of "
                              "point values output. A value of zero indicates "
                              "that output should be generated in each time step. "
@@ -233,16 +235,16 @@ namespace aspect
           const std::vector<std::string> point_list
             = Utilities::split_string_list(prm.get("Evaluation points"), ';');
 
-          std::vector<std::array<double,dim> > evaluation_points;
+          std::vector<std::array<double,dim>> evaluation_points;
 
-          for (unsigned int p=0; p<point_list.size(); ++p)
+          for (const auto &p : point_list)
             {
               const std::vector<std::string> coordinates
-                = Utilities::split_string_list(point_list[p], ',');
+                = Utilities::split_string_list(p, ',');
               AssertThrow (coordinates.size() == dim,
                            ExcMessage ("In setting up the list of evaluation points for the <Point values> "
                                        "postprocessor, one of the evaluation points reads <"
-                                       + point_list[p] +
+                                       + p +
                                        ">, but this does not correspond to a list of numbers with "
                                        "as many coordinates as you run your simulation in."));
 
@@ -254,12 +256,6 @@ namespace aspect
 
           use_natural_coordinates = prm.get_bool("Use natural coordinates");
 
-          if (use_natural_coordinates)
-            AssertThrow (!Plugins::plugin_type_matches<const GeometryModel::Sphere<dim>>(this->get_geometry_model()) &&
-                         !Plugins::plugin_type_matches<const GeometryModel::SphericalShell<dim>>(this->get_geometry_model()),
-                         ExcMessage ("This postprocessor can not be used if the geometry "
-                                     "is a sphere or spherical shell, because these geometries have not implemented natural coordinates."));
-
           // Convert the vector of coordinate arrays in Cartesian or natural
           // coordinates to a vector of Point<dim> of Cartesian coordinates.
           evaluation_points_cartesian.resize(evaluation_points.size());
@@ -268,7 +264,7 @@ namespace aspect
               if (use_natural_coordinates)
                 evaluation_points_cartesian[p] = this->get_geometry_model().natural_to_cartesian_coordinates(evaluation_points[p]);
               else
-                for (unsigned int i = 0; i < dim; i++)
+                for (unsigned int i = 0; i < dim; ++i)
                   evaluation_points_cartesian[p][i] = evaluation_points[p][i];
             }
         }
@@ -292,9 +288,15 @@ namespace aspect
     void
     PointValues<dim>::save (std::map<std::string, std::string> &status_strings) const
     {
+      // Serialize into a stringstream. Put the following into a code
+      // block of its own to ensure the destruction of the 'oa'
+      // archive triggers a flush() on the stringstream so we can
+      // query the completed string below.
       std::ostringstream os;
-      aspect::oarchive oa (os);
-      oa << (*this);
+      {
+        aspect::oarchive oa (os);
+        oa << (*this);
+      }
 
       status_strings["PointValues"] = os.str();
     }
@@ -360,12 +362,14 @@ namespace aspect
                                   "set, in years. In the latter case, the velocity is also converted "
                                   "to meters/year, instead of meters/second."
                                   "\n\n"
-                                  "\\note{Evaluating the solution of a finite element field at "
+                                  ":::{note}\n"
+                                  "Evaluating the solution of a finite element field at "
                                   "arbitrarily chosen points is an expensive process. Using this "
                                   "postprocessor will only be efficient if the number of evaluation "
                                   "points or output times is relatively small. If you need a very large number of "
                                   "evaluation points, you should consider extracting this "
                                   "information from the visualization program you use to display "
-                                  "the output of the `visualization' postprocessor.}")
+                                  "the output of the `visualization' postprocessor.\n"
+                                  ":::")
   }
 }

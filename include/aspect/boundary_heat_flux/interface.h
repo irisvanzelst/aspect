@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,45 +35,15 @@ namespace aspect
    */
   namespace BoundaryHeatFlux
   {
-    using namespace dealii;
-
     /**
      * Base class
      *
      * @ingroup BoundaryHeatFlux
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after the
-         * SimulatorAccess (if applicable) is initialized.
-         */
-        virtual void initialize ();
-
-        /**
-         * A function that is called at the beginning of each time step. The
-         * default implementation of the function does nothing, but derived
-         * classes that need more elaborate setups for a given time step may
-         * overload the function.
-         *
-         * The point of this function is to allow complex boundary heat flux
-         * models to do an initialization step once at the beginning of each
-         * time step. An example would be a model that needs to call an
-         * external program to compute a heat flux change at bottom.
-         */
-        virtual
-        void
-        update ();
-
         /**
          * Compute the heat flux for a list of quadrature points.
          *
@@ -87,34 +57,25 @@ namespace aspect
          * @param material_model_inputs The material property inputs.
          * @param material_model_outputs The material property outputs.
          * @param normal_vectors The normal vector at each quadrature point.
+         *
          * @return A vector of heat flux vectors at the evaluation points.
+         *   For historical reasons, the function is asked
+         *   to provide the heat flux as a vector, even though the place where the
+         *   heat flux is used only uses the component of this vector that is
+         *   to the boundary (which it computes by taking the dot product *normal*
+         *   between the returned vector and the normal vector). Because there are
+         *   situations where all you can do is compute the normal heat flux as a
+         *   scalar, the `heat_flux()` function also receives the normal vector as
+         *   an input argument. As a consequence, one way for the function to
+         *   compute the required heat flux vector is to compute the scalar heat
+         *   flux and multiply it by the normal vector.
          */
         virtual
-        std::vector<Tensor<1,dim> >
+        std::vector<Tensor<1,dim>>
         heat_flux (const types::boundary_id boundary_indicator,
                    const MaterialModel::MaterialModelInputs<dim> &material_model_inputs,
                    const MaterialModel::MaterialModelOutputs<dim> &material_model_outputs,
-                   const std::vector<Tensor<1,dim> > &normal_vectors) const = 0;
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
+                   const std::vector<Tensor<1,dim>> &normal_vectors) const = 0;
     };
 
 
@@ -138,7 +99,7 @@ namespace aspect
     register_boundary_heat_flux (const std::string &name,
                                  const std::string &description,
                                  void (*declare_parameters_function) (ParameterHandler &),
-                                 Interface<dim> *(*factory_function) ());
+                                 std::unique_ptr<Interface<dim>> (*factory_function) ());
 
     /**
      * A function that given the name of a model returns a pointer to an
@@ -151,7 +112,7 @@ namespace aspect
      * @ingroup BoundaryHeatFlux
      */
     template <int dim>
-    Interface<dim> *
+    std::unique_ptr<Interface<dim>>
     create_boundary_heat_flux (ParameterHandler &prm);
 
 
@@ -192,10 +153,10 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_BOUNDARY_HEAT_FLUX_MODEL_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::BoundaryHeatFlux::Interface<2>,classname<2> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::BoundaryHeatFlux::Interface<2>,classname<2>> \
     dummy_ ## classname ## _2d (&aspect::BoundaryHeatFlux::register_boundary_heat_flux<2>, \
                                 name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::BoundaryHeatFlux::Interface<3>,classname<3> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::BoundaryHeatFlux::Interface<3>,classname<3>> \
     dummy_ ## classname ## _3d (&aspect::BoundaryHeatFlux::register_boundary_heat_flux<3>, \
                                 name, description); \
   }

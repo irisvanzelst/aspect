@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,7 +35,6 @@ namespace aspect
     std::pair<std::string,std::string>
     MassFluxStatistics<dim>::execute (TableHandler &statistics)
     {
-      // First determine the units for the output
       const std::string unit = (this->convert_output_to_years())
                                ?
                                "kg/yr"
@@ -48,7 +47,7 @@ namespace aspect
                               1.0;
 
       // create a quadrature formula based on the temperature element alone.
-      const QGauss<dim-1> quadrature_formula (this->introspection().polynomial_degree.velocities + 1);
+      const Quadrature<dim-1> &quadrature_formula = this->introspection().face_quadratures.velocities;
 
       FEFaceValues<dim> fe_face_values (this->get_mapping(),
                                         this->get_fe(),
@@ -57,12 +56,13 @@ namespace aspect
                                         update_normal_vectors    |
                                         update_quadrature_points | update_JxW_values);
 
-      std::vector<std::vector<double> > composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
+      std::vector<std::vector<double>> composition_values (this->n_compositional_fields(),std::vector<double> (quadrature_formula.size()));
 
       std::map<types::boundary_id, double> local_boundary_fluxes;
 
       MaterialModel::MaterialModelInputs<dim> in(fe_face_values.n_quadrature_points, this->n_compositional_fields());
       MaterialModel::MaterialModelOutputs<dim> out(fe_face_values.n_quadrature_points, this->n_compositional_fields());
+      in.requested_properties = MaterialModel::MaterialProperties::density;
 
       // for every surface face on which it makes sense to compute a
       // mass flux and that is owned by this processor,
@@ -70,12 +70,12 @@ namespace aspect
       //   j =  \rho * v * n
       for (const auto &cell : this->get_dof_handler().active_cell_iterators())
         if (cell->is_locally_owned())
-          for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+          for (const unsigned int f : cell->face_indices())
             if (cell->at_boundary(f))
               {
                 fe_face_values.reinit (cell, f);
                 // Set use_strain_rates to false since we don't need viscosity
-                in.reinit(fe_face_values, cell, this->introspection(), this->get_solution(), false);
+                in.reinit(fe_face_values, cell, this->introspection(), this->get_solution());
 
                 this->get_material_model().evaluate(in, out);
 
@@ -104,10 +104,9 @@ namespace aspect
         boundary_indicators
           = this->get_geometry_model().get_used_boundary_indicators ();
         std::vector<double> local_values;
-        for (std::set<types::boundary_id>::const_iterator
-             p = boundary_indicators.begin();
-             p != boundary_indicators.end(); ++p)
-          local_values.push_back (local_boundary_fluxes[*p]);
+        local_values.reserve(boundary_indicators.size());
+        for (const auto p : boundary_indicators)
+          local_values.push_back (local_boundary_fluxes[p]);
 
         // then collect contributions from all processors
         std::vector<double> global_values (local_values.size());
@@ -143,7 +142,7 @@ namespace aspect
 
           // finally have something for the screen
           screen_text.precision(4);
-          screen_text << p->second << " " << unit
+          screen_text << p->second << ' ' << unit
                       << (index == global_boundary_fluxes.size()-1 ? "" : ", ");
         }
 
@@ -177,11 +176,13 @@ namespace aspect
                                   "the core into the mantle when the domain describes the "
                                   "mantle, then you need to multiply the result by -1."
                                   "\n\n"
-                                  "\\note{In geodynamics, the term ``mass flux'' is often understood "
+                                  ":::{note}\n"
+                                  "In geodynamics, the term ``mass flux'' is often understood "
                                   "to be the quantity $\\rho \\mathbf v$, which is really a mass "
                                   "flux \\textit{density}, i.e., a vector-valued field. In contrast "
                                   "to this, the current postprocessor only computes the integrated "
                                   "flux over each part of the boundary. Consequently, the units of "
-                                  "the quantity computed here are $\\frac{kg}{s}$.}")
+                                  "the quantity computed here are $\\frac{kg}{s}$.\n"
+                                  ":::")
   }
 }

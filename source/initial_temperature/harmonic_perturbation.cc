@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,6 +22,7 @@
 #include <aspect/initial_temperature/harmonic_perturbation.h>
 #include <aspect/adiabatic_conditions/interface.h>
 #include <aspect/geometry_model/box.h>
+#include <aspect/geometry_model/two_merged_boxes.h>
 #include <aspect/geometry_model/spherical_shell.h>
 #include <aspect/geometry_model/chunk.h>
 #include <aspect/utilities.h>
@@ -65,7 +66,7 @@ namespace aspect
             {
               // Use a sine as lateral perturbation that is scaled to the opening angle of the geometry.
               // This way the perturbation is always 0 at the model boundaries.
-              const double opening_angle = spherical_geometry_model.opening_angle()*numbers::PI/180.0;
+              const double opening_angle = spherical_geometry_model.opening_angle() * constants::degree_to_radians;
               lateral_perturbation = std::sin(lateral_wave_number_1*scoord[1]*numbers::PI/opening_angle);
             }
 
@@ -92,7 +93,7 @@ namespace aspect
             Plugins::get_plugin_as_type<const GeometryModel::Chunk<dim>> (this->get_geometry_model());
 
           AssertThrow (dim == 2,
-                       ExcMessage ("Harmonic perturbation only implemented in 2D for chunk geometry"));
+                       ExcMessage ("Harmonic perturbation only implemented in 2d for chunk geometry"));
 
           // In case of chunk calculate spherical coordinates
           const std::array<double,dim> scoord = aspect::Utilities::Coordinates::cartesian_to_spherical_coordinates(position);
@@ -113,6 +114,26 @@ namespace aspect
           // that is scaled to the extent of the geometry.
           // This way the perturbation is always 0 at the model borders.
           const Point<dim> extent = box_geometry_model.get_extents();
+
+          if (dim==2)
+            {
+              lateral_perturbation = std::sin(lateral_wave_number_1*position(0)*numbers::PI/extent(0));
+            }
+          else if (dim==3)
+            {
+              lateral_perturbation = std::sin(lateral_wave_number_1*position(0)*numbers::PI/extent(0))
+                                     * std::sin(lateral_wave_number_2*position(1)*numbers::PI/extent(1));
+            }
+        }
+      else if (Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()))
+        {
+          const GeometryModel::TwoMergedBoxes<dim> &two_merged_boxes_geometry_model =
+            Plugins::get_plugin_as_type<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model());
+
+          // In case of Box model use a sine as lateral perturbation
+          // that is scaled to the extent of the geometry.
+          // This way the perturbation is always 0 at the model borders.
+          const Point<dim> extent = two_merged_boxes_geometry_model.get_extents();
 
           if (dim==2)
             {
@@ -149,7 +170,7 @@ namespace aspect
           prm.declare_entry ("Lateral wave number one", "3",
                              Patterns::Integer (),
                              "Doubled first lateral wave number of the harmonic perturbation. "
-                             "Equals the spherical harmonic degree in 3D spherical shells. "
+                             "Equals the spherical harmonic degree in 3d spherical shells. "
                              "In all other cases one equals half of a sine period over "
                              "the model domain. This allows for single up-/downswings. "
                              "Negative numbers reverse the sign of the perturbation but are "
@@ -157,15 +178,15 @@ namespace aspect
           prm.declare_entry ("Lateral wave number two", "2",
                              Patterns::Integer (),
                              "Doubled second lateral wave number of the harmonic perturbation. "
-                             "Equals the spherical harmonic order in 3D spherical shells. "
+                             "Equals the spherical harmonic order in 3d spherical shells. "
                              "In all other cases one equals half of a sine period over "
                              "the model domain. This allows for single up-/downswings. "
                              "Negative numbers reverse the sign of the perturbation.");
           prm.declare_entry ("Magnitude", "1.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The magnitude of the Harmonic perturbation.");
           prm.declare_entry ("Reference temperature", "1600.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The reference temperature that is perturbed by the "
                              "harmonic function. Only used in incompressible models.");
         }

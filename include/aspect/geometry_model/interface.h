@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -46,8 +46,6 @@ namespace aspect
    */
   namespace GeometryModel
   {
-    using namespace dealii;
-
     /**
      * Base class for classes that describe particular geometries for the
      * domain. These classes must also be able to create coarse meshes and
@@ -56,22 +54,9 @@ namespace aspect
      * @ingroup GeometryModels
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         */
-        virtual void initialize ();
-
         /**
          * Generate a coarse mesh for the geometry described by this class.
          */
@@ -114,20 +99,22 @@ namespace aspect
          * only compute the depth with regard to the <i>reference
          * configuration</i> of the geometry, i.e., the geometry initially
          * created. If you are using a dynamic topography in your models
-         * that changes in every time step, then the <i>actual</i> depth
+         * that changes in every time step, or if you apply initial
+         * topography to your model, then the <i>actual</i> depth
          * of a point with regard to this dynamic topography will not
          * match the value this function returns. This is so because
          * computing the actual depth is difficult: In parallel computations,
          * the processor on which you want to evaluate the depth of a point
          * may know nothing about the displacement of the surface anywhere
-         * if it happens to store only interior cells. furthermore, it is
+         * if it happens to store only interior cells. Furthermore, it is
          * not even clear what "depth" one would compute in such situations:
          * The distance to the closest surface point? The vertical distance
          * to the surface point directly above? Or the length of the line
          * from the given point to a surface point that is locally always
          * parallel to the gravity vector? For all of these reasons, this
          * function simply returns the geometric vertical depth of a point
-         * in the known and fixed reference geometry.
+         * in the known and fixed reference geometry, to the reference
+         * surface that defines what zero depth is.
          */
         virtual
         double depth(const Point<dim> &position) const = 0;
@@ -198,7 +185,12 @@ namespace aspect
         Point<dim> representative_point(const double depth) const = 0;
 
         /**
-         * Returns the maximal depth of this geometry.
+         * Returns the maximal depth of this geometry. For a definition of
+         * how "depth" is to be interpreted, see the documentation of the
+         * depth() member function. In particular, the maximal depth of a
+         * geometry model only represents the depth computed with regard
+         * to some reference configuration, ignoring any dynamic or initial
+         * topography.
          */
         virtual
         double maximal_depth() const = 0;
@@ -305,8 +297,35 @@ namespace aspect
          * specifically use a geometry model with periodic boundary conditions
          */
         virtual
-        std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >
+        std::set<std::pair<std::pair<types::boundary_id, types::boundary_id>, unsigned int>>
         get_periodic_boundary_pairs () const;
+
+        /**
+         * Adjust positions to be inside the domain considering periodic boundary conditions.
+         *
+         * This function checks if @p position is outside the domain and if it could
+         * have reasonably crossed a periodic boundary. If so, it will adjust the position
+         * as described by the periodic boundary (e.g. a translation in a box, or a rotation
+         * in a spherical shell). Afterwards, if it adjusted @p position, it will also adjust
+         * all locations given in @p connected_positions (if any where given) and all
+         * velocities given in @p connected_velocities in the same way.
+         * Adjusting both of these allows to adjust related temporary variables,
+         * e.g. the intermediate results of an ordinary differential equation solver
+         * that are used to compute differences/directions between points. The reason
+         * positions and velocities have to be treated separately is that some geometries
+         * have to adjust them differently across a periodic boundary, e.g. a box has
+         * to translate positions but not velocities, while a spherical shell has to
+         * translate positions (by rotation around the center) and rotate velocities.
+         *
+         * This function does not check that the position after the adjustment is inside the
+         * domain; to check this is the responsibility of the calling function.
+         * A common application of this function are particles that crossed a periodic boundary.
+         */
+        virtual
+        void
+        adjust_positions_for_periodicity (Point<dim> &position,
+                                          const ArrayView<Point<dim>> &connected_positions = {},
+                                          const ArrayView<Tensor<1,dim>> &connected_velocities = {}) const;
 
         /**
          * If true, the geometry contains cells with boundaries that are not
@@ -327,25 +346,15 @@ namespace aspect
         point_is_in_domain(const Point<dim> &p) const = 0;
 
         /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
+         * Collects periodic boundary constraints for the given geometry
+         * and @p dof_handler, which will be added to the existing @p constraints.
+         * The default implementation creates cartesian periodic boundary conditions
+         * for all periodic boundary indicators.
          */
         virtual
         void
-        parse_parameters (ParameterHandler &prm);
-
+        make_periodicity_constraints(const DoFHandler<dim> &dof_handler,
+                                     AffineConstraints<double> &constraints) const;
     };
 
 
@@ -370,7 +379,7 @@ namespace aspect
     register_geometry_model (const std::string &name,
                              const std::string &description,
                              void (*declare_parameters_function) (ParameterHandler &),
-                             Interface<dim> *(*factory_function) ());
+                             std::unique_ptr<Interface<dim>> (*factory_function) ());
 
     /**
      * A function that given the name of a model returns a pointer to an
@@ -383,7 +392,7 @@ namespace aspect
      * @ingroup GeometryModels
      */
     template <int dim>
-    Interface<dim> *
+    std::unique_ptr<Interface<dim>>
     create_geometry_model (ParameterHandler &prm);
 
     /**
@@ -422,10 +431,10 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_GEOMETRY_MODEL_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::GeometryModel::Interface<2>,classname<2> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::GeometryModel::Interface<2>,classname<2>> \
     dummy_ ## classname ## _2d (&aspect::GeometryModel::register_geometry_model<2>, \
                                 name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::GeometryModel::Interface<3>,classname<3> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::GeometryModel::Interface<3>,classname<3>> \
     dummy_ ## classname ## _3d (&aspect::GeometryModel::register_geometry_model<3>, \
                                 name, description); \
   }

@@ -1,5 +1,5 @@
 
-Loading shared library <./libsignals_connect.so>
+Loading shared library <./libsignals_connect.debug.so>
 
 Connecting signals
 Number of active cells: 16 (on 3 levels)
@@ -8,20 +8,16 @@ Number of degrees of freedom: 268 (162+25+81)
 
 *** constraints signal called ***
 
-*** Timestep 0:  t=0 seconds
+*** Timestep 0:  t=0 seconds, dt=0 seconds
 
 *** constraints signal called ***
 
    Solving temperature system... 0 iterations.
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 13+0 iterations.
+   Solving Stokes system (GMG)... 8+0 iterations.
 
    Postprocessing:
 
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 

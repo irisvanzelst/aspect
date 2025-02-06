@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -58,193 +58,169 @@ namespace aspect
     }
 
 
-
-    /*
-     * the EllipsoidalChunkGeometry class
-     */
-
-    // Constructor
-    template <int dim>
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::EllipsoidalChunkGeometry()
-      :
-      semi_major_axis_a (-1),
-      eccentricity (-1),
-      semi_minor_axis_b (-1),
-      bottom_depth (-1),
-      topography(nullptr)
-    {}
-
-    // Copy constructor
-    template <int dim>
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::EllipsoidalChunkGeometry(const EllipsoidalChunkGeometry &other)
-      :
-      ChartManifold<dim,3,3>(other)
+    namespace internal
     {
-      this->initialize(other.topography);
-      this->set_manifold_parameters(other.semi_major_axis_a, other.eccentricity, other.semi_minor_axis_b,
-                                    other.bottom_depth, other.corners);
-    }
+      /*
+       * the EllipsoidalChunkGeometry class
+       */
+
+      // Constructor
+      template <int dim>
+      EllipsoidalChunkGeometry<dim>::EllipsoidalChunkGeometry(const InitialTopographyModel::Interface<dim> &topo,
+                                                              const double para_semi_major_axis_a,
+                                                              const double para_eccentricity,
+                                                              const double para_semi_minor_axis_b,
+                                                              const double para_bottom_depth,
+                                                              const std::vector<Point<2>> &para_corners)
+        :
+        topography (&topo),
+        semi_major_axis_a (para_semi_major_axis_a),
+        eccentricity (para_eccentricity),
+        semi_minor_axis_b (para_semi_minor_axis_b),
+        bottom_depth (para_bottom_depth),
+        corners (para_corners)
+      {
+        AssertThrow (dim == 3, ExcMessage("This manifold can currently only be used in 3d."));
+      }
 
 
-    template <int dim>
-    void
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::set_manifold_parameters(const double para_semi_major_axis_a,
-                                                                             const double para_eccentricity,
-                                                                             const double para_semi_minor_axis_b,
-                                                                             const double para_bottom_depth,
-                                                                             const std::vector<Point<2> > &para_corners)
-    {
-      semi_major_axis_a = para_semi_major_axis_a;
-      eccentricity = para_eccentricity;
-      semi_minor_axis_b = para_semi_minor_axis_b;
-      bottom_depth = para_bottom_depth;
-      corners=para_corners;
-    }
 
-    template <int dim>
-    Point<3>
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::push_forward_ellipsoid(const Point<3> &phi_theta_d, const double semi_major_axis_a, const double eccentricity) const
-    {
-      AssertThrow (dim == 3,ExcMessage ("This can currently only be used in 3d."));
+      template <int dim>
+      Point<3>
+      EllipsoidalChunkGeometry<dim>::push_forward_ellipsoid(const Point<3> &phi_theta_d, const double semi_major_axis_a, const double eccentricity) const
+      {
+        // The following converts phi, theta and negative depth to x, y, z
+        // Depth is measured perpendicular to the ellipsoid surface
+        // (i.e. along a vector which does not generally pass through the origin)
+        // Expressions can be found in Ellipsoidal and Cartesian Coordinates Conversion
+        // Subirana, Zornoza and Hernandez-Pajares, 2011:
+        // https://gssc.esa.int/navipedia/index.php/Ellipsoidal_and_Cartesian_Coordinates_Conversion
 
-      // The following converts phi, theta and negative depth to x, y, z
-      // Depth is measured perpendicular to the ellipsoid surface
-      // (i.e. along a vector which does not generally pass through the origin)
-      // Expressions can be found in Ellipsoidal and Cartesian Coordinates Conversion
-      // Subirana, Zornoza and Hernandez-Pajares, 2011:
-      // https://gssc.esa.int/navipedia/index.php/Ellipsoidal_and_Cartesian_Coordinates_Conversion
+        const double phi   = phi_theta_d[0]; // Longitude in radians
+        const double theta = phi_theta_d[1]; // Latitude in radians
+        const double d     = phi_theta_d[2]; // The negative depth (a depth of 10 meters is -10)
 
-      const double phi   = phi_theta_d[0]; // Longitude in radians
-      const double theta = phi_theta_d[1]; // Latitude in radians
-      const double d     = phi_theta_d[2]; // The negative depth (a depth of 10 meters is -10)
+        const double R_bar = semi_major_axis_a / std::sqrt(1 - (eccentricity * eccentricity *
+                                                                std::sin(theta) * std::sin(theta))); // radius of curvature of the prime vertical
 
-      const double R_bar = semi_major_axis_a / std::sqrt(1 - (eccentricity * eccentricity *
-                                                              std::sin(theta) * std::sin(theta))); // radius of curvature of the prime vertical
+        return Point<3> ((R_bar + d) * std::cos(phi) * std::cos(theta),
+                         (R_bar + d) * std::sin(phi) * std::cos(theta),
+                         ((1 - eccentricity * eccentricity) * R_bar + d) * std::sin(theta));
+      }
 
-      return Point<3> ((R_bar + d) * std::cos(phi) * std::cos(theta),
-                       (R_bar + d) * std::sin(phi) * std::cos(theta),
-                       ((1 - eccentricity * eccentricity) * R_bar + d) * std::sin(theta));
-    }
+      template <int dim>
+      Point<3>
+      EllipsoidalChunkGeometry<dim>::pull_back_ellipsoid(const Point<3> &x, const double semi_major_axis_a, const double eccentricity) const
+      {
+        // The following converts x, y, z to phi, theta and negative depth
+        // Depth is measured perpendicular to the ellipsoid surface
+        // (i.e. along a vector which does not generally pass through the origin)
+        // Expressions can be found in Ellipsoidal and Cartesian Coordinates Conversion
+        // Subirana, Zornoza and Hernandez-Pajares, 2011:
+        // https://gssc.esa.int/navipedia/index.php/Ellipsoidal_and_Cartesian_Coordinates_Conversion
 
-    template <int dim>
-    Point<3>
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::pull_back_ellipsoid(const Point<3> &x, const double semi_major_axis_a, const double eccentricity) const
-    {
-      // The following converts x, y, z to phi, theta and negative depth
-      // Depth is measured perpendicular to the ellipsoid surface
-      // (i.e. along a vector which does not generally pass through the origin)
-      // Expressions can be found in Ellipsoidal and Cartesian Coordinates Conversion
-      // Subirana, Zornoza and Hernandez-Pajares, 2011:
-      // https://gssc.esa.int/navipedia/index.php/Ellipsoidal_and_Cartesian_Coordinates_Conversion
+        const double R      = semi_major_axis_a; // semi-major axis
+        const double b      = R * std::sqrt(1 - eccentricity * eccentricity); // semi-minor axis
+        const double p      = std::sqrt(x(0) * x(0) + x(1) * x(1)); // distance from origin projected onto x-y plane
+        const double th     = std::atan2(R * x(2), b * p); // starting guess for theta
+        const double phi    = std::atan2(x(1), x(0)); // azimuth (geodetic longitude)
+        const double theta  = std::atan2(x(2) + (R * R - b * b) / b * Utilities::fixed_power<3>(std::sin(th)),
+                                         (p - (eccentricity * eccentricity * R  * Utilities::fixed_power<3>(std::cos(th))))); // first iterate for theta
+        const double R_bar  = R / (std::sqrt(1 - eccentricity * eccentricity * std::sin(theta) * std::sin(theta))); // first iterate for R_bar
 
-      AssertThrow (dim == 3,ExcMessage ("This can currently only be used in 3d."));
-      const double R      = semi_major_axis_a; // semi-major axis
-      const double b      = R * std::sqrt(1 - eccentricity * eccentricity); // semi-minor axis
-      const double p      = std::sqrt(x(0) * x(0) + x(1) * x(1)); // distance from origin projected onto x-y plane
-      const double th     = std::atan2(R * x(2), b * p); // starting guess for theta
-      const double phi    = std::atan2(x(1), x(0)); // azimuth (geodetic longitude)
-      const double theta  = std::atan2(x(2) + (R * R - b * b) / b * std::pow(std::sin(th),3),
-                                       (p - (eccentricity * eccentricity * R  * std::pow(std::cos(th),3)))); // first iterate for theta
-      const double R_bar  = R / (std::sqrt(1 - eccentricity * eccentricity * std::sin(theta) * std::sin(theta))); // first iterate for R_bar
+        Point<3> phi_theta_d;
+        phi_theta_d[0] = phi;
 
-      Point<3> phi_theta_d;
-      phi_theta_d[0] = phi;
+        phi_theta_d[1] = theta;
+        phi_theta_d[2] = p / std::cos(theta) - R_bar; // first iterate for d
+        return phi_theta_d;
+      }
 
-      phi_theta_d[1] = theta;
-      phi_theta_d[2] = p / std::cos(theta) - R_bar; // first iterate for d
-      return phi_theta_d;
-    }
+      template <int dim>
+      Point<3>
+      EllipsoidalChunkGeometry<dim>::push_forward_topography(const Point<3> &phi_theta_d_hat) const
+      {
+        const double d_hat = phi_theta_d_hat[2]; // long, lat, depth
+        Point<dim-1> phi_theta;
+        if (dim == 3)
+          phi_theta = Point<dim-1>(phi_theta_d_hat[0] * constants::radians_to_degree,phi_theta_d_hat[1] * constants::radians_to_degree);
+        const double h = topography != nullptr ? topography->value(phi_theta) : 0;
+        const double d = d_hat + (d_hat + bottom_depth)/bottom_depth*h;
+        const Point<3> phi_theta_d (phi_theta_d_hat[0],
+                                    phi_theta_d_hat[1],
+                                    d);
+        return phi_theta_d;
+      }
 
-    template <int dim>
-    Point<3>
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::push_forward_topography(const Point<3> &phi_theta_d_hat) const
-    {
-      AssertThrow (dim == 3,ExcMessage ("This can currently only be used in 3d."));
-      const double d_hat = phi_theta_d_hat[2]; // long, lat, depth
-      Point<dim-1> phi_theta;
-      const double rad_to_degree = 180/numbers::PI;
-      if (dim == 3)
-        phi_theta = Point<dim-1>(phi_theta_d_hat[0] * rad_to_degree,phi_theta_d_hat[1] * rad_to_degree);
-      const double h = topography != nullptr ? topography->value(phi_theta) : 0;
-      const double d = d_hat + (d_hat + bottom_depth)/bottom_depth*h;
-      const Point<3> phi_theta_d (phi_theta_d_hat[0],
-                                  phi_theta_d_hat[1],
-                                  d);
-      return phi_theta_d;
-    }
+      template <int dim>
+      Point<3>
+      EllipsoidalChunkGeometry<dim>::pull_back_topography(const Point<3> &phi_theta_d) const
+      {
+        const double d = phi_theta_d[2];
+        Point<dim-1> phi_theta;
+        if (dim == 3)
+          phi_theta = Point<dim-1>(phi_theta_d[0] * constants::radians_to_degree,
+                                   phi_theta_d[1] * constants::radians_to_degree);
+        const double h = topography != nullptr ? topography->value(phi_theta) : 0;
+        const double d_hat = bottom_depth * (d-h)/(bottom_depth+h);
+        const Point<3> phi_theta_d_hat (phi_theta_d[0],
+                                        phi_theta_d[1],
+                                        d_hat);
+        return phi_theta_d_hat;
+      }
 
-    template <int dim>
-    Point<3>
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::pull_back_topography(const Point<3> &phi_theta_d) const
-    {
-      AssertThrow (dim == 3,ExcMessage ("This can currently only be used in 3d."));
-      const double d = phi_theta_d[2];
-      const double rad_to_degree = 180/numbers::PI;
-      Point<dim-1> phi_theta;
-      if (dim == 3)
-        phi_theta = Point<dim-1>(phi_theta_d[0] * rad_to_degree,phi_theta_d[1] * rad_to_degree);
-      const double h = topography != nullptr ? topography->value(phi_theta) : 0;
-      const double d_hat = bottom_depth * (d-h)/(bottom_depth+h);
-      const Point<3> phi_theta_d_hat (phi_theta_d[0],
-                                      phi_theta_d[1],
-                                      d_hat);
-      return phi_theta_d_hat;
-    }
+      /**
+       * TODO: These functions (pull back and push forward) should be changed that they always
+       * take and return 3d points, because 2d points make no sense for an ellipsoid, even with
+       * a 2d triangulation. To do this correctly we need to add the spacedim to the triangulation
+       * in ASPECT. What is now presented is just a temporary fix to get access to the pull back
+       * function from outside. The push forward function can't be fixed in this way, because
+       * it is used by a bind statement.
+       */
+      template <int dim>
+      Point<3>
+      EllipsoidalChunkGeometry<dim>::pull_back(const Point<3> &space_point) const
+      {
+        return pull_back_topography(pull_back_ellipsoid (space_point, semi_major_axis_a, eccentricity));
 
-    /**
-     * TODO: These functions (pull back and push forward) should be changed that they always
-     * take and return 3D points, because 2D points make no sense for an ellipsoid, even with
-     * a 2D triangulation. To do this correctly we need to add the spacedim to the triangulation
-     * in ASPECT. What is now presented is just a temporary fix to get access to the pull back
-     * function from outside. The push forward function can't be fixed in this way, because
-     * it is used by a bind statement.
-     */
-    template <int dim>
-    Point<3>
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::pull_back(const Point<3> &space_point) const
-    {
-      AssertThrow (dim == 3,ExcMessage ("This can not be done with 2D points."));
-      return pull_back_topography(pull_back_ellipsoid (space_point, semi_major_axis_a, eccentricity));
+      }
 
-    }
+      template <int dim>
+      Point<2>
+      EllipsoidalChunkGeometry<dim>::pull_back(const Point<2> &space_point) const
+      {
+        return space_point;
 
-    template <int dim>
-    Point<2>
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::pull_back(const Point<2> &space_point) const
-    {
-      AssertThrow (dim == 3,ExcMessage ("This can not be done with 2D points."));
-      return space_point;
+      }
 
-    }
+      template <int dim>
+      Point<3>
+      EllipsoidalChunkGeometry<dim>::push_forward(const Point<3> &chart_point) const
+      {
+        return push_forward_ellipsoid (push_forward_topography(chart_point), semi_major_axis_a, eccentricity);
+      }
 
-    template <int dim>
-    Point<3>
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::push_forward(const Point<3> &chart_point) const
-    {
-      AssertThrow (dim == 3,ExcMessage ("This can not be done with 2D points."));
-      return push_forward_ellipsoid (push_forward_topography(chart_point), semi_major_axis_a, eccentricity);
-    }
-
-    template <int dim>
-    std::unique_ptr<Manifold<dim,3> >
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::clone() const
-    {
-      return std_cxx14::make_unique<EllipsoidalChunkGeometry>(*this);
+      template <int dim>
+      std::unique_ptr<Manifold<dim,3>>
+      EllipsoidalChunkGeometry<dim>::clone() const
+      {
+        return std::make_unique<EllipsoidalChunkGeometry>(*this);
+      }
     }
 
     template <int dim>
     void
     EllipsoidalChunk<dim>::initialize()
     {
-      manifold.initialize(&(this->get_initial_topography_model()));
+      manifold = std::make_unique<internal::EllipsoidalChunkGeometry<dim>>(this->get_initial_topography_model(),
+                                                                            semi_major_axis_a,
+                                                                            eccentricity,
+                                                                            semi_minor_axis_b,
+                                                                            bottom_depth,
+                                                                            corners);
     }
 
-    template <int dim>
-    void
-    EllipsoidalChunk<dim>::EllipsoidalChunkGeometry::initialize(const InitialTopographyModel::Interface<dim> *topography_)
-    {
-      topography = topography_;
-    }
+
 
     template <>
     void
@@ -254,39 +230,41 @@ namespace aspect
 
       // Generate parallelepiped grid with one point (point 0) at (0,0,0) and the
       // other corners (respectively corner 1,2 and 4) placed relative to that point.
-      const Point<3> corner_points[dim] = {Point<dim>((corners[1][0]-corners[0][0])*numbers::PI/180,
-                                                      (corners[1][1]-corners[0][1])*numbers::PI/180,
+      const Point<3> corner_points[dim] = {Point<dim>((corners[1][0]-corners[0][0])*constants::degree_to_radians,
+                                                      (corners[1][1]-corners[0][1])*constants::degree_to_radians,
                                                       0),
-                                           Point<dim>((corners[3][0]-corners[0][0])*numbers::PI/180,
-                                                      (corners[3][1]-corners[0][1])*numbers::PI/180,
+                                           Point<dim>((corners[3][0]-corners[0][0])*constants::degree_to_radians,
+                                                      (corners[3][1]-corners[0][1])*constants::degree_to_radians,
                                                       0),
                                            Point<dim>(0,
                                                       0,
                                                       bottom_depth)
                                           };
-      const unsigned int  subdivisions[dim] = {EW_subdiv,NS_subdiv,depth_subdiv};
+      const unsigned int  subdivisions[dim] = {EW_subdiv, NS_subdiv, depth_subdiv};
 
-      GridGenerator::subdivided_parallelepiped (coarse_grid, subdivisions,corner_points, true);
+      GridGenerator::subdivided_parallelepiped (coarse_grid, subdivisions, corner_points, true);
 
       // Shift the grid point at (0,0,0) (and the rest of the
       // points with it) to the correct location at corner[0] at a
       // negative depth.
-      const Point<3> base_point(corners[0][0] *numbers::PI/180,corners[0][1] *numbers::PI/180,-bottom_depth);
+      const Point<3> base_point(corners[0][0] * constants::degree_to_radians,
+                                corners[0][1] * constants::degree_to_radians,
+                                -bottom_depth);
       GridTools::shift(base_point,coarse_grid);
 
       // Transform to the ellipsoid surface
       GridTools::transform (
         [&](const Point<dim> &x) -> Point<dim>
       {
-        return manifold.push_forward(x);
+        return manifold->push_forward(x);
       },
       coarse_grid);
 
-      // also attach the real manifold to slot 15. we won't use it
-      // during regular operation, but we set manifold_ids for all
-      // cells, faces and edges immediately before refinement and
+      // Also attach the real manifold to slot 15 (arbitrarily chosen).
+      // We won't use it during regular operation, but we set manifold_ids for
+      // all cells, faces and edges immediately before refinement and
       // clear it again afterwards
-      coarse_grid.set_manifold (15, manifold);
+      coarse_grid.set_manifold (15, *manifold);
 
       coarse_grid.signals.pre_refinement.connect (
         [&] {set_manifold_ids(coarse_grid);});
@@ -313,7 +291,7 @@ namespace aspect
       // the inner and outer boundary, which conveniently is what
       // happens in the following loop
       for (const auto &cell : coarse_grid.active_cell_iterators())
-        for (unsigned int f = 0; f < GeometryInfo<dim>::faces_per_cell; ++f)
+        for (const unsigned int f : cell->face_indices())
           if (cell->face(f)->at_boundary())
             cell->face(f)->set_boundary_id(f);
     }
@@ -338,35 +316,31 @@ namespace aspect
         {
           case 2:
           {
-            static const std::pair<std::string,types::boundary_id> mapping[]
-              = { std::pair<std::string,types::boundary_id>("east",   0),
-                  std::pair<std::string,types::boundary_id>("west",   1),
-                  std::pair<std::string,types::boundary_id>("bottom", 2),
-                  std::pair<std::string,types::boundary_id>("top",    3)
-                };
-
-            return std::map<std::string,types::boundary_id> (&mapping[0],
-                                                             &mapping[sizeof(mapping)/sizeof(mapping[0])]);
+            return
+            {
+              {"east",   0},
+              {"west",   1},
+              {"bottom", 2},
+              {"top",    3}
+            };
           }
 
           case 3:
           {
-            static const std::pair<std::string,types::boundary_id> mapping[]
-              = { std::pair<std::string,types::boundary_id>("east",   0),
-                  std::pair<std::string,types::boundary_id>("west",   1),
-                  std::pair<std::string,types::boundary_id>("north",  2),
-                  std::pair<std::string,types::boundary_id>("south",  3),
-                  std::pair<std::string,types::boundary_id>("bottom", 4),
-                  std::pair<std::string,types::boundary_id>("top",    5)
-                };
-
-            return std::map<std::string,types::boundary_id> (&mapping[0],
-                                                             &mapping[sizeof(mapping)/sizeof(mapping[0])]);
+            return
+            {
+              {"east",   0},
+              {"west",   1},
+              {"north",  2},
+              {"south",  3},
+              {"bottom", 4},
+              {"top",    5}
+            };
           }
         }
 
       Assert (false, ExcNotImplemented());
-      return std::map<std::string,types::boundary_id>();
+      return {};
     }
 
     template <int dim>
@@ -403,15 +377,15 @@ namespace aspect
                             "the missing corner value will be calculated so all faces are parallel.");
           prm.declare_entry("Depth",
                             "500000.0",
-                            Patterns::Double(0),
+                            Patterns::Double(0.),
                             "Bottom depth of model region.");
           prm.declare_entry("Semi-major axis",
                             "6378137.0",
-                            Patterns::Double(0),
+                            Patterns::Double(0.),
                             "The semi-major axis (a) of an ellipsoid. This is the radius for a sphere (eccentricity=0). Default WGS84 semi-major axis.");
           prm.declare_entry("Eccentricity",
                             "8.1819190842622e-2",
-                            Patterns::Double(0),
+                            Patterns::Double(0.),
                             "Eccentricity of the ellipsoid. Zero is a perfect sphere, default (8.1819190842622e-2) is WGS84.");
           prm.declare_entry("East-West subdivisions",
                             "1",
@@ -435,8 +409,8 @@ namespace aspect
     void
     EllipsoidalChunk<dim>::parse_parameters(ParameterHandler &prm)
     {
-      // only implemented for the 3d case
-      AssertThrow (dim == 3, ExcMessage ("2D has not been implemented."));
+      AssertThrow (dim == 3, ExcMessage("This geometry can currently only be used in 3d."));
+
       prm.enter_subsection("Geometry model");
       {
         prm.enter_subsection("Ellipsoidal chunk");
@@ -455,22 +429,22 @@ namespace aspect
           unsigned int missing = 0;
           if (NEcorner == "")
             {
-              missing++;
+              ++missing;
               present[0] = false;
             }
           if (NWcorner == "")
             {
-              missing++;
+              ++missing;
               present[1] = false;
             }
           if (SWcorner == "")
             {
-              missing++;
+              ++missing;
               present[2] = false;
             }
           if (SEcorner == "")
             {
-              missing++;
+              ++missing;
               present[3] = false;
             }
 
@@ -521,12 +495,12 @@ namespace aspect
           bottom_depth = prm.get_double("Depth");
           semi_major_axis_a = prm.get_double("Semi-major axis");
           eccentricity = prm.get_double("Eccentricity");
-          semi_minor_axis_b = std::sqrt((1 - pow(eccentricity,2.)) * pow(semi_major_axis_a,2.));
+          semi_minor_axis_b = std::sqrt((1 - Utilities::fixed_power<2>(eccentricity)) * Utilities::fixed_power<2>(semi_major_axis_a));
           EW_subdiv = prm.get_integer("East-West subdivisions");
           NS_subdiv = prm.get_integer("North-South subdivisions");
           depth_subdiv = prm.get_integer("Depth subdivisions");
 
-          // Check whether the corners of the rectangle are really place correctly
+          // Check whether the corners of the rectangle are really placed correctly
           if (present[0] == true && present[1] == true)
             {
               AssertThrow (corners[0][0] >= corners[1][0],
@@ -565,7 +539,7 @@ namespace aspect
           // If one or two of the corners is not provided, calculate it.
           if (missing == 1)
             {
-              for (unsigned int i = 0; i <= 3; i++)
+              for (unsigned int i = 0; i <= 3; ++i)
                 {
                   // find the corner which is missing, if there is one
                   if (present[i] == false)
@@ -629,21 +603,13 @@ namespace aspect
         prm.leave_subsection();
       }
       prm.leave_subsection();
-
-
-      // Construct manifold object Pointer to an object that describes the geometry.
-      manifold.set_manifold_parameters(semi_major_axis_a,
-                                       eccentricity,
-                                       semi_minor_axis_b,
-                                       bottom_depth,
-                                       corners);
     }
 
     template <int dim>
     double
     EllipsoidalChunk<dim>::depth(const Point<dim> &position) const
     {
-      return std::max(std::min(-manifold.pull_back(position)[2], maximal_depth()), 0.0);
+      return std::max(std::min(-manifold->pull_back(position)[dim-1], maximal_depth()), 0.0);
     }
 
     template <int dim>
@@ -653,7 +619,7 @@ namespace aspect
       AssertThrow(false, ExcMessage("Function height_above_reference_surface is not yet implemented "
                                     "for the ellipsoidal chunk geometry model. "
                                     "Consider using a box, spherical shell, or chunk.") );
-      return -999;
+      return numbers::signaling_nan<double>();
     }
 
 
@@ -668,7 +634,7 @@ namespace aspect
     double
     EllipsoidalChunk<dim>::get_radius(const Point<dim> &position) const
     {
-      const Point<dim> long_lat_depth = manifold.pull_back(position);
+      const Point<dim> long_lat_depth = manifold->pull_back(position);
       return semi_major_axis_a / (std::sqrt(1 - eccentricity * eccentricity * std::sin(long_lat_depth[1]) * std::sin(long_lat_depth[1])));
     }
 
@@ -680,7 +646,7 @@ namespace aspect
     }
 
     template <int dim>
-    const std::vector<Point<2> > &
+    const std::vector<Point<2>> &
     EllipsoidalChunk<dim>::get_corners() const
     {
       return corners;
@@ -730,11 +696,11 @@ namespace aspect
              ExcMessage("Given depth must be less than or equal to the maximal depth of this geometry."));
 
       // Choose a point on the center axis of the domain
-      Point<dim> p = Point<3>((eastLongitude + westLongitude) * 0.5 * numbers::PI/180,
-                              (southLatitude + northLatitude) * 0.5 * numbers::PI/180,
+      Point<dim> p = Point<3>((eastLongitude + westLongitude) * 0.5 * constants::degree_to_radians,
+                              (southLatitude + northLatitude) * 0.5 * constants::degree_to_radians,
                               -depth);
 
-      return manifold.push_forward(p);
+      return manifold->push_forward(p);
     }
 
 
@@ -747,8 +713,7 @@ namespace aspect
                   ExcMessage("After displacement of the mesh, this function can no longer be used to determine whether a point lies in the domain or not."));
 
       // dim = 3
-      const Point<dim> ellipsoidal_point = manifold.pull_back(point);
-      const double rad_to_degree = 180.0/numbers::PI;
+      const Point<dim> ellipsoidal_point = manifold->pull_back(point);
 
       // compare deflection from the ellipsoid surface
       if (ellipsoidal_point[dim-1] > 0.0+std::numeric_limits<double>::epsilon()*bottom_depth ||
@@ -756,7 +721,7 @@ namespace aspect
         return false;
 
       // compare lon/lat
-      if (!Utilities::polygon_contains_point<dim>(corners, Point<2>(ellipsoidal_point[0]*rad_to_degree,ellipsoidal_point[1]*rad_to_degree)))
+      if (!Utilities::polygon_contains_point<dim>(corners, Point<2>(ellipsoidal_point[0]*constants::radians_to_degree,ellipsoidal_point[1]*constants::radians_to_degree)))
         return false;
 
       return true;
@@ -766,13 +731,18 @@ namespace aspect
     std::array<double,dim>
     EllipsoidalChunk<dim>::cartesian_to_natural_coordinates(const Point<dim> &position_point) const
     {
-      Assert(dim == 3,ExcMessage("This geometry model doesn't support 2d."));
       // the chunk manifold works internally with a vector with longitude, latitude, depth.
       // We need to output radius, longitude, latitude to be consistent.
+      // Ignore the topography by calling pull_back_ellipsoid to avoid a loop when calling the
+      // AsciiDataBoundary for topography which uses this function....
+      Point<3> cartesian_point;
+      for (unsigned int d=0; d<dim; ++d)
+        cartesian_point[d] = position_point[d];
 
-      Point<dim> transformed_point = manifold.pull_back(position_point);
+      Point<3> transformed_point = manifold->pull_back_ellipsoid(cartesian_point, semi_major_axis_a, eccentricity);
 
-      const double radius = get_radius(position_point);
+      const double radius =  semi_major_axis_a /
+                             (std::sqrt(1 - eccentricity * eccentricity * std::sin(transformed_point[1]) * std::sin(transformed_point[1])));
       std::array<double,dim> position_array;
       position_array[0] = radius + transformed_point(2);
       position_array[1] = transformed_point(0);
@@ -795,7 +765,9 @@ namespace aspect
     EllipsoidalChunk<3>::natural_to_cartesian_coordinates(const std::array<double,3> &position_tensor) const
     {
       // We receive radius, longitude, latitude and we need to turn it first back into
-      // longitude, latitude, depth for internal use, and push_forward to cartesian coordiantes.
+      // longitude, latitude, depth for internal use, and push_forward to cartesian coordinates.
+      // Ignore the topography by calling push_forward_ellipsoid to avoid a loop when calling the
+      // AsciiDataBoundary for topography which uses this function....
       Point<3> position_point;
       position_point(0) = position_tensor[1];
       position_point(1) = position_tensor[2];
@@ -803,7 +775,7 @@ namespace aspect
       const double radius = semi_major_axis_a / (std::sqrt(1 - eccentricity * eccentricity * std::sin(position_point(1)) * std::sin(position_point(1))));
       position_point(2) = position_tensor[0] - radius;
 
-      Point<3> transformed_point = manifold.push_forward(position_point);
+      Point<3> transformed_point = manifold->push_forward_ellipsoid(position_point, semi_major_axis_a, eccentricity);
       return transformed_point;
     }
 
@@ -813,17 +785,17 @@ namespace aspect
     EllipsoidalChunk<2>::natural_to_cartesian_coordinates(const std::array<double,2> &/*position_tensor*/) const
     {
       Assert(false, ExcMessage("This geometry model doesn't support 2d."));
-      return Point<2>();
+      return {};
     }
 
   }
 }
 
 template <int dim>
-typename aspect::GeometryModel::EllipsoidalChunk<dim>::EllipsoidalChunkGeometry
+typename aspect::GeometryModel::internal::EllipsoidalChunkGeometry<dim>
 aspect::GeometryModel::EllipsoidalChunk<dim>::get_manifold() const
 {
-  return manifold;
+  return *manifold;
 }
 
 // explicit instantiations
@@ -831,9 +803,18 @@ namespace aspect
 {
   namespace GeometryModel
   {
+    namespace internal
+    {
+#define INSTANTIATE(dim) \
+  template class EllipsoidalChunkGeometry<dim>;
+      ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
+    }
+
     ASPECT_REGISTER_GEOMETRY_MODEL(EllipsoidalChunk,
                                    "ellipsoidal chunk",
-                                   "A 3D chunk geometry that accounts for Earth's ellipticity (default assuming the "
+                                   "A 3d chunk geometry that accounts for Earth's ellipticity (default assuming the "
                                    "WGS84 ellipsoid definition) which can be defined in non-coordinate directions. "
                                    "In the description of the ellipsoidal chunk, two of the ellipsoidal axes have the "
                                    "same length so that there is only a semi-major axis and a semi-minor axis. "
@@ -844,7 +825,7 @@ namespace aspect
                                    "file by longitude:latitude. It is also possible to define additional subdivisions "
                                    "of the mesh in each direction. The boundary of the domain is formed by linear "
                                    "interpolation in longitude-latitude space between adjacent points "
-                                   "(i.e. [lon, lat](f) = [lon1*f + lon2*(1-f), lat1*f + lat2*(1-f)], "
+                                   "(i.e. $[lon, lat](f) = [lon1 \\cdot f + lon2 \\cdot(1-f), lat1 \\cdot f + lat2 \\cdot (1-f)]$, "
                                    "where f is a value between 0 and 1). Faces of the model are defined as "
                                    "0, west; 1,east; 2, south; 3, north; 4, inner; 5, outer.\n\n"
                                    "This geometry model supports initial topography for deforming the initial mesh.")

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -64,7 +64,7 @@ namespace aspect
     template <int dim>
     void
     Averaging<dim>::average (const AveragingOperation averaging_operation,
-                             const std::vector<Point<dim> >    &position,
+                             const std::vector<Point<dim>>    &position,
                              std::vector<double>           &values_out) const
     {
       // if an output field has not been filled (because it was
@@ -134,7 +134,7 @@ namespace aspect
           }
           case pick_largest:
           {
-            double max = -std::numeric_limits<double>::max();
+            double max = std::numeric_limits<double>::lowest();
             for (unsigned int i=0; i<N; ++i)
               max = std::max(max, values_out[i]);
 
@@ -299,7 +299,7 @@ namespace aspect
                      */
                     if (values_out[j] != 0)
                       {
-                        sum_value += weight*log(values_out[j]);
+                        sum_value += weight*std::log(values_out[j]);
                       }
 
                     sum_weights += weight;
@@ -338,7 +338,7 @@ namespace aspect
        * and the normalized weighted distance averaging schemes need the distance between
        * the points and can not handle a distance of zero.
        */
-      if (out.densities.size() > 1)
+      if (out.n_evaluation_points() > 1)
         {
           /* Average the base model values based on the chosen average */
           average (averaging_operation,in.position,out.viscosities);
@@ -370,8 +370,8 @@ namespace aspect
           prm.declare_entry ("Averaging operation", "none",
                              Patterns::Selection ("none|arithmetic average|harmonic average|geometric average|pick largest|log average|nwd arithmetic average|nwd harmonic average|nwd geometric average"),
                              "Choose the averaging operation to use.");
-          prm.declare_entry ("Bell shape limit", "1",
-                             Patterns::Double(0),
+          prm.declare_entry ("Bell shape limit", "1.",
+                             Patterns::Double(0.),
                              "The limit normalized distance between 0 and 1 where the bell shape becomes zero. See the manual for a more information.");
         }
         prm.leave_subsection();
@@ -394,7 +394,7 @@ namespace aspect
           // create the base model and initialize its SimulatorAccess base
           // class; it will get a chance to read its parameters below after we
           // leave the current section
-          base_model.reset(create_material_model<dim>(prm.get("Base model")));
+          base_model = create_material_model<dim>(prm.get("Base model"));
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(base_model.get()))
             sim->initialize_simulator (this->get_simulator());
 
@@ -420,11 +420,10 @@ namespace aspect
     }
 
     template <int dim>
-    double
-    Averaging<dim>::
-    reference_viscosity() const
+    void
+    Averaging<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      return base_model->reference_viscosity();
+      base_model->create_additional_named_outputs(out);
     }
   }
 }

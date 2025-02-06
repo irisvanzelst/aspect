@@ -1,12 +1,12 @@
 # This test is used to check if the latent heat of
-# melting of peridotite is calculated correctly. 
+# melting of peridotite is calculated correctly.
 # The material is upwelling with a constant velocity
-# (without seperation of melt and solid) and without
-# conduction of heat, so that the steady state of the 
+# (without separation of melt and solid) and without
+# conduction of heat, so that the steady state of the
 # model is an adiabatic temperature profile. An approximated
-# analytical solution for this profile to compare the solution 
-# to is described in Katz et al., 2003 (A new parameterization 
-# of hydrous mantle melting). 
+# analytical solution for this profile to compare the solution
+# to is described in Katz et al., 2003 (A new parameterization
+# of hydrous mantle melting).
 
 # At the top, we define the number of space dimensions we would like to
 # work in:
@@ -16,11 +16,9 @@ set Dimension                              = 2
 # time system we want to work in and what the end time is.
 set Use years in output instead of seconds = false
 set End time                               = 2.5e13
-
 set Pressure normalization                 = surface
 set Surface pressure                       = 0
 set Adiabatic surface temperature          = 1723.15   # 1450°C adiabat
-
 
 # Then come a number of sections that deal with the setup
 # of the problem to solve. The first one deals with the
@@ -40,7 +38,6 @@ subsection Geometry model
   end
 end
 
-
 # The next section deals with the initial conditions for the
 # temperature (there are no initial conditions for the
 # velocity variable since the velocity is assumed to always
@@ -57,30 +54,17 @@ end
 
 subsection Boundary temperature model
   set List of model names = initial temperature
+  set Fixed temperature boundary indicators   = 2
 end
 
 subsection Boundary velocity model
+  set Prescribed velocity boundary indicators = 2:function
+  set Tangential velocity boundary indicators = 0,1
+
   subsection Function
     set Function expression = 0;1e-10
   end
 end
-
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
-subsection Boundary velocity model
-  set Prescribed velocity boundary indicators = 2:function
-end
-
-subsection Boundary velocity model
-  set Tangential velocity boundary indicators = 0,1
-end
-
-subsection Boundary temperature model
-  set Fixed temperature boundary indicators   = 2
-end
-
 
 # The following two sections describe first the
 # direction (vertical) and magnitude of gravity and the
@@ -95,7 +79,6 @@ subsection Gravity model
   end
 end
 
-
 subsection Material model
   set Model name = latent heat melt
 
@@ -104,13 +87,12 @@ subsection Material model
     set Mass fraction cpx        = 0.10
     set Reference specific heat  = 1000
     set Relative density of melt = 0.878787879  # melt density of 2900 kg/m^3
-    set Reference temperature    = 1623.15      # 1350°C adiabat 
+    set Reference temperature    = 1623.15      # 1350°C adiabat
     set Peridotite melting entropy change = -300
     set Thermal conductivity     = 0.0
     set Compressibility          = 0.0
   end
 end
-
 
 # The settings above all pertain to the description of the
 # continuous partial differential equations we want to solve.
@@ -123,7 +105,6 @@ subsection Mesh refinement
   set Initial adaptive refinement              = 0
   set Time steps between mesh refinement       = 0
 end
-
 
 # The final part is to specify what ASPECT should do with the
 # solution once computed at the end of every time step. The
@@ -141,14 +122,17 @@ subsection Postprocess
   subsection Visualization
     set Interpolate output = false
     set Time between graphical output = 0.01
-    set List of output variables = melt fraction, viscosity, density, nonadiabatic temperature
+    set List of output variables = melt fraction, material properties, nonadiabatic temperature
 
     subsection Melt fraction
       set Mass fraction cpx = 0.10
     end
+
+    subsection Material properties
+      set List of material properties = viscosity, density
+    end
   end
 end
-
 
 subsection Heating model
   set List of model names = adiabatic heating, latent heat

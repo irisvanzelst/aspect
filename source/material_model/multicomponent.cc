@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,15 +35,18 @@ namespace aspect
     evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
              MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      EquationOfStateOutputs<dim> eos_outputs (this->n_compositional_fields()+1);
+      EquationOfStateOutputs<dim> eos_outputs (this->introspection().n_chemical_composition_fields()+1);
 
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
-          const std::vector<double> volume_fractions = MaterialUtilities::compute_volume_fractions(in.composition[i]);
+          // The (incompressible) Boussinesq approximation treats the
+          // buoyancy term as Delta rho[i] * C[i], which implies that
+          // compositional fields are given as volume fractions.
+          const std::vector<double> volume_fractions = MaterialUtilities::compute_only_composition_fractions(in.composition[i],
+                                                       this->introspection().chemical_composition_field_indices());
 
           equation_of_state.evaluate(in, i, eos_outputs);
-
-          out.viscosities[i] = MaterialUtilities::average_value (volume_fractions, viscosities, viscosity_averaging);
+          out.viscosities[i] = MaterialUtilities::average_value(volume_fractions, viscosities, viscosity_averaging);
           out.specific_heat[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.specific_heat_capacities, MaterialUtilities::arithmetic);
           out.thermal_expansion_coefficients[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.thermal_expansion_coefficients, MaterialUtilities::arithmetic);
           out.compressibilities[i] = MaterialUtilities::average_value (volume_fractions, eos_outputs.compressibilities, MaterialUtilities::arithmetic);
@@ -66,14 +69,6 @@ namespace aspect
     }
 
     template <int dim>
-    double
-    Multicomponent<dim>::
-    reference_viscosity () const
-    {
-      return viscosities[0]; // background
-    }
-
-    template <int dim>
     bool
     Multicomponent<dim>::
     is_compressible () const
@@ -91,19 +86,20 @@ namespace aspect
         {
           EquationOfState::MulticomponentIncompressible<dim>::declare_parameters (prm, 4.e-5);
 
-          prm.declare_entry ("Reference temperature", "293",
-                             Patterns::Double (0),
-                             "The reference temperature $T_0$. Units: $\\si{K}$.");
+          prm.declare_entry ("Reference temperature", "293.",
+                             Patterns::Double (0.),
+                             "The reference temperature $T_0$. Units: \\si{\\kelvin}.");
           prm.declare_entry ("Viscosities", "1.e21",
                              Patterns::Anything(),
                              "List of viscosities for background mantle and compositional fields,"
                              "for a total of N+1 values, where N is the number of compositional fields."
-                             "If only one value is given, then all use the same value. Units: $Pa \\, s$");
+                             "If only one value is given, then all use the same value. Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Thermal conductivities", "4.7",
                              Patterns::Anything(),
                              "List of thermal conductivities for background mantle and compositional fields,"
                              "for a total of N+1 values, where N is the number of compositional fields."
-                             "If only one value is given, then all use the same value. Units: $W/m/K$.");
+                             "If only one value is given, then all use the same value. "
+                             "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
           prm.declare_entry ("Viscosity averaging scheme", "harmonic",
                              Patterns::Selection("arithmetic|harmonic|geometric|maximum composition"),
                              "When more than one compositional field is present at a point "
@@ -132,21 +128,21 @@ namespace aspect
           viscosity_averaging = MaterialUtilities::parse_compositional_averaging_operation ("Viscosity averaging scheme",
                                 prm);
 
-          // Establish that a background field is required here
-          const bool has_background_field = true;
+          // Make options file for parsing maps to double arrays
+          std::vector<std::string> chemical_field_names = this->introspection().chemical_composition_field_names();
+          chemical_field_names.insert(chemical_field_names.begin(),"background");
 
-          // Retrieve the list of composition names
-          const std::vector<std::string> list_of_composition_names = this->introspection().get_composition_names();
+          std::vector<std::string> compositional_field_names = this->introspection().get_composition_names();
+          compositional_field_names.insert(compositional_field_names.begin(),"background");
 
-          viscosities = Utilities::parse_map_to_double_array (prm.get("Viscosities"),
-                                                              list_of_composition_names,
-                                                              has_background_field,
-                                                              "Viscosities");
+          Utilities::MapParsing::Options options(chemical_field_names, "Viscosities");
+          options.list_of_allowed_keys = compositional_field_names;
+          options.allow_multiple_values_per_key = true;
 
-          thermal_conductivities = Utilities::parse_map_to_double_array (prm.get("Thermal conductivities"),
-                                                                         list_of_composition_names,
-                                                                         has_background_field,
-                                                                         "Thermal conductivities");
+          // Parse multicomponent properties
+          viscosities = Utilities::MapParsing::parse_map_to_double_array (prm.get("Viscosities"), options);
+          options.property_name = "Thermal conductivities";
+          thermal_conductivities = Utilities::MapParsing::parse_map_to_double_array (prm.get("Thermal conductivities"), options);
         }
         prm.leave_subsection();
       }
@@ -169,8 +165,9 @@ namespace aspect
   {
     ASPECT_REGISTER_MATERIAL_MODEL(Multicomponent,
                                    "multicomponent",
-                                   "This model is for use with an arbitrary number of compositional fields, where each field"
-                                   " represents a rock type which can have completely different properties from the others."
+                                   "This incompressible model is for use with an arbitrary number of"
+                                   " compositional fields, where each field represents a rock type which"
+                                   " can have completely different properties from the others."
                                    " However, each rock type itself has constant material properties.  The value of the "
                                    " compositional field is interpreted as a volume fraction. If the sum of the fields is"
                                    " greater than one, they are renormalized.  If it is less than one, material properties "

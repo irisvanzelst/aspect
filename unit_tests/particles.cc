@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2020 by the authors of the ASPECT code.
+  Copyright (C) 2020 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -20,19 +20,21 @@
 
 #include "common.h"
 #include <aspect/particle/property/interface.h>
+#include <aspect/particle/manager.h>
 #include <deal.II/base/parameter_handler.h>
 
 TEST_CASE("Particle Manager plugin names")
 {
-  aspect::Particle::Property::Manager<2> manager;
   dealii::ParameterHandler prm;
-  manager.declare_parameters(prm);
-  prm.enter_subsection("Postprocess");
+  aspect::Particle::Property::Manager<2> manager;
+  // The property manager needs to know about the integrator, which is declared in World
+  aspect::Particle::Manager<2>::declare_parameters(prm);
+
   prm.enter_subsection("Particles");
+  manager.declare_parameters(prm);
   prm.set("List of particle properties","composition, position");
-  prm.leave_subsection();
-  prm.leave_subsection();
   manager.parse_parameters(prm);
+  prm.leave_subsection();
 
   // existing and listed pluring
   REQUIRE(manager.plugin_name_exists("composition") == true);
@@ -42,7 +44,7 @@ TEST_CASE("Particle Manager plugin names")
   REQUIRE(manager.plugin_name_exists("pT path") == false);
 
   // non-existed plugin
-  REQUIRE(manager.plugin_name_exists("non-existend plugin name") == false);
+  REQUIRE(manager.plugin_name_exists("non-existent plugin name") == false);
 
   // check that one is before the other
   REQUIRE(manager.check_plugin_order("composition", "position") == true);

@@ -2,10 +2,9 @@
 Number of active cells: 48 (on 3 levels)
 Number of degrees of freedom: 740 (450+65+225)
 
-*** Timestep 0:  t=0 years
+*** Timestep 0:  t=0 years, dt=0 years
    Solving temperature system... 0 iterations.
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 19+0 iterations.
+   Solving Stokes system (GMG)... 12+0 iterations.
 
    Postprocessing:
      Writing graphical output:           output-minimum_refinement_function_spherical/solution/solution-00000
@@ -17,10 +16,9 @@ Number of degrees of freedom: 740 (450+65+225)
 Number of active cells: 144 (on 4 levels)
 Number of degrees of freedom: 2,124 (1,298+177+649)
 
-*** Timestep 0:  t=0 years
+*** Timestep 0:  t=0 years, dt=0 years
    Solving temperature system... 0 iterations.
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 43+0 iterations.
+   Solving Stokes system (GMG)... 32+0 iterations.
 
    Postprocessing:
      Writing graphical output:           output-minimum_refinement_function_spherical/solution/solution-00001
@@ -29,13 +27,12 @@ Number of degrees of freedom: 2,124 (1,298+177+649)
      Heat fluxes through boundary parts: 983.4 W, 1971 W, 0 W, 0 W
      Writing depth average:              output-minimum_refinement_function_spherical/depth_average
 
-Number of active cells: 357 (on 5 levels)
-Number of degrees of freedom: 5,205 (3,194+414+1,597)
+Number of active cells: 288 (on 5 levels)
+Number of degrees of freedom: 4,308 (2,642+345+1,321)
 
-*** Timestep 0:  t=0 years
+*** Timestep 0:  t=0 years, dt=0 years
    Solving temperature system... 0 iterations.
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 200+18 iterations.
+   Solving Stokes system (GMG)... 40+0 iterations.
 
    Postprocessing:
      Writing graphical output:           output-minimum_refinement_function_spherical/solution/solution-00002
@@ -44,13 +41,12 @@ Number of degrees of freedom: 5,205 (3,194+414+1,597)
      Heat fluxes through boundary parts: 983.4 W, 1971 W, 0 W, 0 W
      Writing depth average:              output-minimum_refinement_function_spherical/depth_average
 
-Number of active cells: 573 (on 6 levels)
-Number of degrees of freedom: 8,325 (5,114+654+2,557)
+Number of active cells: 480 (on 6 levels)
+Number of degrees of freedom: 7,116 (4,370+561+2,185)
 
-*** Timestep 0:  t=0 years
+*** Timestep 0:  t=0 years, dt=0 years
    Solving temperature system... 0 iterations.
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 200+19 iterations.
+   Solving Stokes system (GMG)... 40+0 iterations.
 
    Postprocessing:
 
@@ -74,13 +70,9 @@ Number of degrees of freedom: 8,325 (5,114+654+2,557)
      Heat fluxes through boundary parts: 983.4 W, 1971 W, 0 W, 0 W
      Writing depth average:              output-minimum_refinement_function_spherical/depth_average
 
-Number of active cells: 573 (on 6 levels)
-Number of degrees of freedom: 8,325 (5,114+654+2,557)
+Skipping mesh refinement, because the mesh did not change.
 
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 

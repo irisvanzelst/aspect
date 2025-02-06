@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,20 +17,22 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_builder_features_subducting_plate_temperature_interface_h
-#define _world_builder_features_subducting_plate_temperature_interface_h
+#ifndef WORLD_BUILDER_FEATURES_SUBDUCTING_PLATE_MODELS_TEMPERATURE_INTERFACE_H
+#define WORLD_BUILDER_FEATURES_SUBDUCTING_PLATE_MODELS_TEMPERATURE_INTERFACE_H
 
-#include <vector>
+#include "world_builder/grains.h"
+#include "world_builder/parameters.h"
+#include "world_builder/utilities.h"
+#include "world_builder/features/feature_utilities.h"
+
 #include <map>
-
-#include <world_builder/world.h>
-#include <world_builder/parameters.h>
-#include <world_builder/point.h>
-
+#include <vector>
 
 namespace WorldBuilder
 {
   class World;
+  class Parameters;
+  template <unsigned int dim> class Point;
 
   /**
    * This class is an interface for the specific plate tectonic feature classes,
@@ -38,6 +40,7 @@ namespace WorldBuilder
    */
   namespace Features
   {
+    using namespace FeatureUtilities;
 
     namespace SubductingPlateModels
     {
@@ -84,13 +87,14 @@ namespace WorldBuilder
                                    double temperature,
                                    const double feature_min_depth,
                                    const double feature_max_depth,
-                                   const std::map<std::string,double> &distance_from_planes) const = 0;
+                                   const WorldBuilder::Utilities::PointDistanceFromCurvedPlanes &distance_from_planes,
+                                   const AdditionalParameters &additional_parameters) const = 0;
             /**
              * A function to register a new type. This is part of the automatic
              * registration of the object factory.
              */
             static void registerType(const std::string &name,
-                                     void ( *)(Parameters &, const std::string &),
+                                     void ( * /*declare_entries*/)(Parameters &, const std::string &),
                                      ObjectFactory *factory);
 
 
@@ -149,22 +153,22 @@ namespace WorldBuilder
          * register it. Because this is a library, we need some extra measures
          * to ensure that the static variable is actually initialized.
          */
-#define WB_REGISTER_FEATURE_CONTINENTAL_TEMPERATURE_MODEL(klass,name) \
+#define WB_REGISTER_FEATURE_SUBDUCTING_PLATE_TEMPERATURE_MODEL(klass,name) \
   class klass##Factory : public ObjectFactory { \
     public: \
       klass##Factory() \
       { \
         Interface::registerType(#name, klass::declare_entries, this); \
       } \
-      virtual std::unique_ptr<Interface> create(World *world) { \
+      std::unique_ptr<Interface> create(World *world) override final { \
         return std::unique_ptr<Interface>(new klass(world)); \
       } \
   }; \
   static klass##Factory global_##klass##Factory;
 
-      }
-    }
-  }
-}
+      } // namespace Temperature
+    } // namespace SubductingPlateModels
+  } // namespace Features
+} // namespace WorldBuilder
 
 #endif

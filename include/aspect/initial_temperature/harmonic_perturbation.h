@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,8 +30,6 @@ namespace aspect
 {
   namespace InitialTemperature
   {
-    using namespace dealii;
-
     /**
      * A class that describes a perturbed initially constant temperature field
      * for any geometry model or dimension in shape of a harmonic function.
@@ -69,8 +67,8 @@ namespace aspect
         /**
          * The radial/depth wave number of the harmonic perturbation. All wave
          * number variables are in fact twice the wave number in a
-         * mathematical sense. This allows the user to prescribe a single up-
-         * / downswing or half periods.
+         * mathematical sense. This allows the user to prescribe a single
+         * up-/downswing or half periods.
          */
         int vertical_wave_number;
 

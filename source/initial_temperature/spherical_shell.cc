@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,8 +25,6 @@
 #include <aspect/geometry_model/sphere.h>
 #include <aspect/geometry_model/chunk.h>
 #include <aspect/geometry_model/ellipsoidal_chunk.h>
-#include <fstream>
-#include <iostream>
 #include <cstring>
 
 
@@ -61,7 +59,7 @@ namespace aspect
       const double phi   = std::atan2(position(0),position(1));
       const double s_mod = s
                            +
-                           0.2 * s * (1-s) * std::sin(angular_mode*phi +(90 + 2*rotation_offset)*numbers::PI/180 ) * scale;
+                           0.2 * s * (1-s) * std::sin(angular_mode*phi + (90 + 2*rotation_offset) * constants::degree_to_radians ) * scale;
 
       // Check that a boundary temperature is prescribed
       AssertThrow (this->has_boundary_temperature(),
@@ -88,7 +86,7 @@ namespace aspect
                              Patterns::Integer (),
                              "The number of convection cells with which to perturb the system.");
 
-          prm.declare_entry  ("Rotation offset", "-45",
+          prm.declare_entry  ("Rotation offset", "-45.",
                               Patterns::Double (),
                               "Amount of clockwise rotation in degrees to apply to "
                               "the perturbations. Default is set to -45 in order "
@@ -186,6 +184,11 @@ namespace aspect
     SphericalGaussianPerturbation<dim>::
     initial_temperature (const Point<dim> &position) const
     {
+      // Check that a boundary temperature is prescribed
+      AssertThrow (this->has_boundary_temperature(),
+                   ExcMessage ("This initial condition can only be used if a boundary "
+                               "temperature is prescribed."));
+
       const double dT = this->get_boundary_temperature_manager().maximal_temperature()
                         - this->get_boundary_temperature_manager().minimal_temperature();
       const double T0 = this->get_boundary_temperature_manager().maximal_temperature()/dT;
@@ -227,9 +230,9 @@ namespace aspect
       const double x = (scale - this->depth)*std::cos(angle);
       const double y = (scale - this->depth)*std::sin(angle);
       const double Perturbation = (sign * amplitude *
-                                   std::exp( -( std::pow((position(0)*scale/R1-x),2)
+                                   std::exp( -( Utilities::fixed_power<2>((position(0)*scale/R1-x))
                                                 +
-                                                std::pow((position(1)*scale/R1-y),2) ) / sigma));
+                                                Utilities::fixed_power<2>((position(1)*scale/R1-y)) ) / sigma));
 
       if (r > R1 - 1e-6*R1 || InterpolVal + Perturbation < T1)
         return T1*dT;
@@ -249,27 +252,27 @@ namespace aspect
       {
         prm.enter_subsection("Spherical gaussian perturbation");
         {
-          prm.declare_entry ("Angle", "0e0",
-                             Patterns::Double (0),
+          prm.declare_entry ("Angle", "0.",
+                             Patterns::Double (0.),
                              "The angle where the center of the perturbation is placed.");
           prm.declare_entry ("Non-dimensional depth", "0.7",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The non-dimensional radial distance where the center of the "
                              "perturbation is placed.");
           prm.declare_entry ("Amplitude", "0.01",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The amplitude of the perturbation.");
           prm.declare_entry ("Sigma", "0.2",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The standard deviation of the Gaussian perturbation.");
-          prm.declare_entry ("Sign", "1",
+          prm.declare_entry ("Sign", "1.",
                              Patterns::Double (),
                              "The sign of the perturbation.");
           prm.declare_entry ("Filename for initial geotherm table", "initial-geotherm-table",
                              Patterns::FileName(),
                              "The file from which the initial geotherm table is to be read. "
                              "The format of the file is defined by what is read in "
-                             "source/initial\\_conditions/spherical\\_shell.cc.");
+                             "source/initial\\_temperature/spherical\\_shell.cc.");
         }
         prm.leave_subsection ();
       }
@@ -289,16 +292,10 @@ namespace aspect
           amplitude  = prm.get_double ("Amplitude");
           sigma  = prm.get_double ("Sigma");
           sign  = prm.get_double ("Sign");
-          initial_geotherm_table = prm.get ("Filename for initial geotherm table");
         }
         prm.leave_subsection ();
       }
       prm.leave_subsection ();
-
-      // Check that a boundary temperature is prescribed
-      AssertThrow (this->has_boundary_temperature(),
-                   ExcMessage ("This initial condition can only be used if a boundary "
-                               "temperature is prescribed."));
 
       // This initial condition only makes sense if the geometry is derived from
       // a spherical model

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -240,7 +240,7 @@ namespace aspect
                                                "for the velocity and pressure field in terms of an "
                                                "explicit formula. The format of these "
                                                "functions follows the syntax understood by the "
-                                               "muparser library, see Section~\\ref{sec:muparser-format}.")
+                                               "muparser library, see "
+                                               "{ref}\\`sec:run-aspect:parameters-overview:muparser-format\\`.")
   }
 }
-

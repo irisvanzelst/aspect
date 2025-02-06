@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -36,7 +36,8 @@ namespace aspect
       MeltFraction ()
         :
         DataPostprocessorScalar<dim> ("melt_fraction",
-                                      update_values | update_quadrature_points)
+                                      update_values | update_quadrature_points),
+        Interface<dim>("")  // a fraction, so physical units "1"
       {}
 
 
@@ -45,15 +46,15 @@ namespace aspect
       void
       MeltFraction<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         const unsigned int n_quadrature_points = input_data.solution_values.size();
         Assert (computed_quantities.size() == n_quadrature_points,    ExcInternalError());
         Assert (computed_quantities[0].size() == 1,                   ExcInternalError());
         Assert (input_data.solution_values[0].size() == this->introspection().n_components,           ExcInternalError());
 
-        // in case the material model computes the melt fraction iself, we use that output
-        if (Plugins::plugin_type_matches<const MaterialModel::MeltFractionModel<dim>> (this->get_material_model()))
+        // in case the material model computes the melt fraction itself, we use that output
+        if (MaterialModel::MeltFractionModel<dim>::is_melt_fraction_model(this->get_material_model()))
           {
             MaterialModel::MaterialModelInputs<dim> in(input_data,
                                                        this->introspection());
@@ -63,11 +64,9 @@ namespace aspect
             // Compute the melt fraction...
             this->get_material_model().evaluate(in, out);
 
-            const MaterialModel::MeltFractionModel<dim> &melt_material_model =
-              Plugins::get_plugin_as_type<const MaterialModel::MeltFractionModel<dim>> (this->get_material_model());
-
             std::vector<double> melt_fractions(n_quadrature_points);
-            melt_material_model.melt_fractions(in, melt_fractions);
+            MaterialModel::MeltFractionModel<dim>::as_melt_fraction_model(this->get_material_model())
+            .melt_fractions(in, melt_fractions);
 
             for (unsigned int q=0; q<n_quadrature_points; ++q)
               computed_quantities[q](0) = melt_fractions[q];
@@ -109,7 +108,7 @@ namespace aspect
               if (peridotite_melt_fraction > F_max && temperature < T_liquidus)
                 {
                   const double T_max = std::pow(F_max,1/beta) * (T_lherz_liquidus - T_solidus) + T_solidus;
-                  peridotite_melt_fraction = F_max + (1 - F_max) * pow((temperature - T_max) / (T_liquidus - T_max),beta);
+                  peridotite_melt_fraction = F_max + (1 - F_max) * std::pow((temperature - T_max) / (T_liquidus - T_max),beta);
                 }
 
               // melting of pyroxenite after Sobolev et al., 2011
@@ -158,26 +157,26 @@ namespace aspect
                                  "Constant parameter in the quadratic "
                                  "function that approximates the solidus "
                                  "of peridotite. "
-                                 "Units: $\\degree C$.");
+                                 "Units: \\si{\\degreeCelsius}.");
               prm.declare_entry ("A2", "1.329e-7",
                                  Patterns::Double (),
                                  "Prefactor of the linear pressure term "
                                  "in the quadratic function that approximates "
                                  "the solidus of peridotite. "
-                                 "Units: $\\degree C/Pa$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal}.");
               prm.declare_entry ("A3", "-5.1e-18",
                                  Patterns::Double (),
                                  "Prefactor of the quadratic pressure term "
                                  "in the quadratic function that approximates "
                                  "the solidus of peridotite. "
-                                 "Units: $\\degree C/(Pa^2)$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal\\squared}.");
               prm.declare_entry ("B1", "1475.0",
                                  Patterns::Double (),
                                  "Constant parameter in the quadratic "
                                  "function that approximates the lherzolite "
                                  "liquidus used for calculating the fraction "
                                  "of peridotite-derived melt. "
-                                 "Units: $\\degree C$.");
+                                 "Units: \\si{\\degreeCelsius}.");
               prm.declare_entry ("B2", "8.0e-8",
                                  Patterns::Double (),
                                  "Prefactor of the linear pressure term "
@@ -185,7 +184,7 @@ namespace aspect
                                  "the  lherzolite liquidus used for "
                                  "calculating the fraction of peridotite-"
                                  "derived melt. "
-                                 "Units: $\\degree C/Pa$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal}.");
               prm.declare_entry ("B3", "-3.2e-18",
                                  Patterns::Double (),
                                  "Prefactor of the quadratic pressure term "
@@ -193,25 +192,25 @@ namespace aspect
                                  "the  lherzolite liquidus used for "
                                  "calculating the fraction of peridotite-"
                                  "derived melt. "
-                                 "Units: $\\degree C/(Pa^2)$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal\\squared}.");
               prm.declare_entry ("C1", "1780.0",
                                  Patterns::Double (),
                                  "Constant parameter in the quadratic "
                                  "function that approximates the liquidus "
                                  "of peridotite. "
-                                 "Units: $\\degree C$.");
+                                 "Units: \\si{\\degreeCelsius}.");
               prm.declare_entry ("C2", "4.50e-8",
                                  Patterns::Double (),
                                  "Prefactor of the linear pressure term "
                                  "in the quadratic function that approximates "
                                  "the liquidus of peridotite. "
-                                 "Units: $\\degree C/Pa$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal}.");
               prm.declare_entry ("C3", "-2.0e-18",
                                  Patterns::Double (),
                                  "Prefactor of the quadratic pressure term "
                                  "in the quadratic function that approximates "
                                  "the liquidus of peridotite. "
-                                 "Units: $\\degree C/(Pa^2)$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal\\squared}.");
               prm.declare_entry ("r1", "0.5",
                                  Patterns::Double (),
                                  "Constant in the linear function that "
@@ -223,7 +222,7 @@ namespace aspect
                                  "Prefactor of the linear pressure term "
                                  "in the linear function that approximates "
                                  "the clinopyroxene reaction coefficient. "
-                                 "Units: $1/Pa$.");
+                                 "Units: \\si{\\per\\pascal}.");
               prm.declare_entry ("beta", "1.5",
                                  Patterns::Double (),
                                  "Exponent of the melting temperature in "
@@ -239,7 +238,7 @@ namespace aspect
                                  "Constant parameter in the quadratic "
                                  "function that approximates the solidus "
                                  "of pyroxenite. "
-                                 "Units: $\\degree C$.");
+                                 "Units: \\si{\\degreeCelsius}.");
               prm.declare_entry ("D2", "1.329e-7",
                                  Patterns::Double (),
                                  "Prefactor of the linear pressure term "
@@ -249,25 +248,25 @@ namespace aspect
                                  "value given in Sobolev, 2011, because they use "
                                  "the potential temperature whereas we use the "
                                  "absolute temperature. "
-                                 "Units: $\\degree C/Pa$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal}.");
               prm.declare_entry ("D3", "-5.1e-18",
                                  Patterns::Double (),
                                  "Prefactor of the quadratic pressure term "
                                  "in the quadratic function that approximates "
                                  "the solidus of pyroxenite. "
-                                 "Units: $\\degree C/(Pa^2)$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal\\squared}.");
               prm.declare_entry ("E1", "663.8",
                                  Patterns::Double (),
                                  "Prefactor of the linear depletion term "
                                  "in the quadratic function that approximates "
                                  "the melt fraction of pyroxenite. "
-                                 "Units: $\\degree C/Pa$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal}.");
               prm.declare_entry ("E2", "-611.4",
                                  Patterns::Double (),
                                  "Prefactor of the quadratic depletion term "
                                  "in the quadratic function that approximates "
                                  "the melt fraction of pyroxenite. "
-                                 "Units: $\\degree C/(Pa^2)$.");
+                                 "\\si{\\degreeCelsius\\per\\pascal\\squared}.");
             }
             prm.leave_subsection();
           }
@@ -332,11 +331,11 @@ namespace aspect
                                                   "Otherwise, a specific parametrization for batch melting "
                                                   "(as described in the following) will be used. "
                                                   "It does not take into account latent heat. "
-                                                  "If there are no compositional fields, this postprocessor "
-                                                  "will visualize the melt fraction of peridotite "
+                                                  "If there are no compositional fields, or no fields called 'pyroxenite', "
+                                                  " this postprocessor will visualize the melt fraction of peridotite "
                                                   "(calculated using the anhydrous model of Katz, 2003). "
-                                                  "If there is at least one compositional field, the "
-                                                  "postprocessor assumes that the  first compositional "
+                                                  "If there is a compositional field called 'pyroxenite', the "
+                                                  "postprocessor assumes that this compositional "
                                                   "field is the content of pyroxenite, and will visualize "
                                                   "the melt fraction for a mixture of peridotite and pyroxenite "
                                                   "(using the melting model of Sobolev, 2011 for pyroxenite). "
@@ -345,9 +344,11 @@ namespace aspect
                                                   "being the mass fraction of Cpx in peridotite in the Katz "
                                                   "melting model (Mass fraction cpx), which right now has a "
                                                   "default of 15\\%. "
-                                                  "The corresponding p-T-diagrams can be generated by running "
+                                                  "The corresponding $p$-$T$-diagrams can be generated by running "
                                                   "the tests melt\\_postprocessor\\_peridotite and "
-                                                  "melt\\_postprocessor\\_pyroxenite.")
+                                                  "melt\\_postprocessor\\_pyroxenite."
+                                                  "\n\n"
+                                                  "Physical units: None.")
     }
   }
 }

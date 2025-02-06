@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,21 +17,18 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_builder_features_interface_h
-#define _world_builder_features_interface_h
+#ifndef WORLD_BUILDER_FEATURES_INTERFACE_H
+#define WORLD_BUILDER_FEATURES_INTERFACE_H
 
-#include <map>
-#include <vector>
 
-#include <world_builder/world.h>
-#include <world_builder/parameters.h>
-#include <world_builder/point.h>
-
-using namespace std;
+#include "world_builder/grains.h"
+#include "world_builder/utilities.h"
+#include "world_builder/objects/distance_from_surface.h"
 
 namespace WorldBuilder
 {
   class World;
+  class Parameters;
 
 
   namespace Features
@@ -56,18 +53,11 @@ namespace WorldBuilder
         virtual
         ~Interface();
 
-
-        /**
-         * depricated
-         */
-        void
-        declare_interface_entries(Parameters &prm,
-                                  const CoordinateSystem coordinate_system);
         /**
          * helper function to parse coordinates.
          */
         void
-        get_coordinates(const std::string name,
+        get_coordinates(const std::string &name,
                         Parameters &prm,
                         const CoordinateSystem coordinate_system);
 
@@ -87,33 +77,27 @@ namespace WorldBuilder
 
 
         /**
-         * takes temperature and position and returns a temperature.
+         * takes a set of properties and a position and return a new set of properties
          */
         virtual
-        double temperature(const Point<3> &position,
-                           const double depth,
-                           const double gravity,
-                           double temperature) const = 0;
-        /**
-         * Returns a value for the requested composition (0 is not present,
-         * 1 is present) based on the given position and
-         */
-        virtual
-        double composition(const Point<3> &position,
-                           const double depth,
-                           const unsigned int composition_number,
-                           double value) const = 0;
-
+        void properties(const Point<3> &position_in_cartesian_coordinates,
+                        const Objects::NaturalCoordinate &position_in_natural_coordinates,
+                        const double depth,
+                        const std::vector<std::array<unsigned int,3>> &properties,
+                        const double gravity,
+                        const std::vector<size_t> &entry_in_output,
+                        std::vector<double> &output) const = 0;
 
         /**
          * A function to register a new type. This is part of the automatic
          * registration of the object factory.
          */
         static void registerType(const std::string &name,
-                                 void ( *)(Parameters &, const std::string &, const std::vector<std::string> &required_entries),
+                                 void ( * /*declare_entries*/)(Parameters &, const std::string &, const std::vector<std::string> &required_entries),
+                                 void ( *make_snippet)(Parameters &),
                                  ObjectFactory *factory);
 
-        const std::string get_name() const
+        std::string get_name() const
         {
           return name;
         };
@@ -124,6 +108,17 @@ namespace WorldBuilder
          * registration of the object factory.
          */
         static std::unique_ptr<Interface> create(const std::string &name, WorldBuilder::World *world);
+
+        /**
+        * Returns a PlaneDistances object that has the distance from and along a feature plane,
+        * calculated from the coordinates and the depth of the point.
+        */
+        virtual
+        Objects::PlaneDistances
+        distance_to_feature_plane(const Point<3> &position_in_cartesian_coordinates,
+                                  const Objects::NaturalCoordinate &position_in_natural_coordinates,
+                                  const double depth) const;
+
 
       protected:
         /**
@@ -137,10 +132,21 @@ namespace WorldBuilder
         std::string name;
 
         /**
+         * The index of the tag for this feature.
+         * This corresponds to the index in the feature_tags variable which is store in the World.
+         */
+        size_t tag_index;
+
+        /**
+         * The type of interpolation used to get the line position between the points.
+         */
+        WorldBuilder::Utilities::InterpolationType interpolation_type;
+
+        /**
          * number of original coordinates, before adding
          * more automatically.
          */
-        unsigned int original_number_of_coordinates;
+        std::size_t original_number_of_coordinates;
 
         /**
          * The coordinates at the surface of the feature
@@ -148,15 +154,9 @@ namespace WorldBuilder
         std::vector<Point<2> > coordinates;
 
         /**
-         * A vector of one dimensional coordinates for this feature.
-         * If empty, this variables is interpretated just as
-         * {0,1,2,...,number of coordinates}. It allows for, for example,
-         * adding extra coordinates automatically, and still reference the
-         * user provided coordinates by the original number. Note that no
-         * whole numbers may be skiped. So for a list of 4 points, {0,0.5,1,2}
-         * is allowed, but {0,2,3,4} is not.
+         * The x and y spline
          */
-        std::vector<double> one_dimensional_coordinates;
+        WorldBuilder::Objects::BezierCurve bezier_curve;
 
 
         /**
@@ -186,6 +186,12 @@ namespace WorldBuilder
                                                  const std::vector<std::string>& required_entries)> declares;
           return declares;
         }
+
+        static std::map<std::string, void ( *)(Parameters &)> &get_snippet_map()
+        {
+          static std::map<std::string, void ( *)(Parameters &)> declares;
+          return declares;
+        }
     };
 
 
@@ -208,15 +214,15 @@ namespace WorldBuilder
     public: \
       klass##Factory() \
       { \
-        Interface::registerType(#name, klass::declare_entries, this); \
+        Interface::registerType(#name, klass::declare_entries, klass::make_snippet, this); \
       } \
-      virtual std::unique_ptr<Interface> create(World *world) { \
+      std::unique_ptr<Interface> create(World *world) override final { \
         return std::unique_ptr<Interface>(new klass(world)); \
       } \
   }; \
   static klass##Factory global_##klass##Factory;
 
-  }
-}
+  } // namespace Features
+} // namespace WorldBuilder
 
 #endif

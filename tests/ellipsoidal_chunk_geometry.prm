@@ -4,7 +4,7 @@
 # spherical and ellipsoidal coordinates the conversion is inaccurate
 # very close to the center of the domain. This test documents this
 # inaccuracy and shows that it is negligible for points at the
-# core-mantle boundary (5e-11 relative to center distance) and even for points 
+# core-mantle boundary (5e-11 relative to center distance) and even for points
 # at the inner-core-boundary (1e-7).
 
 set Dimension                              = 3
@@ -13,15 +13,16 @@ set End time                               = 0
 
 subsection Geometry model
   set Model name = ellipsoidal chunk
-    subsection Ellipsoidal chunk
-        set NE corner = 7.5:30
-        set SW corner = -7.5:-10
-        set Depth = 3000000
-        set Eccentricity = 0.5
-        set East-West subdivisions = 1
-        set North-South subdivisions = 2
-        set Depth subdivisions = 3
-   end
+
+  subsection Ellipsoidal chunk
+    set NE corner = 7.5:30
+    set SW corner = -7.5:-10
+    set Depth = 3000000
+    set Eccentricity = 0.5
+    set East-West subdivisions = 1
+    set North-South subdivisions = 2
+    set Depth subdivisions = 3
+  end
 end
 
 subsection Boundary velocity model
@@ -32,11 +33,11 @@ end
 subsection Boundary temperature model
   set Fixed temperature boundary indicators   = inner, outer,north,south,east,west
   set List of model names = constant
+
   subsection Constant
     set Boundary indicator to temperature mappings = west: 0, east: 1, south: 2, north: 3, inner: 4, outer:5
   end
 end
-
 
 subsection Material model
   set Model name = simple
@@ -49,6 +50,7 @@ end
 
 subsection Initial temperature model
   set Model name = function
+
   subsection Function
     set Function expression = 1.473e3
   end
@@ -70,8 +72,11 @@ subsection Postprocess
 
   subsection Visualization
     set Interpolate output = false
-    set List of output variables          = density
+    set List of output variables          = material properties
     set Output format                     = gnuplot
 
+    subsection Material properties
+      set List of material properties = density
+    end
   end
 end

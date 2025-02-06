@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -41,7 +41,7 @@ namespace aspect
     boundary_temperature (const types::boundary_id /*boundary_indicator*/,
                           const Point<dim> &position) const
     {
-      Utilities::NaturalCoordinate<dim> point =
+      const Utilities::NaturalCoordinate<dim> point =
         this->get_geometry_model().cartesian_to_other_coordinates(position, coordinate_system);
       return boundary_temperature_function.value(Utilities::convert_array_to_point<dim>(point.get_coordinates()));
     }
@@ -93,7 +93,7 @@ namespace aspect
                              "A selection that determines the assumed coordinate "
                              "system for the function variables. Allowed values "
                              "are `cartesian', `spherical', and `depth'. `spherical' coordinates "
-                             "are interpreted as r,phi or r,phi,theta in 2D/3D "
+                             "are interpreted as r,phi or r,phi,theta in 2d/3d "
                              "respectively with theta being the polar angle. `depth' "
                              "will create a function, in which only the first "
                              "parameter is non-zero, which is interpreted to "
@@ -101,12 +101,12 @@ namespace aspect
 
           Functions::ParsedFunction<dim>::declare_parameters (prm, 1);
 
-          prm.declare_entry ("Minimal temperature", "273",
+          prm.declare_entry ("Minimal temperature", "273.",
                              Patterns::Double (),
-                             "Minimal temperature. Units: $\\si{K}$.");
-          prm.declare_entry ("Maximal temperature", "3773",
+                             "Minimal temperature. Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Maximal temperature", "3773.",
                              Patterns::Double (),
-                             "Maximal temperature. Units: $\\si{K}$.");
+                             "Maximal temperature. Units: \\si{\\kelvin}.");
         }
         prm.leave_subsection();
       }
@@ -181,6 +181,6 @@ namespace aspect
                                                "\n\n"
                                                "The format of these "
                                                "functions follows the syntax understood by the "
-                                               "muparser library, see Section~\\ref{sec:muparser-format}.")
+                                               "muparser library, see {ref}\\`sec:run-aspect:parameters-overview:muparser-format\\`.")
   }
 }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,15 +17,17 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_feature_types_plugin_system_h
-#define _world_feature_types_plugin_system_h
+#ifndef WORLD_BUILDER_TYPES_PLUGIN_SYSTEM_H
+#define WORLD_BUILDER_TYPES_PLUGIN_SYSTEM_H
 
-#include <world_builder/types/interface.h>
-#include <world_builder/features/interface.h>
+
+#include "world_builder/features/interface.h"
 
 
 namespace WorldBuilder
 {
+  class Parameters;
+
   namespace Types
   {
 
@@ -33,41 +35,34 @@ namespace WorldBuilder
      * This class represents a plate tectonic feature class, such as the
      * continental plate class, oceanic plate class and subduction zone class.
      */
-    class PluginSystem : public Interface
+    class PluginSystem final: public Interface
     {
       public:
         /**
          * constructor
          */
-        PluginSystem(const std::string &default_vaule,
+        PluginSystem(std::string default_value_,
                      void ( *declare_entries)(Parameters &, const std::string &, const std::vector<std::string> &),
-                     const std::vector<std::string> required_entries,
+                     std::vector<std::string> required_entries,
                      const bool allow_multiple = true);
 
 
         /**
          * Copy constructor
          */
-        PluginSystem(PluginSystem &feature);
+        PluginSystem(PluginSystem const &plugin_system);
 
         /**
          * Destructor
          */
-        ~PluginSystem();
-
-        /**
-         * clone
-         */
-        virtual
-        std::unique_ptr<Interface> clone() const;
+        ~PluginSystem() override final;
 
         /**
          * Todo
          */
-        virtual
         void write_schema(Parameters &prm,
                           const std::string &name,
-                          const std::string &documentation) const;
+                          const std::string &documentation) const override final;
 
 
         std::string default_value;
@@ -75,10 +70,16 @@ namespace WorldBuilder
         std::vector<std::string> required_entries;
         bool allow_multiple;
 
+      protected:
+        PluginSystem *clone_impl() const override final
+        {
+          return new PluginSystem(*this);
+        };
+
       private:
 
     };
-  }
-}
+  } // namespace Types
+} // namespace WorldBuilder
 
 #endif

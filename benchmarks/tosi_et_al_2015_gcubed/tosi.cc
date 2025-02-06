@@ -1,7 +1,29 @@
+/*
+  Copyright (C) 2018 - 2024 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file doc/COPYING.  If not see
+  <http://www.gnu.org/licenses/>.
+ */
+
 #include <aspect/geometry_model/interface.h>
 #include <aspect/global.h>
 #include <aspect/geometry_model/box.h>
 #include <aspect/postprocess/interface.h>
+#include <aspect/newton.h>
+
 #include <aspect/simulator_access.h>
 #include <deal.II/base/parameter_handler.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -17,7 +39,7 @@ namespace aspect
    * benchmark models that were presented in the open access Tosi et al. (2015) paper:
    * @code
    *  @Article{T15,
-   *    Author = {Tosi, N. and Stein, C. and Noack, L. and H\"uttig, C. and Maierova, P. and Samual, H. and Davies, D. R. and Wilson, C. R. and Kramer, S. C. and Thieulot, C. and Glerum, A. and Fraters, M. and Spakman, W. and Rozel, A. and Tackley, P. J.},
+   *    Author = {Tosi, N. and Stein, C. and Noack, L. and H\"uttig, C. and Maierova, P. and Samuel, H. and Davies, D. R. and Wilson, C. R. and Kramer, S. C. and Thieulot, C. and Glerum, A. and Fraters, M. and Spakman, W. and Rozel, A. and Tackley, P. J.},
    *    Title = {A community benchmark for viscoplastic thermal convection in a 2-D square box},
    *    Journal = {Geochemistry, Geophysics, Geosystems},
    *    Year = {2015}
@@ -38,9 +60,6 @@ namespace aspect
    */
   namespace TosiBenchmark
   {
-    using namespace dealii;
-
-
     /**
      * @ingroup MaterialModels
      */
@@ -48,8 +67,8 @@ namespace aspect
     class TosiMaterial : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override
         {
           /**
            * As described in Tosi et al (2015), the viscosity \eta is computed as the
@@ -62,34 +81,19 @@ namespace aspect
            * $\eta_{plast}(\dot\epsilon) = \text{eta\_asterisk} + \frac{\text{sigma\_yield}}{\sqrt(\dot\epsilon:\dot\epsilon)}$
            */
 
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          //set up additional output for the derivatives
+          MaterialModel::MaterialModelDerivatives<dim> *derivatives;
+          derivatives = out.template get_additional_output<MaterialModel::MaterialModelDerivatives<dim>>();
+
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
-              if (in.strain_rate.size())
+              if (in.requests_property(MaterialModel::MaterialProperties::viscosity))
                 {
-                  double viscosity = 0.0;
-
-                  // In the first nonlinear iteration of the (pre-refinement steps of the) first time step,
-                  // strain rate is zero, so we set viscosity to eta_initial, a user-defined guess of the viscosity.
-                  if ((this->get_timestep_number() == 0 && in.strain_rate[i].norm() == 0))
-                    viscosity = eta_initial;
-                  else
-                    {
-                      // Otherwise we compute the linear viscosity and, if needed, the plastic viscosity.
-                      const double visc_linear = viscolin(eta_T,eta_Z,in.temperature[i],this->get_geometry_model().depth(in.position[i]));
-
-                      if (eta_asterisk == 0.0 && sigma_yield == 0.0)
-                        viscosity = visc_linear;
-                      else
-                        {
-                          const double visc_plastic = viscoplast(eta_asterisk,sigma_yield,deviator(in.strain_rate[i]).norm());
-
-                          // Compute the harmonic average (equation (6) of the paper)
-                          viscosity = 2.0 / ((1.0 / visc_linear) + (1.0 / visc_plastic));
-                        }
-                    }
-
-                  // Cut-off the viscosity by user-defined values to avoid possible very large viscosity ratios
-                  out.viscosities[i] = std::max(std::min(viscosity,eta_maximum),eta_minimum);
+                  out.viscosities[i] = viscosity (in.temperature[i],
+                                                  in.pressure[i],
+                                                  in.composition[i],
+                                                  in.strain_rate[i],
+                                                  in.position[i]);
                 }
 
               out.densities[i] = reference_rho * (1.0 - thermal_alpha * (in.temperature[i] - reference_T));
@@ -106,6 +110,75 @@ namespace aspect
               // change in compositional field c at point i.
               for (unsigned int c=0; c<in.composition[i].size(); ++c)
                 out.reaction_terms[i][c] = 0.0;
+
+              // If requested compute viscosity derivatives. This is only important
+              // if using the Newton solver.
+              if (derivatives != nullptr && in.requests_property(MaterialModel::MaterialProperties::viscosity))
+                {
+                  if (use_analytical_derivative)
+                    {
+                      if (in.strain_rate[i].norm() == 0)
+                        {
+                          derivatives->viscosity_derivative_wrt_strain_rate[i] = 0;
+                          derivatives->viscosity_derivative_wrt_pressure[i] = 0;
+                        }
+                      else
+                        {
+                          const double deviator_strain_rate_norm = in.strain_rate[i].norm();
+                          const double part1 = (eta_asterisk * deviator_strain_rate_norm + sigma_yield);
+
+                          derivatives->viscosity_derivative_wrt_strain_rate[i] = -(0.5*out.viscosities[i]*out.viscosities[i])
+                                                                                 * (sigma_yield/(part1 * part1 * deviator_strain_rate_norm)) * in.strain_rate[i];
+                          derivatives->viscosity_derivative_wrt_pressure[i] = 0;
+                        }
+                    }
+                  else
+                    {
+                      // finite difference derivative
+                      const double finite_difference_accuracy = 1e-7;
+
+                      SymmetricTensor<2,dim> &deta = derivatives->viscosity_derivative_wrt_strain_rate[i];
+
+                      // derivative in xx direction
+                      SymmetricTensor<2,dim> dstrain_rate = in.strain_rate[i];
+                      dstrain_rate[0][0] += std::fabs(in.strain_rate[i][0][0]) * finite_difference_accuracy;
+                      const double eta_zero_zero = viscosity(in.temperature[i], in.pressure[i], in.composition[i], dstrain_rate, in.position[i]);
+                      deta[0][0] = eta_zero_zero - out.viscosities[i];
+
+                      if (dstrain_rate[0][0] != 0)
+                        deta[0][0] /= std::fabs(in.strain_rate[i][0][0]) * finite_difference_accuracy;
+                      else
+                        deta[0][0] = 0;
+
+                      // derivative in xy direction
+                      dstrain_rate = in.strain_rate[i];
+                      // dstrain_rate in yx direction is multiplied by 0.5, because the symmetric tensor
+                      // is modified by 0.5 in xy and yx direction simultaneously and we compute the combined
+                      // derivative
+                      dstrain_rate[1][0] += 0.5 * std::fabs(in.strain_rate[i][1][0]) * finite_difference_accuracy;
+                      const double eta_one_zero = viscosity(in.temperature[i], in.pressure[i], in.composition[i], dstrain_rate, in.position[i]);
+                      deta[1][0] = eta_one_zero - out.viscosities[i];
+
+                      if (dstrain_rate[1][0] != 0)
+                        deta[1][0] /= std::fabs(in.strain_rate[i][1][0]) * finite_difference_accuracy;
+                      else
+                        deta[1][0] = 0;
+
+                      // derivative in yy direction
+                      dstrain_rate = in.strain_rate[i];
+                      dstrain_rate[1][1] += std::fabs(in.strain_rate[i][1][1]) * finite_difference_accuracy;
+                      const double eta_one_one = viscosity(in.temperature[i], in.pressure[i], in.composition[i], dstrain_rate, in.position[i]);
+                      deta[1][1] = eta_one_one - out.viscosities[i];
+
+                      if (dstrain_rate[1][1] != 0)
+                        deta[1][1] /= std::fabs(in.strain_rate[i][1][1]) * finite_difference_accuracy;
+                      else
+                        deta[1][1] = 0;
+
+                      derivatives->viscosity_derivative_wrt_pressure[i] = 0;
+                    }
+                }
+
             }
 
         }
@@ -127,7 +200,7 @@ namespace aspect
          * (compressible Stokes) or as $\nabla \cdot \mathbf{u}=0$
          * (incompressible Stokes).
          */
-        virtual bool is_compressible () const;
+        bool is_compressible () const override;
         /**
          * @}
          */
@@ -141,19 +214,17 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
-        /**
-         * @name Reference quantities
-         * @{
-         */
-        virtual double reference_viscosity () const;
-        /**
-         * @}
-         */
       private:
+
+        double viscosity (const double                  temperature,
+                          const double                  pressure,
+                          const std::vector<double>    &compositional_fields,
+                          const SymmetricTensor<2,dim> &strain_rate,
+                          const Point<dim>             &position) const;
+
         /*
          * Function to compute the linear viscosity
          * according to equation (7) of Tosi et al. 2015.
@@ -196,13 +267,6 @@ namespace aspect
          */
         double thermal_k;
 
-
-
-        /*
-         * The reference viscosity
-         */
-        double eta;
-
         /*
          * The linear viscosity parameter pertaining to
          * the viscosity contrast due to temperature
@@ -242,7 +306,56 @@ namespace aspect
          */
         double eta_initial;
 
+        /**
+         * Whether to use analytical or finite-difference viscosity derivatives
+         * if the Newton solver is used.
+         */
+        bool use_analytical_derivative;
+
     };
+
+    /*
+     * Function to calculate the viscosity according
+     * to equation (6) of the paper.
+     */
+    template <int dim>
+    double
+    TosiMaterial<dim>::
+    viscosity (const double temperature,
+               const double,
+               const std::vector<double> &,
+               const SymmetricTensor<2,dim> &strain_rate,
+               const Point<dim> &) const
+    {
+
+      // In the first nonlinear iteration of the (pre-refinement steps of the) first time step,
+      // strain rate is zero, so we set viscosity to eta_initial, a user-defined guess of the viscosity.
+      if (strain_rate.norm() == 0)
+        {
+          return eta_initial;
+        }
+
+      // Otherwise we compute the linear viscosity and, if needed, the plastic viscosity.
+      double viscosity = 0.0;
+      const double visc_linear = viscolin(eta_T,eta_Z,temperature,0);
+
+      if (eta_asterisk == 0.0 && sigma_yield == 0.0)
+        {
+          viscosity = visc_linear;
+        }
+      else
+        {
+          const double visc_plastic = viscoplast(eta_asterisk,sigma_yield,strain_rate.norm());
+
+          // Compute the harmonic average (equation (6) of the paper)
+          viscosity = 2.0 / ((1.0 / visc_linear) + (1.0 / visc_plastic));
+        }
+
+      // Cut-off the viscosity by user-defined values to avoid possible very large viscosity ratios
+      viscosity = std::max(std::min(viscosity,eta_maximum),eta_minimum);
+
+      return viscosity;
+    }
 
     /*
      * Function to compute the linear viscosity
@@ -274,14 +387,6 @@ namespace aspect
       return etaasterisk + (stressy/strainratenorm);
     }
 
-    template <int dim>
-    double
-    TosiMaterial<dim>::
-    reference_viscosity () const
-    {
-      return eta;
-    }
-
 
 
     template <int dim>
@@ -308,9 +413,6 @@ namespace aspect
                              Patterns::Double (0),
                              "The value of the reference temperature $T_0$. The reference temperature is used "
                              "in the density calculation.");
-          prm.declare_entry ("Reference viscosity", "1e-1",
-                             Patterns::Double (0),
-                             "The value of the constant reference viscosity $\\eta_0$.");
           prm.declare_entry ("Minimum viscosity", "1e-6",
                              Patterns::Double (0),
                              "The value of the minimum cut-off viscosity $\\eta_min$.");
@@ -345,6 +447,9 @@ namespace aspect
                              Patterns::Double (0),
                              "The value of the plastic viscosity constant $\\eta_asterisk$, "
                              "as used in equation (8) of the paper.");
+          prm.declare_entry ("Use analytical derivative", "false",
+                             Patterns::Bool (),
+                             "Whether to use the analytical or the finite difference derivative for the Newton method.");
         }
         prm.leave_subsection();
       }
@@ -362,7 +467,6 @@ namespace aspect
         {
           reference_rho              = prm.get_double ("Reference density");
           reference_T                = prm.get_double ("Reference temperature");
-          eta                        = prm.get_double ("Reference viscosity");
           thermal_k                  = prm.get_double ("Thermal conductivity");
           reference_specific_heat    = prm.get_double ("Reference specific heat");
           thermal_alpha              = prm.get_double ("Thermal expansion coefficient");
@@ -373,6 +477,7 @@ namespace aspect
           eta_minimum                = prm.get_double ("Minimum viscosity");
           eta_maximum                = prm.get_double ("Maximum viscosity");
           eta_initial                = prm.get_double ("Initial viscosity");
+          use_analytical_derivative  = prm.get_bool ("Use analytical derivative");
 
         }
         prm.leave_subsection();
@@ -405,16 +510,15 @@ namespace aspect
          * Evaluate the solution for statistics on the rate of viscous dissipation,
          * rate of work and the error between the two.
          */
-        virtual
         std::pair<std::string,std::string>
-        execute (TableHandler &statistics);
+        execute (TableHandler &statistics) override;
     };
 
     template <int dim>
     std::pair<std::string,std::string>
     TosiPostprocessor<dim>::execute (TableHandler &statistics)
     {
-      AssertThrow(Plugins::plugin_type_matches<const GeometryModel::Box<dim> >(this->get_geometry_model()),
+      AssertThrow(this->get_geometry_model().natural_coordinate_system() == aspect::Utilities::Coordinates::CoordinateSystem::cartesian,
                   ExcMessage("The current calculation of rate of work only makes sense in a Cartesian geometry."));
 
       AssertThrow(Plugins::plugin_type_matches<const TosiMaterial<dim>>(this->get_material_model()),
@@ -427,7 +531,7 @@ namespace aspect
                                             .degree+1);
 
       const unsigned int n_q_points = quadrature_formula.size();
-      std::vector<Tensor<1,dim> > velocities(n_q_points);
+      std::vector<Tensor<1,dim>> velocities(n_q_points);
 
       FEValues<dim> fe_values (this->get_mapping(),
                                this->get_fe(),
@@ -443,20 +547,18 @@ namespace aspect
 
       // the values of the compositional fields are stored as blockvectors for each field
       // we have to extract them in this structure
-      std::vector<std::vector<double> > prelim_composition_values (this->n_compositional_fields(),
+      std::vector<std::vector<double>> prelim_composition_values (this->n_compositional_fields(),
                                                                    std::vector<double> (n_q_points));
 
       typename MaterialModel::Interface<dim>::MaterialModelInputs in(n_q_points,
                                                                      this->n_compositional_fields());
       typename MaterialModel::Interface<dim>::MaterialModelOutputs out(n_q_points,
                                                                        this->n_compositional_fields());
+      in.requested_properties = MaterialModel::MaterialProperties::viscosity;
 
       // loop over active, locally owned cells and
       // extract material model input and compute integrals
-      typename DoFHandler<dim>::active_cell_iterator
-      cell = this->get_dof_handler().begin_active(),
-      endc = this->get_dof_handler().end();
-      for (; cell!=endc; ++cell)
+      for (const auto &cell : this->get_dof_handler().active_cell_iterators())
         if (cell->is_locally_owned())
           {
             fe_values.reinit (cell);
@@ -615,4 +717,3 @@ namespace aspect
                                   "Note that this postprocessor only makes sense for box geometries.")
   }
 }
-

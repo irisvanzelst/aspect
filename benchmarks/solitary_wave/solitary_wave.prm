@@ -1,12 +1,11 @@
 # Listing of Parameters
 # ---------------------
 # Set up the solitary wave benchmark
-# (Barcilon & Richter, 1986; Simpson & Spiegelman, 2011; 
+# (Barcilon & Richter, 1986; Simpson & Spiegelman, 2011;
 # Keller et al., 2013; Schmeling, 200
 
 set Additional shared libraries            = ./libsolitary_wave.so
-
-set Adiabatic surface temperature          = 1623               # default: 0
+set Adiabatic surface temperature          = 1623
 set CFL number                             = 1.0
 set Nonlinear solver scheme                = iterated Advection and Stokes
 set Output directory                       = output
@@ -21,17 +20,15 @@ set Dimension                              = 2
 # This end time is chosen in such a way that the solitary wave travels
 # approximately 5 times its wavelength during the model time.
 set End time                               = 6e6
-
 set Pressure normalization                 = surface
 set Surface pressure                       = 0
 set Resume computation                     = false
 set Start time                             = 0
-
 set Use years in output instead of seconds = true
 
 subsection Discretization
   subsection Stabilization parameters
-    set beta  = 0.001 # default: 0.078
+    set beta  = 0.001
   end
 end
 
@@ -40,19 +37,17 @@ subsection Compositional fields
   set Names of fields = porosity
 end
 
-
 subsection Boundary temperature model
   set Fixed temperature boundary indicators   = top, bottom
   set List of model names = initial temperature
 
   subsection Initial temperature
     # Temperature at the inner boundary (core mantle boundary). Units: K.
-    set Maximal temperature = 3773 # default: 6000
+    set Maximal temperature = 3773
 
     # Temperature at the outer boundary (lithosphere water/air). Units: K.
-    set Minimal temperature = 273  # default: 0
+    set Minimal temperature = 273
   end
-
 end
 
 subsection Boundary composition model
@@ -62,52 +57,51 @@ end
 
 # we apply the phase speed of the wave here, so that it always stays in the same place in our model
 # the phase speed is c = 5.25e-11 m/s, but we have to convert it to m/years using the same conversion
-# that is used internally in Aspect: year_in_seconds = 60*60*24*365.2425
+# that is used internally in ASPECT: year_in_seconds = 60*60*24*365.2425
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = left, right
   set Prescribed velocity boundary indicators = top:function, bottom:function
+
   subsection Function
-#    set Function expression = 0;-8.2836999e-5
+    #    set Function expression = 0;-8.2836999e-5
     set Function expression = 0;-1.65673998e-4
-#    set Function expression = 0;-3.31347996e-4
-#    set Function expression = 0;-6.62695992e-4
+
+    #    set Function expression = 0;-3.31347996e-4
+    #    set Function expression = 0;-6.62695992e-4
   end
 end
 
 subsection Geometry model
-  set Model name = box # default: 
+  set Model name = box
 
   subsection Box
     set X extent  = 10
     set Y extent  = 400
     set Y repetitions = 40
   end
-
 end
 
-
 subsection Gravity model
-  set Model name = vertical # default: 
-
+  set Model name = vertical
 
   subsection Vertical
     # Magnitude of the gravity vector in $m/s^2$. The direction is always
     # radially outward from the center of the earth.
-    set Magnitude = 10.0 # default: 30
+    set Magnitude = 10.0
   end
-
 end
 
-
 subsection Initial temperature model
-  set Model name = function # default: 
+  set Model name = function
+
   subsection Function
     set Function expression = 0
   end
 end
 
 subsection Initial composition model
-  set Model name = Solitary wave initial condition # default: 
+  set Model name = Solitary wave initial condition
+
   subsection Solitary wave initial condition
     set Offset = 200
     set Read solution from file = true
@@ -116,42 +110,32 @@ subsection Initial composition model
   end
 end
 
-
 subsection Material model
   set Model name = Solitary Wave
+
   subsection Solitary wave
     set Reference permeability = 5e-9
   end
 end
 
-
 subsection Mesh refinement
   set Coarsening fraction                      = 0.0
   set Refinement fraction                      = 0.0
-
-  set Initial adaptive refinement              = 0                    # default: 2
-  set Initial global refinement                = 4                    # default: 2
+  set Initial adaptive refinement              = 0
+  set Initial global refinement                = 4
   set Strategy                                 = composition
   set Time steps between mesh refinement       = 0
 end
-
 
 subsection Melt settings
   set Include melt transport                  = true
 end
 
-
 subsection Postprocess
-
   set List of postprocessors = visualization,composition statistics,velocity statistics,solitary wave statistics
 
   subsection Visualization
-
-    set List of output variables      = density, viscosity, thermal expansivity, melt material properties 
-
-    subsection Melt material properties
-      set List of properties = fluid density, permeability, fluid viscosity, compaction viscosity
-    end
+    set List of output variables      = material properties, melt material properties
 
     # VTU file output supports grouping files from several CPUs into one file
     # using MPI I/O when writing on a parallel filesystem. Select 0 for no
@@ -167,12 +151,17 @@ subsection Postprocess
     # value of zero indicates that output should be generated in each time
     # step. Units: years if the 'Use years in output instead of seconds'
     # parameter is set; seconds otherwise.
-    set Time between graphical output = 5e5                                                                                # default: 1e8
+    set Time between graphical output = 5e5
+
+    subsection Melt material properties
+      set List of properties = fluid density, permeability, fluid viscosity, compaction viscosity
+    end
+
+    subsection Material properties
+      set List of material properties = density, viscosity, thermal expansivity
+    end
   end
-
 end
-
-
 
 subsection Solver parameters
   set Composition solver tolerance = 1e-14

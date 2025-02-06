@@ -1,9 +1,10 @@
 # TanGurnis benchmark TALA using geometric multigrid preconditioner
 
-include $ASPECT_SOURCE_DIR/benchmarks/tangurnis/tala/tan.prm 
+include $ASPECT_SOURCE_DIR/benchmarks/tangurnis/tala/tan.prm
+
 
 subsection Material model
-  set Material averaging = harmonic average
+  set Material averaging = harmonic average only viscosity
 end
 
 subsection Solver parameters
@@ -13,6 +14,6 @@ subsection Solver parameters
 end
 
 subsection Mesh refinement
-  set Initial adaptive refinement        = 0                       # default: 2
-  set Initial global refinement          = 3                       # default: 2
+  set Initial adaptive refinement        = 0
+  set Initial global refinement          = 3
 end

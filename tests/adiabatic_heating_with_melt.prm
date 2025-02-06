@@ -1,17 +1,17 @@
 # This test is used to check if the adiabatic heating
 # of melt is calculated correctly.
 # The material is upwelling with a constant velocity
-# and without conduction of heat, so that the steady state 
+# and without conduction of heat, so that the steady state
 # of the model is an adiabatic temperature profile, and
-# the temperature should not change over time. 
+# the temperature should not change over time.
 #
 # The testcase is very similar to the adiabatic_heating
 # test, but melt transport and the adiabatic heat of melt
-# heating model are enabled. There is 100% melt in the model, 
-# and melt has a different density than the solid (so that 
+# heating model are enabled. There is 100% melt in the model,
+# and melt has a different density than the solid (so that
 # melt an solid velocities are different). However, the melt
 # should still upwell adiabatically, so temperature should
-# not change. 
+# not change.
 
 # At the top, we define the number of space dimensions we would like to
 # work in:
@@ -22,7 +22,6 @@ set Nonlinear solver scheme                = iterated Advection and Stokes
 # time system we want to work in and what the end time is.
 set Use years in output instead of seconds = false
 set End time                               = 2.5e13
-
 set Pressure normalization                 = surface
 set Surface pressure                       = 0
 set Adiabatic surface temperature          = 1723.15   # 1450°C adiabat
@@ -31,7 +30,6 @@ subsection Discretization
   set Stokes velocity polynomial degree    = 2
   set Composition polynomial degree        = 1
 end
-
 
 subsection Geometry model
   set Model name = box
@@ -50,6 +48,7 @@ end
 
 subsection Initial temperature model
   set Model name = adiabatic
+
   subsection Adiabatic
     subsection Function
       set Function expression       = 1.0;0.0
@@ -59,6 +58,7 @@ end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
     set Function expression = 1.0; 0.0
   end
@@ -66,36 +66,21 @@ end
 
 subsection Boundary temperature model
   set List of model names = initial temperature
-end
-
-subsection Boundary composition model
-  set List of model names = initial composition
-end
-
-subsection Boundary velocity model
-  subsection Function
-    set Function expression = 0;1e-10
-  end
-end
-
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
-subsection Boundary velocity model
-  set Prescribed velocity boundary indicators = 3:function
-end
-
-subsection Boundary velocity model
-  set Tangential velocity boundary indicators = 0,1
-end
-
-subsection Boundary temperature model
   set Fixed temperature boundary indicators   = 2
 end
 
 subsection Boundary composition model
-    set Fixed composition boundary indicators   = 2
+  set List of model names = initial composition
+  set Fixed composition boundary indicators   = 2
+end
+
+subsection Boundary velocity model
+  set Prescribed velocity boundary indicators = 3:function
+  set Tangential velocity boundary indicators = 0,1
+
+  subsection Function
+    set Function expression = 0;1e-10
+  end
 end
 
 subsection Melt settings
@@ -108,6 +93,7 @@ end
 
 subsection Boundary fluid pressure model
   set Plugin name = density
+
   subsection Density
     set Density formulation = fluid density
   end
@@ -121,7 +107,6 @@ subsection Gravity model
   end
 end
 
-
 subsection Material model
   set Model name = melt global
 
@@ -129,7 +114,7 @@ subsection Material model
     set Reference solid density  = 3300
     set Reference melt density   = 3000
     set Reference specific heat  = 1000
-    set Reference temperature    = 1600 
+    set Reference temperature    = 1600
     set Thermal conductivity     = 0.0
     set Surface solidus          = 10000.0
     set Include melting and freezing = false
@@ -138,13 +123,11 @@ subsection Material model
   end
 end
 
-
 subsection Mesh refinement
   set Initial global refinement                = 2
   set Initial adaptive refinement              = 0
   set Time steps between mesh refinement       = 0
 end
-
 
 subsection Postprocess
   set List of postprocessors = temperature statistics, heating statistics
@@ -152,7 +135,11 @@ subsection Postprocess
   subsection Visualization
     set Interpolate output = false
     set Time between graphical output = 0.01
-    set List of output variables = viscosity, density, nonadiabatic temperature
+    set List of output variables = material properties, nonadiabatic temperature
+
+    subsection Material properties
+      set List of material properties = viscosity, density
+    end
   end
 end
 

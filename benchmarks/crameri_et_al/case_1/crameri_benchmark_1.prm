@@ -19,58 +19,60 @@ set Additional shared libraries = ./libcrameri_benchmark_1.so
 subsection Boundary temperature model
   set Fixed temperature boundary indicators   = bottom, top
   set List of model names = constant
+
   subsection Constant
-    set Boundary indicator to temperature mappings = left:0, right:0, bottom:0, top:0
+    set Boundary indicator to temperature mappings = bottom:0, top:0
   end
 end
-
 
 subsection Discretization
   set Stokes velocity polynomial degree       = 2
   set Temperature polynomial degree           = 2
   set Use locally conservative discretization = false
+
   subsection Stabilization parameters
     set alpha = 2
     set beta  = 0.078
-    set cR    = 0.5   # default: 0.11
+    set cR    = 0.5
   end
 end
 
-
 subsection Geometry model
   set Model name = rebound box
+
   subsection Rebound Box
     set Order = 1
     set Amplitude = 7.e3
   end
+
   subsection Box
-    set X extent = 28.e5 
+    set X extent = 28.e5
     set Y extent = 7.e5
     set X repetitions = 300
     set Y repetitions = 75
   end
 end
 
-
 subsection Gravity model
   set Model name = vertical
+
   subsection Vertical
     set Magnitude = 10.0
   end
 end
 
-
 subsection Initial temperature model
   set Model name = function
-  subsection Function 
+
+  subsection Function
     set Variable names      = x,y
     set Function expression =  0.0
   end
 end
 
-
 subsection Material model
   set Model name = simple
+
   subsection Simple model
     set Reference density             = 3300
     set Reference specific heat       = 1250
@@ -83,17 +85,15 @@ subsection Material model
   end
 end
 
-
 subsection Mesh refinement
   set Additional refinement times        =
-  set Initial adaptive refinement        = 0                       # default: 2
-  set Initial global refinement          = 0                      # default: 2
+  set Initial adaptive refinement        = 0
+  set Initial global refinement          = 0
   set Refinement fraction                = 0.0
   set Coarsening fraction                = 0.00
   set Strategy                           = composition
-  set Time steps between mesh refinement = 0                     # default: 10
+  set Time steps between mesh refinement = 0
 end
-
 
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = left, right
@@ -102,6 +102,7 @@ end
 
 subsection Mesh deformation
   set Mesh deformation boundary indicators = top: free surface
+
   subsection Free surface
     set Free surface stabilization theta = 0.5
   end
@@ -113,6 +114,7 @@ end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
     set Variable names      = x,y
     set Function expression = if(y>600.e3, 1, 0);
@@ -121,16 +123,21 @@ end
 
 subsection Postprocess
   set List of postprocessors = visualization,topography
+
   subsection Visualization
-    set List of output variables = viscosity
+    set List of output variables = material properties
     set Number of grouped files       = 1
     set Output format                 = vtu
     set Time between graphical output = 1.e4
+
+    subsection Material properties
+      set List of material properties = viscosity
+    end
   end
 end
 
 subsection Solver parameters
   subsection Stokes solver parameters
-    set Number of cheap Stokes solver steps = 0 
+    set Number of cheap Stokes solver steps = 0
   end
 end

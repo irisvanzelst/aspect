@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -34,7 +34,7 @@ namespace aspect
   {
     template <int dim>
     ContinentalGeotherm<dim>::ContinentalGeotherm ()
-    {}
+      = default;
 
 
     template <int dim>
@@ -43,12 +43,12 @@ namespace aspect
     initialize ()
     {
       // Check that the required radioactive heating model ("compositional heating") is used
-      const std::vector<std::string> &heating_models = this->get_heating_model_manager().get_active_heating_model_names();
+      const std::vector<std::string> &heating_models = this->get_heating_model_manager().get_active_plugin_names();
       AssertThrow(std::find(heating_models.begin(), heating_models.end(), "compositional heating") != heating_models.end(),
                   ExcMessage("The continental geotherm initial temperature plugin requires the compositional heating plugin."));
 
       // Check that the required material model ("visco plastic") is used
-      AssertThrow(Plugins::plugin_type_matches<MaterialModel::ViscoPlastic<dim> >(this->get_material_model()),
+      AssertThrow(Plugins::plugin_type_matches<MaterialModel::ViscoPlastic<dim>>(this->get_material_model()),
                   ExcMessage("The continental geotherm initial temperature plugin requires the viscoplastic material model plugin."));
     }
 
@@ -80,10 +80,10 @@ namespace aspect
 
       // Temperature in layer 1
       if (depth <= thicknesses[0])
-        return -0.5*densities[0]*heat_productivities[0]/conductivities[0]*std::pow(depth,2) + (0.5*densities[0]*heat_productivities[0]*thicknesses[0]/conductivities[0] + (T1-T0)/thicknesses[0])*depth + T0;
+        return -0.5*densities[0]*heat_productivities[0]/conductivities[0]*Utilities::fixed_power<2>(depth) + (0.5*densities[0]*heat_productivities[0]*thicknesses[0]/conductivities[0] + (T1-T0)/thicknesses[0])*depth + T0;
       // Temperature in layer 2
       else if (depth <= thicknesses[0]+thicknesses[1])
-        return -0.5*densities[1]*heat_productivities[1]/conductivities[1]*std::pow(depth-thicknesses[0],2.) + (0.5*densities[1]*heat_productivities[1]*thicknesses[1]/conductivities[1] + (T2-T1)/thicknesses[1])*(depth-thicknesses[0]) + T1;
+        return -0.5*densities[1]*heat_productivities[1]/conductivities[1]*Utilities::fixed_power<2>(depth-thicknesses[0]) + (0.5*densities[1]*heat_productivities[1]*thicknesses[1]/conductivities[1] + (T2-T1)/thicknesses[1])*(depth-thicknesses[0]) + T1;
       // Temperature in layer 3
       else if (depth <= thicknesses[0]+thicknesses[1]+thicknesses[2])
         return (LAB_isotherm-T2)/thicknesses[2] *(depth-thicknesses[0]-thicknesses[1]) + T2;
@@ -105,18 +105,18 @@ namespace aspect
         prm.enter_subsection("Continental geotherm");
         {
           prm.declare_entry ("Layer thicknesses", "30000.",
-                             Patterns::List(Patterns::Double(0)),
+                             Patterns::List(Patterns::Double(0.)),
                              "List of the 3 thicknesses of the lithospheric layers "
                              "'upper\\_crust', 'lower\\_crust' and 'mantle\\_lithosphere'. "
                              "If only one thickness is given, then the same thickness is used "
-                             "for all layers. Units: $m$");
+                             "for all layers. Units: \\si{meter}.");
           prm.declare_entry ("Surface temperature", "273.15",
-                             Patterns::Double (0),
-                             "The value of the surface temperature. Units: $\\si{K}$.");
+                             Patterns::Double (0.),
+                             "The value of the surface temperature. Units: \\si{\\kelvin}.");
           prm.declare_entry ("Lithosphere-Asthenosphere boundary isotherm", "1673.15",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The value of the isotherm that is assumed at the Lithosphere-"
-                             "Asthenosphere boundary. Units: $\\si{K}$.");
+                             "Asthenosphere boundary. Units: \\si{\\kelvin}.");
         }
         prm.leave_subsection();
       }
@@ -211,7 +211,7 @@ namespace aspect
 
           // To obtain the radioactive heating rate in W/kg, we divide the volumetric heating rate by density
           AssertThrow(heat_productivities.size() == 3 && densities.size() == 3 && conductivities.size() == 3,
-                      ExcMessage("The entries for density, conductivity and heat production do not match with the expected number of layers (3)."))
+                      ExcMessage("The entries for density, conductivity and heat production do not match with the expected number of layers (3)."));
 
           for (unsigned int i = 0; i<3; ++i)
             heat_productivities[i] /= densities[i];

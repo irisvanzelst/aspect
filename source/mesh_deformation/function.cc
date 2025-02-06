@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the ASPECT code.
+  Copyright (C) 2018 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -58,17 +58,26 @@ namespace aspect
     template <int dim>
     void
     BoundaryFunction<dim>::compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
-                                                                    ConstraintMatrix &mesh_velocity_constraints,
+                                                                    AffineConstraints<double> &mesh_velocity_constraints,
                                                                     const std::set<types::boundary_id> &boundary_ids) const
     {
       // Loop over all boundary indicators to set the velocity constraints
-      for (std::set<types::boundary_id>::const_iterator boundary_id = boundary_ids.begin();
-           boundary_id != boundary_ids.end(); ++boundary_id)
+      for (const auto boundary_id : boundary_ids)
         VectorTools::interpolate_boundary_values (this->get_mapping(),
                                                   mesh_deformation_dof_handler,
-                                                  *boundary_id,
+                                                  boundary_id,
                                                   function,
                                                   mesh_velocity_constraints);
+    }
+
+
+
+    template <int dim>
+    bool
+    BoundaryFunction<dim>::
+    needs_surface_stabilization () const
+    {
+      return false;
     }
 
 
@@ -130,8 +139,11 @@ namespace aspect
                                            "deformation velocity, i.e. the return value of "
                                            "this plugin is later multiplied by the time step length "
                                            "to compute the displacement increment in this time step. "
-                                           "The format of the "
+                                           "Although the function's time variable is interpreted as "
+                                           "years when Use years in output instead of seconds is set to true, "
+                                           "the boundary deformation velocity should still be given "
+                                           "in m/s. The format of the "
                                            "functions follows the syntax understood by the "
-                                           "muparser library, see Section~\\ref{sec:muparser-format}.")
+                                           "muparser library, see {ref}\\`sec:run-aspect:parameters-overview:muparser-format\\`.")
   }
 }

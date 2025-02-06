@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,67 +33,16 @@ namespace aspect
 {
   namespace BoundaryVelocity
   {
-    template <int dim>
-    Interface<dim>::~Interface ()
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::initialize ()
-    {}
-
-
-
-    template <int dim>
-    void
-    Interface<dim>::update ()
-    {}
-
-
-
-    template <int dim>
-    void
-    Interface<dim>::
-    declare_parameters (dealii::ParameterHandler &)
-    {}
-
-
-    template <int dim>
-    void
-    Interface<dim>::parse_parameters (dealii::ParameterHandler &)
-    {}
-
-
-
     // ------------------------------ Manager -----------------------------
     // -------------------------------- Deal with registering boundary_velocity models and automating
     // -------------------------------- their setup and selection at run time
-
-    template <int dim>
-    Manager<dim>::~Manager()
-    {}
-
-
-
-    template <int dim>
-    void
-    Manager<dim>::update ()
-    {
-      for (const auto &boundary : boundary_velocity_objects)
-        for (const auto &p : boundary.second)
-          p->update();
-    }
-
-
-
     namespace
     {
       std::tuple
-      <void *,
-      void *,
-      aspect::internal::Plugins::PluginList<Interface<2> >,
-      aspect::internal::Plugins::PluginList<Interface<3> > > registered_plugins;
+      <aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::UnusablePluginList,
+      aspect::internal::Plugins::PluginList<Interface<2>>,
+      aspect::internal::Plugins::PluginList<Interface<3>>> registered_plugins;
     }
 
 
@@ -102,7 +51,7 @@ namespace aspect
     Manager<dim>::register_boundary_velocity (const std::string &name,
                                               const std::string &description,
                                               void (*declare_parameters_function) (ParameterHandler &),
-                                              Interface<dim> *(*factory_function) ())
+                                              std::unique_ptr<Interface<dim>> (*factory_function) ())
     {
       std::get<dim>(registered_plugins).register_plugin (name,
                                                          description,
@@ -117,19 +66,30 @@ namespace aspect
     Manager<dim>::boundary_velocity (const types::boundary_id boundary_indicator,
                                      const Point<dim> &position) const
     {
-      typename std::map<types::boundary_id,std::vector<std::unique_ptr<BoundaryVelocity::Interface<dim> > > >::const_iterator boundary_plugins =
-        boundary_velocity_objects.find(boundary_indicator);
+      Tensor<1,dim> velocity;
 
-      Assert(boundary_plugins != boundary_velocity_objects.end(),
+      bool found_plugin = false;
+      unsigned int i=0;
+      for (const auto &plugin: this->plugin_objects)
+        {
+          if (boundary_indicators[i] == boundary_indicator)
+            {
+              found_plugin = true;
+              const Tensor<1,dim> plugin_velocity = plugin->boundary_velocity(boundary_indicator,
+                                                                              position);
+              for (unsigned int d=0; d<dim; ++d)
+                if (component_masks[i][d] == true)
+                  velocity[d] += plugin_velocity[d];
+            }
+
+          ++i;
+        }
+
+      (void) found_plugin;
+      Assert(found_plugin == true,
              ExcMessage("The boundary velocity manager class was asked for the "
                         "boundary velocity at a boundary that contains no active "
                         "boundary velocity plugin."));
-
-      Tensor<1,dim> velocity = Tensor<1,dim>();
-
-      for (const auto &plugin : boundary_plugins->second)
-        velocity += plugin->boundary_velocity(boundary_indicator,
-                                              position);
 
       return velocity;
     }
@@ -137,7 +97,8 @@ namespace aspect
 
 
     template <int dim>
-    const std::map<types::boundary_id, std::pair<std::string,std::vector<std::string> > > &
+    DEAL_II_DEPRECATED
+    const std::map<types::boundary_id, std::pair<std::string,std::vector<std::string>>> &
     Manager<dim>::get_active_boundary_velocity_names () const
     {
       return boundary_velocity_indicators;
@@ -146,10 +107,61 @@ namespace aspect
 
 
     template <int dim>
-    const std::map<types::boundary_id,std::vector<std::unique_ptr<BoundaryVelocity::Interface<dim> > > > &
+    DEAL_II_DEPRECATED
+    const std::map<types::boundary_id,std::vector<std::unique_ptr<BoundaryVelocity::Interface<dim>>>> &
     Manager<dim>::get_active_boundary_velocity_conditions () const
     {
+      AssertThrow(false, ExcMessage("This function has been removed. Use the function "
+                                    "get_active_plugins() of the base class ManagerBase "
+                                    "instead."));
       return boundary_velocity_objects;
+    }
+
+
+
+    template <int dim>
+    const std::vector<types::boundary_id> &
+    Manager<dim>::get_active_plugin_boundary_indicators() const
+    {
+      return boundary_indicators;
+    }
+
+
+
+    template <int dim>
+    ComponentMask
+    Manager<dim>::get_component_mask(const types::boundary_id boundary_id) const
+    {
+      Assert(prescribed_velocity_boundary_indicators.find(boundary_id) != prescribed_velocity_boundary_indicators.end(),
+             ExcMessage("The boundary velocity manager class was asked for the "
+                        "component mask of boundary indicator <"
+                        +
+                        Utilities::int_to_string(boundary_id)
+                        +
+                        "> with symbolic name <"
+                        +
+                        this->get_geometry_model().translate_id_to_symbol_name(boundary_id)
+                        +
+                        ">, but this boundary is not part of the active boundary velocity plugins."));
+
+      // Since all component masks of plugins at the same boundary are identical, we can use
+      // the component mask of the first plugin we find that is responsible for this boundary.
+      for (unsigned int i=0; i<boundary_indicators.size(); ++i)
+        if (boundary_indicators[i] == boundary_id)
+          return component_masks[i];
+
+      // We should never get here if plugins and boundary indicators were set up correctly.
+      AssertThrow(false, ExcInternalError());
+      return ComponentMask();
+    }
+
+
+
+    template <int dim>
+    const std::set<types::boundary_id> &
+    Manager<dim>::get_prescribed_boundary_velocity_indicators () const
+    {
+      return prescribed_velocity_boundary_indicators;
     }
 
 
@@ -268,7 +280,7 @@ namespace aspect
           {
             AssertThrow (false, ExcMessage ("While parsing the entry <Boundary velocity model/Zero velocity "
                                             "boundary indicators>, there was an error. Specifically, "
-                                            "the conversion function complained as follows: "
+                                            "the conversion function complained as follows:\n\n"
                                             + error));
           }
 
@@ -285,7 +297,7 @@ namespace aspect
           {
             AssertThrow (false, ExcMessage ("While parsing the entry <Boundary velocity model/Tangential velocity "
                                             "boundary indicators>, there was an error. Specifically, "
-                                            "the conversion function complained as follows: "
+                                            "the conversion function complained as follows:\n\n"
                                             + error));
           }
 
@@ -294,24 +306,23 @@ namespace aspect
         const std::vector<std::string> x_boundary_velocity_indicators
           = Utilities::split_string_list(prm.get("Prescribed velocity boundary indicators"));
 
-        for (std::vector<std::string>::const_iterator p = x_boundary_velocity_indicators.begin();
-             p != x_boundary_velocity_indicators.end(); ++p)
+        for (const auto &p : x_boundary_velocity_indicators)
           {
             // each entry has the format (white space is optional):
             // <id> [x][y][z] : <value (might have spaces)>
             //
             // first tease apart the two halves
-            const std::vector<std::string> split_parts = Utilities::split_string_list (*p, ':');
+            const std::vector<std::string> split_parts = Utilities::split_string_list (p, ':');
             AssertThrow (split_parts.size() == 2,
                          ExcMessage ("The format for prescribed velocity boundary indicators "
                                      "requires that each entry has the form `"
                                      "<id> [x][y][z] : <value>', but there does not "
                                      "appear to be a colon in the entry <"
-                                     + *p
+                                     + p
                                      + ">."));
 
             // the easy part: get the value
-            const std::string value = split_parts[1];
+            const std::string &value = split_parts[1];
 
             // now for the rest. since we don't know whether there is a
             // component selector, start reading at the end and subtracting
@@ -365,7 +376,7 @@ namespace aspect
               {
                 AssertThrow (false, ExcMessage ("While parsing the entry <Boundary velocity model/Prescribed "
                                                 "velocity indicators>, there was an error. Specifically, "
-                                                "the conversion function complained as follows: "
+                                                "the conversion function complained as follows:\n\n"
                                                 + error));
               }
 
@@ -383,31 +394,40 @@ namespace aspect
               {
                 boundary_velocity_indicators[boundary_id] = std::make_pair(comp,std::vector<std::string>(1,value));
               }
+
+            this->plugin_names.push_back(value);
+            boundary_indicators.push_back(boundary_id);
+            prescribed_velocity_boundary_indicators.insert(boundary_id);
+
+            ComponentMask component_mask(this->introspection().n_components,
+                                         false);
+
+            if (comp.empty() || comp.find('x') != std::string::npos)
+              component_mask.set(this->introspection().component_indices.velocities[0],true);
+            if (comp.empty() || comp.find('y') != std::string::npos)
+              component_mask.set(this->introspection().component_indices.velocities[1],true);
+            if (dim == 3 && (comp.empty() || comp.find('z') != std::string::npos))
+              component_mask.set(this->introspection().component_indices.velocities[2],true);
+
+            component_masks.push_back(component_mask);
           }
       }
       prm.leave_subsection();
 
       // go through the list, create objects and let them parse
       // their own parameters
-      for (std::map<types::boundary_id, std::pair<std::string,std::vector<std::string> > >::iterator
-           boundary_id = boundary_velocity_indicators.begin();
-           boundary_id != boundary_velocity_indicators.end(); ++boundary_id)
+      for (const auto &plugin_name: this->plugin_names)
         {
-          for (std::vector<std::string>::iterator
-               name = boundary_id->second.second.begin();
-               name != boundary_id->second.second.end(); ++name)
-            {
-              boundary_velocity_objects[boundary_id->first].push_back(
-                std::unique_ptr<Interface<dim> > (std::get<dim>(registered_plugins)
-                                                  .create_plugin (*name,
-                                                                  "Boundary velocity::Model names")));
+          // create boundary traction objects
+          this->plugin_objects.push_back(std::get<dim>(registered_plugins)
+                                         .create_plugin (plugin_name,
+                                                         "Boundary velocity::Model names"));
 
-              if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(boundary_velocity_objects[boundary_id->first].back().get()))
-                sim->initialize_simulator (this->get_simulator());
+          if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(this->plugin_objects.back().get()))
+            sim->initialize_simulator (this->get_simulator());
 
-              boundary_velocity_objects[boundary_id->first].back()->parse_parameters (prm);
-              boundary_velocity_objects[boundary_id->first].back()->initialize ();
-            }
+          this->plugin_objects.back()->parse_parameters (prm);
+          this->plugin_objects.back()->initialize ();
         }
     }
 
@@ -431,11 +451,11 @@ namespace aspect
     namespace Plugins
     {
       template <>
-      std::list<internal::Plugins::PluginList<BoundaryVelocity::Interface<2> >::PluginInfo> *
-      internal::Plugins::PluginList<BoundaryVelocity::Interface<2> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<BoundaryVelocity::Interface<2>>::PluginInfo> *
+      internal::Plugins::PluginList<BoundaryVelocity::Interface<2>>::plugins = nullptr;
       template <>
-      std::list<internal::Plugins::PluginList<BoundaryVelocity::Interface<3> >::PluginInfo> *
-      internal::Plugins::PluginList<BoundaryVelocity::Interface<3> >::plugins = nullptr;
+      std::list<internal::Plugins::PluginList<BoundaryVelocity::Interface<3>>::PluginInfo> *
+      internal::Plugins::PluginList<BoundaryVelocity::Interface<3>>::plugins = nullptr;
     }
   }
 
@@ -446,5 +466,7 @@ namespace aspect
   template class Manager<dim>;
 
     ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -49,7 +49,7 @@ namespace aspect
 
           void
           evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                                std::vector<Vector<double> > &computed_quantities) const override;
+                                std::vector<Vector<double>> &computed_quantities) const override;
 
           void
           update () override;
@@ -79,7 +79,7 @@ namespace aspect
            */
           std::vector<double> padded_temperature_depth_average;
           /**
-           * Whether to extrapolate temperautres above/below the first/last depth-average slice
+           * Whether to extrapolate temperatures above/below the first/last depth-average slice
            * or, alternatively, interpolate above the center of the first slice using the surface
            * temperature or below the last slice using the bottom temperature.
            */

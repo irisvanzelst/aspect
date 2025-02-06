@@ -1,4 +1,4 @@
-# Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+# Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 #
 # This file is part of ASPECT.
 #
@@ -16,9 +16,9 @@
 # along with ASPECT; see the file LICENSE.  If not see
 # <http://www.gnu.org/licenses/>.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.13.4)
 
-FIND_PACKAGE(Aspect 2.1.0 QUIET HINTS ${Aspect_DIR} ../ ../../ $ENV{ASPECT_DIR})
+FIND_PACKAGE(Aspect 2.4.0 QUIET HINTS ${Aspect_DIR} ../ ../../ $ENV{ASPECT_DIR})
 
 IF (NOT Aspect_FOUND)
   MESSAGE(FATAL_ERROR "\n"
@@ -35,5 +35,5 @@ DEAL_II_INITIALIZE_CACHED_VARIABLES()
 SET(TARGET "blankenbach")
 PROJECT(${TARGET})
 
-ADD_LIBRARY(${TARGET} SHARED code.cc)
+ADD_LIBRARY(${TARGET} SHARED code.cc heat_flux_statistics_gradient.h heat_flux_statistics_gradient.cc)
 ASPECT_SETUP_PLUGIN(${TARGET})

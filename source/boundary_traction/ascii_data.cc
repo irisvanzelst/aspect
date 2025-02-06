@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -28,18 +28,23 @@ namespace aspect
   {
     template <int dim>
     AsciiData<dim>::AsciiData ()
-    {}
+      = default;
 
 
     template <int dim>
     void
     AsciiData<dim>::initialize ()
     {
-      for (const auto &bv : this->get_boundary_traction())
-        if (bv.second.get() == this)
-          boundary_ids.insert(bv.first);
+      unsigned int i=0;
+      for (const auto &plugin : this->get_boundary_traction_manager().get_active_plugins())
+        {
+          if (plugin.get() == this)
+            boundary_ids.insert(this->get_boundary_traction_manager().get_active_plugin_boundary_indicators()[i]);
 
-      AssertThrow(*(boundary_ids.begin()) != numbers::invalid_boundary_id,
+          ++i;
+        }
+
+      AssertThrow(boundary_ids.empty() == false,
                   ExcMessage("Did not find the boundary indicator for the traction ascii data plugin."));
 
       Utilities::AsciiDataBoundary<dim>::initialize(boundary_ids,
@@ -57,7 +62,7 @@ namespace aspect
       const double pressure = Utilities::AsciiDataBoundary<dim>::get_data_component(boundary_indicator,
                                                                                     position,
                                                                                     0);
-      return -pressure * normal_vector;;
+      return -pressure * normal_vector;
     }
 
 

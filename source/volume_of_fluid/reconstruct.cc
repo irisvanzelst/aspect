@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -25,8 +25,6 @@
 
 namespace aspect
 {
-  using namespace dealii;
-
   template <>
   void VolumeOfFluidHandler<2>::update_volume_of_fluid_normals (const VolumeOfFluidField<2> &field,
                                                                 LinearAlgebra::BlockVector &solution)
@@ -62,7 +60,7 @@ namespace aspect
 
     // Variables to do volume calculations
 
-    QGauss<dim> quadrature(max_degree);
+    const QGauss<dim> quadrature(max_degree);
 
     std::vector<double> xFEM_values(quadrature.size());
 
@@ -79,7 +77,7 @@ namespace aspect
     for (unsigned int i=0; i<dim; ++i)
       reconstruction_stencil_unit_cell_center[i] = 0.5;
 
-    std::vector<types::global_dof_index> cell_dof_indicies (system_fe.dofs_per_cell);
+    std::vector<types::global_dof_index> cell_dof_indices (system_fe.dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices (system_fe.dofs_per_cell);
 
     const FEVariable<dim> &volume_of_fluid_var = field.volume_fraction;
@@ -129,7 +127,7 @@ namespace aspect
             // Due to mesh structure, we need to obtain the cells by
             // considering the pattern of neighboring cells
             //
-            // Indicies used for the stencil references follow the
+            // Indices used for the stencil references follow the
             // pattern
             //
             // 6 7 8
@@ -152,11 +150,7 @@ namespace aspect
                         const typename DoFHandler<dim>::cell_iterator neighbor =
                           cell->neighbor_or_periodic_neighbor(neighbor_no);
                         if (neighbor->level() == cell->level() &&
-#if DEAL_II_VERSION_GTE(9,2,0)
                             neighbor->is_active())
-#else
-                            neighbor->active())
-#endif
                           cen = neighbor;
                         else
                           cen = endc;
@@ -193,11 +187,7 @@ namespace aspect
                                 const typename DoFHandler<dim>::cell_iterator neighbor =
                                   cen->neighbor_or_periodic_neighbor(neighbor_no);
                                 if (neighbor->level() == cell->level() &&
-#if DEAL_II_VERSION_GTE(9,2,0)
                                     neighbor->is_active())
-#else
-                                    neighbor->active())
-#endif
                                   curr = neighbor;
                                 else
                                   curr = endc;
@@ -212,7 +202,7 @@ namespace aspect
                     if (curr != endc)
                       {
                         // Cell reference is valid, so get data
-                        curr->get_dof_indices (cell_dof_indicies);
+                        curr->get_dof_indices (cell_dof_indices);
                         stencil_unit_cell_centers[3 * j + i] = Point<dim> (-1.0 + i,
                                                                            -1.0 + j);
                       }
@@ -221,11 +211,11 @@ namespace aspect
                         // Cell reference is invalid, so replace with current
                         // cell to reduce branching complexity in the later
                         // algorithm
-                        cell->get_dof_indices (cell_dof_indicies);
+                        cell->get_dof_indices (cell_dof_indices);
                         stencil_unit_cell_centers[3 * j + i] = Point<dim> (0.0,
                                                                            0.0);
                       }
-                    local_volume_of_fluids (3 * j + i) = solution (cell_dof_indicies[volume_of_fluid_ind]);
+                    local_volume_of_fluids (3 * j + i) = solution (cell_dof_indices[volume_of_fluid_ind]);
                     neighbor_cells[3 * j + i] = curr;
                   }
               }
@@ -329,9 +319,9 @@ namespace aspect
               const std::vector<double> weights = fevalues.get_JxW_values();
 
               double cell_vol = 0.0;
-              for (unsigned int j=0; j<weights.size(); ++j)
+              for (const double weight : weights)
                 {
-                  cell_vol+=weights[j];
+                  cell_vol+=weight;
                 }
               for (unsigned int nind = 0; nind < n_candidate_normals; ++nind)
                 {
@@ -367,9 +357,9 @@ namespace aspect
                 const std::vector<double> weights = fevalues.get_JxW_values();
 
                 double cell_vol = 0.0;
-                for (unsigned int j=0; j<weights.size(); ++j)
+                for (const double weight : weights)
                   {
-                    cell_vol+=weights[j];
+                    cell_vol+=weight;
                   }
 
                 for (unsigned int nind = 0; nind < n_candidate_normals; ++nind)
@@ -465,7 +455,7 @@ namespace aspect
     const unsigned int volume_of_fluidN_c_index = volume_of_fluidN_var.first_component_index;
 
     const unsigned int base_element = composition_field.base_element(this->introspection());
-    const std::vector<Point<dim> > support_points = system_fe.base_element(base_element).get_unit_support_points();
+    const std::vector<Point<dim>> support_points = system_fe.base_element(base_element).get_unit_support_points();
 
     for (auto cell : this->get_dof_handler().active_cell_iterators ())
       {
@@ -494,7 +484,7 @@ namespace aspect
                                    ?
                                    0.0
                                    :
-                                   2.0*(0.5-abs(cell_volume_of_fluid-0.5))/normal_l1_norm;
+                                   2.0*(0.5-std::abs(cell_volume_of_fluid-0.5))/normal_l1_norm;
         for (unsigned int i=0; i<system_fe.base_element(base_element).dofs_per_cell; ++i)
           {
             const unsigned int system_local_dof
@@ -515,8 +505,10 @@ namespace aspect
     solution.block(blockidx) = initial_solution.block(blockidx);
   }
 
+
+
   template <>
-  void VolumeOfFluidHandler<3>::update_volume_of_fluid_composition (const typename Simulator<3>::AdvectionField &/*composition_field*/,
+  void VolumeOfFluidHandler<3>::update_volume_of_fluid_composition (const Simulator<3>::AdvectionField &/*composition_field*/,
                                                                     const VolumeOfFluidField<3> &/*volume_of_fluid_field*/,
                                                                     LinearAlgebra::BlockVector &/*solution*/)
   {

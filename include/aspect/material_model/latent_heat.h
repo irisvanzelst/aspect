@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2013 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2013 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -28,8 +28,6 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     /**
      * A material model that implements a standard approximation of the latent
      * heat terms following Christensen \& Yuen, 1986. The change of entropy
@@ -74,15 +72,6 @@ namespace aspect
          */
 
         /**
-         * @name Reference quantities
-         * @{
-         */
-        double reference_viscosity () const override;
-        /**
-         * @}
-         */
-
-        /**
          * @name Functions used in dealing with run-time parameters
          * @{
          */
@@ -111,8 +100,8 @@ namespace aspect
         double thermal_alpha;
         double reference_specific_heat;
         double reference_compressibility;
-        double max_viscosity;
-        double min_viscosity;
+        double maximum_viscosity;
+        double minimum_viscosity;
 
         /**
          * The thermal conductivity.

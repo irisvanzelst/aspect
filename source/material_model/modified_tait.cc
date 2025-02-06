@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,7 +32,7 @@ namespace aspect
     evaluate(const MaterialModelInputs<dim> &in,
              MaterialModelOutputs<dim> &out) const
     {
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const double temperature = in.temperature[i];
           const double pressure = in.pressure[i];
@@ -63,10 +63,10 @@ namespace aspect
           // The following Einstein energies and heat capacities are divided through by 3nR.
           // This doesn't matter, as the equation of state relies only on ratios of these quantities.
           const double E_th0 = einstein_temperature * (0.5 + 1. / (std::exp(x_einstein0) - 1.0));
-          const double C_V0 = x_einstein0 * x_einstein0 * std::exp(x_einstein0) / std::pow(std::exp(x_einstein0) - 1.0, 2.0);
+          const double C_V0 = x_einstein0 * x_einstein0 * std::exp(x_einstein0) / Utilities::fixed_power<2>(std::exp(x_einstein0) - 1.0);
 
           const double E_th = einstein_temperature * (0.5 + 1. / (std::exp(x_einstein) - 1.0));
-          const double C_V = x_einstein * x_einstein * std::exp(x_einstein) / std::pow(std::exp(x_einstein) - 1.0, 2.0);
+          const double C_V = x_einstein * x_einstein * std::exp(x_einstein) / Utilities::fixed_power<2>(std::exp(x_einstein) - 1.0);
 
           // The relative thermal pressure
           const double Pth_rel = reference_thermal_expansivity * reference_isothermal_bulk_modulus * (E_th - E_th0) / C_V0;
@@ -86,7 +86,7 @@ namespace aspect
                                      std::pow((1. - tait_b * Pth_rel), - tait_c)));
 
           const double dSdT = (reference_isothermal_bulk_modulus / reference_rho *
-                               std::pow((xi * reference_thermal_expansivity), 2) *
+                               Utilities::fixed_power<2>((xi * reference_thermal_expansivity)) *
                                (std::pow((1. + tait_b * psubpth), -1. - tait_c) -
                                 std::pow((1. - tait_b * Pth_rel), -1. - tait_c)) +
                                dintVdpdT * (( 1 - 2./x_einstein + 2./(std::exp(x_einstein) - 1.))
@@ -117,16 +117,6 @@ namespace aspect
 
 
     template <int dim>
-    double
-    ModifiedTait<dim>::
-    reference_viscosity () const
-    {
-      return eta;
-    }
-
-
-
-    template <int dim>
     bool
     ModifiedTait<dim>::
     is_compressible () const
@@ -145,39 +135,40 @@ namespace aspect
         prm.enter_subsection("Modified Tait model");
         {
           prm.declare_entry ("Reference pressure", "1e5",
-                             Patterns::Double (0),
-                             "Reference pressure $P_0$. Units: $\\text{Pa}$.");
+                             Patterns::Double (0.),
+                             "Reference pressure $P_0$. Units: \\si{\\pascal}.");
           prm.declare_entry ("Reference temperature", "298.15",
-                             Patterns::Double (0),
-                             "Reference temperature $T_0$. Units: $\\text{K}$.");
-          prm.declare_entry ("Reference density", "3300",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
+                             "Reference temperature $T_0$. Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Reference density", "3300.",
+                             Patterns::Double (0.),
                              "The density at the reference pressure and temperature. "
-                             "Units: $\\text{kg}/\\text{m}^3$.");
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Reference isothermal bulk modulus", "125e9",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The isothermal bulk modulus at the reference pressure and temperature. "
-                             "Units: $\\text{Pa}$.");
-          prm.declare_entry ("Reference bulk modulus derivative", "4",
-                             Patterns::Double (0),
+                             "Units: \\si{\\pascal}.");
+          prm.declare_entry ("Reference bulk modulus derivative", "4.",
+                             Patterns::Double (0.),
                              "The value of the first pressure derivative of the isothermal bulk modulus "
                              "at the reference pressure and temperature. "
-                             "Units: [].");
+                             "Units: None.");
           prm.declare_entry ("Reference thermal expansivity", "2e-5",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The thermal expansion coefficient at the reference pressure and temperature. "
-                             "Units: $1/\\text{K}$.");
-          prm.declare_entry ("Einstein temperature", "600",
-                             Patterns::Double (0),
+                             "Units: \\si{\\per\\kelvin}.");
+          prm.declare_entry ("Einstein temperature", "600.",
+                             Patterns::Double (0.),
                              "The Einstein temperature at the reference pressure and temperature. "
-                             "Units: $\\text{K}$.");
+                             "Units: \\si{\\kelvin}.");
           prm.declare_entry ("Viscosity", "1e21",
-                             Patterns::Double (0),
-                             "The value of the constant viscosity $\\eta_0$. Units: $\\text{Pas}$.");
+                             Patterns::Double (0.),
+                             "The value of the constant viscosity $\\eta_0$. "
+                             "Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Thermal conductivity", "4.7",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The value of the constant thermal conductivity $k$. "
-                             "Units: $\\text{W}/\\text{m}/\\text{K}$.");
+                             "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
 
           prm.enter_subsection("Reference heat capacity function");
           {

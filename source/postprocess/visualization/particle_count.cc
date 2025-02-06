@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -20,10 +20,7 @@
 
 
 #include <aspect/postprocess/visualization/particle_count.h>
-
-#include <aspect/postprocess/particles.h>
-#include <aspect/particle/world.h>
-#include <aspect/simulator.h>
+#include <aspect/particle/manager.h>
 
 
 namespace aspect
@@ -33,24 +30,33 @@ namespace aspect
     namespace VisualizationPostprocessors
     {
       template <int dim>
-      std::pair<std::string, Vector<float> *>
+      ParticleCount<dim>::
+      ParticleCount ()
+        :
+        CellDataVectorCreator<dim>("")  // no physical units
+      {}
+
+
+
+      template <int dim>
+      std::pair<std::string, std::unique_ptr<Vector<float>>>
       ParticleCount<dim>::execute() const
       {
-        const Postprocess::Particles<dim> &particle_postprocessor =
-          this->get_postprocess_manager().template get_matching_postprocessor<Postprocess::Particles<dim> >();
-
-        const Particle::ParticleHandler<dim> &particle_handler =
-          particle_postprocessor.get_particle_world().get_particle_handler();
-
-        std::pair<std::string, Vector<float> *>
+        std::pair<std::string, std::unique_ptr<Vector<float>>>
         return_value ("particles_per_cell",
-                      new Vector<float>(this->get_triangulation().n_active_cells()));
+                      std::make_unique<Vector<float>>(this->get_triangulation().n_active_cells()));
 
         // loop over all of the cells and count particles in them
         for (const auto &cell : this->get_dof_handler().active_cell_iterators())
           if (cell->is_locally_owned())
             {
-              (*return_value.second)(cell->active_cell_index()) = static_cast<float> (particle_handler.n_particles_in_cell(cell));
+              unsigned int n_particles_in_cell = 0;
+              for (unsigned int particle_manager_index = 0;
+                   particle_manager_index < this->n_particle_managers();
+                   ++particle_manager_index)
+                n_particles_in_cell += this->get_particle_manager(particle_manager_index).get_particle_handler().n_particles_in_cell(cell);
+
+              (*return_value.second)(cell->active_cell_index()) = static_cast<float>(n_particles_in_cell);
             }
 
         return return_value;
@@ -62,7 +68,7 @@ namespace aspect
       std::list<std::string>
       ParticleCount<dim>::required_other_postprocessors() const
       {
-        return std::list<std::string> (1, "particles");
+        return {"particles"};
       }
     }
   }
@@ -79,7 +85,9 @@ namespace aspect
       ASPECT_REGISTER_VISUALIZATION_POSTPROCESSOR(ParticleCount,
                                                   "particle count",
                                                   "A visualization output object that generates output "
-                                                  "about the number of particles per cell.")
+                                                  "about the number of particles per cell."
+                                                  "\n\n"
+                                                  "Physical units: None.")
     }
   }
 }

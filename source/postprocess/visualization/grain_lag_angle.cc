@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,11 +33,21 @@ namespace aspect
   {
     namespace VisualizationPostprocessors
     {
-      template<int dim>
-      std::pair<std::string, Vector<float> *> GrainLagAngle<dim>::execute() const
+      template <int dim>
+      GrainLagAngle<dim>::
+      GrainLagAngle ()
+        :
+        CellDataVectorCreator<dim>("radian")
+      {}
+
+
+
+      template <int dim>
+      std::pair<std::string, std::unique_ptr<Vector<float>>>
+      GrainLagAngle<dim>::execute() const
       {
-        std::pair<std::string, Vector<float> *> return_value("grain_lag_angle",
-                                                             new Vector<float>(this->get_triangulation().n_active_cells()));
+        std::pair<std::string, std::unique_ptr<Vector<float>>> return_value("grain_lag_angle",
+                                                                              std::make_unique<Vector<float>>(this->get_triangulation().n_active_cells()));
 
         const QMidpoint<dim> quadrature_formula;
         const unsigned int n_q_points = quadrature_formula.size(); // this is 1 for QMidpoint
@@ -49,8 +59,6 @@ namespace aspect
         // Set up material models
         MaterialModel::MaterialModelInputs<dim> in(n_q_points,
                                                    this->n_compositional_fields());
-        MaterialModel::MaterialModelOutputs<dim> out(n_q_points,
-                                                     this->n_compositional_fields());
 
         // Loop over cells and calculate theta in each one
         // Note that we start after timestep 0 because we need the strain rate,
@@ -58,13 +66,12 @@ namespace aspect
         for (const auto &cell : this->get_dof_handler().active_cell_iterators())
           if (cell->is_locally_owned() && this->get_timestep_number() > 0)
             {
-
               // Fill the material model objects for the cell (for strain rate)
               fe_values.reinit(cell);
               in.reinit(fe_values, cell, this->introspection(),
-                        this->get_solution(), true);
+                        this->get_solution());
               // Also get velocity gradients
-              std::vector<Tensor<2, dim> > velocity_gradient(n_q_points,
+              std::vector<Tensor<2, dim>> velocity_gradient(n_q_points,
                                                              Tensor<2, dim>());
               fe_values[this->introspection().extractors.velocities].get_function_gradients(
                 this->get_solution(), velocity_gradient);
@@ -156,7 +163,7 @@ namespace aspect
                                                   "A visualization output object that generates output "
                                                   "showing the angle between the ~infinite strain axis "
                                                   "and the flow velocity. Kaminski and Ribe "
-                                                  "(2002, Gcubed) call this quantity $\\Theta$ and "
+                                                  "(see \\cite{Kaminski2002}) call this quantity $\\Theta$ and "
                                                   "define it as "
                                                   "$\\Theta = \\cos^{-1}(\\hat{u}\\cdot\\hat{e})$ "
                                                   " where $\\hat{u}=\\vec{u}/|{u}|$, $\\vec{u}$ "
@@ -165,8 +172,9 @@ namespace aspect
                                                   "which we calculate as the first eigenvector of "
                                                   "the 'left stretch' tensor. "
                                                   "$\\Theta$ can be used to calculate the grain "
-                                                  "orientation lag parameter.")
+                                                  "orientation lag parameter."
+                                                  "\n\n"
+                                                  "Physical units: \\si{\\radian}.")
     }
   }
 }
-

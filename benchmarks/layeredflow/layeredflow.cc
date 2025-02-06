@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -36,8 +36,6 @@ namespace aspect
 {
   namespace LayeredFlowBenchmark
   {
-    using namespace dealii;
-
     namespace AnalyticSolutions
     {
 
@@ -50,14 +48,14 @@ namespace aspect
         const double yplus=(1.+y0)/beta;
         const double yminus=(1.-y0)/beta;
         const double C1 = 2.*numbers::PI /
-                          ( beta*std::log(beta*beta+pow(1.+y0,2.0))-2.*(1.+y0)*std::atan(yplus)
-                            - beta*std::log(beta*beta+pow(1.-y0,2.0))+2.*(1.-y0)*std::atan(yminus)
+                          ( beta*std::log(beta*beta+Utilities::fixed_power<2>(1.+y0))-2.*(1.+y0)*std::atan(yplus)
+                            - beta*std::log(beta*beta+Utilities::fixed_power<2>(1.-y0))+2.*(1.-y0)*std::atan(yminus)
                             + 2.*numbers::PI*(1.+2.*epsilon) );
 
-        const double C2 = ( beta*std::log( beta*beta+std::pow(1+y0,2.) )- 2.*(1.+y0)*std::atan(yplus)
+        const double C2 = ( beta*std::log( beta*beta+Utilities::fixed_power<2>(1+y0) )- 2.*(1.+y0)*std::atan(yplus)
                             + numbers::PI*(1.+2.*epsilon) )*C1 ;
         const double y = pos[1]-1.0;
-        const double v_x = (-beta*C1*std::log(beta*beta+std::pow(y-y0,2.0))+2.*(y-y0)*C1*std::atan((y-y0)/beta)
+        const double v_x = (-beta*C1*std::log(beta*beta+Utilities::fixed_power<2>(y-y0))+2.*(y-y0)*C1*std::atan((y-y0)/beta)
                             + numbers::PI*(1.+2.*epsilon)*y*C1+C2)/(2.*numbers::PI);
         const double v_y = 0;
         return Point<2> (v_x,v_y);
@@ -83,8 +81,8 @@ namespace aspect
             epsilon_(epsilon)
           {}
 
-          virtual void vector_value (const Point< dim >   &pos,
-                                     Vector< double >   &values) const
+          void vector_value (const Point<dim>   &pos,
+                             Vector<double>   &values) const override
           {
             Assert (dim == 2, ExcNotImplemented());
             Assert (values.size() >= 4, ExcInternalError());
@@ -116,10 +114,9 @@ namespace aspect
         /**
          * Return the boundary velocity as a function of position.
          */
-        virtual
         Tensor<1,dim>
         boundary_velocity (const types::boundary_id ,
-                           const Point<dim> &position) const;
+                           const Point<dim> &position) const override;
 
       private:
         const double beta;
@@ -141,10 +138,10 @@ namespace aspect
          * @name Physical parameters used in the basic equations
          * @{
          */
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override
         {
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
               const Point<dim> &pos = in.position[i];
 
@@ -176,7 +173,7 @@ namespace aspect
          * (compressible Stokes) or as $\nabla \cdot \mathbf{u}=0$
          * (incompressible Stokes).
          */
-        virtual bool is_compressible () const;
+        bool is_compressible () const override;
         /**
          * @}
          */
@@ -190,20 +187,11 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
 
 
-        /**
-         * @name Reference quantities
-         * @{
-         */
-        virtual double reference_viscosity () const;
-        /**
-         * @}
-         */
         /**
          * Returns the viscosity value in the inclusion
          */
@@ -216,15 +204,6 @@ namespace aspect
         double beta;
         double epsilon;
     };
-
-
-    template <int dim>
-    double
-    LayeredFlowMaterial<dim>::
-    reference_viscosity () const
-    {
-      return 1.;
-    }
 
 
     template <int dim>
@@ -340,23 +319,22 @@ namespace aspect
         /**
          * Generate graphical output from the current solution.
          */
-        virtual
         std::pair<std::string,std::string>
-        execute (TableHandler &statistics);
+        execute (TableHandler &statistics) override;
     };
 
     template <int dim>
     std::pair<std::string,std::string>
     LayeredFlowPostprocessor<dim>::execute (TableHandler &)
     {
-      std::unique_ptr<Function<dim> > ref_func;
+      std::unique_ptr<Function<dim>> ref_func;
       {
         const LayeredFlowMaterial<dim> &
         material_model
           = Plugins::get_plugin_as_type<const LayeredFlowMaterial<dim>>(this->get_material_model());
 
-        ref_func.reset (new AnalyticSolutions::FunctionLayeredFlow<dim>(material_model.get_beta(),
-                                                                        material_model.get_epsilon()));
+        ref_func = std::make_unique<AnalyticSolutions::FunctionLayeredFlow<dim>>(material_model.get_beta(),
+                                                                                  material_model.get_epsilon());
       }
 
       const QGauss<dim> quadrature_formula (this->introspection().polynomial_degree.velocities+2);
@@ -422,4 +400,3 @@ namespace aspect
                                   "and reports the error. See the manual for more information.")
   }
 }
-

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2018 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,6 +33,7 @@
 #include <deal.II/multigrid/mg_constrained_dofs.h>
 #include <deal.II/multigrid/multigrid.h>
 #include <deal.II/multigrid/mg_transfer_matrix_free.h>
+#include <deal.II/multigrid/mg_transfer_global_coarsening.templates.h>
 #include <deal.II/multigrid/mg_tools.h>
 #include <deal.II/multigrid/mg_coarse.h>
 #include <deal.II/multigrid/mg_smoother.h>
@@ -43,21 +44,147 @@
 #include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/la_parallel_block_vector.h>
 
+/**
+ * Typedef for the number type for the multigrid operators. Can be either float or double.
+ */
+using GMGNumberType = double;
+
 namespace aspect
 {
-  using namespace dealii;
+  namespace internal
+  {
+    /**
+     * Matrix-free operators must use deal.II defined vectors, while the rest of the ASPECT
+     * software is based on Trilinos vectors. Here we define functions which copy between the
+     * vector types.
+     */
+    namespace ChangeVectorTypes
+    {
+      void import(TrilinosWrappers::MPI::Vector &out,
+                  const dealii::LinearAlgebra::ReadWriteVector<double> &rwv,
+                  const VectorOperation::values                 operation);
+
+      void copy(TrilinosWrappers::MPI::Vector &out,
+                const dealii::LinearAlgebra::distributed::Vector<double> &in);
+
+      void copy(dealii::LinearAlgebra::distributed::Vector<double> &out,
+                const TrilinosWrappers::MPI::Vector &in);
+
+      void copy(TrilinosWrappers::MPI::BlockVector &out,
+                const dealii::LinearAlgebra::distributed::BlockVector<double> &in);
+
+      void copy(dealii::LinearAlgebra::distributed::BlockVector<double> &out,
+                const TrilinosWrappers::MPI::BlockVector &in);
+    }
+  }
 
   /**
    * This namespace contains all matrix-free operators used in the Stokes solver.
    */
   namespace MatrixFreeStokesOperators
   {
+
+    /**
+     * This struct stores the data for the current linear operator that is required to perform
+     * matrix-vector products.
+     *
+     * The members of type Table<2, VectorizedArray<X>> contain values
+     * of type X, grouped by cell batch using the VectorizedArray. The
+     * table is indexed by the index of the cell batch and quadrature
+     * point index.  In other words, you can access the value by
+     * <tt>table(cell_batch_index, q_index)[cell_index]</tt>
+     */
+    template <int dim, typename number>
+    struct OperatorCellData
+    {
+      /**
+       * Information on the compressibility of the flow.
+       */
+      bool is_compressible;
+
+      /**
+       * Pressure scaling constant.
+       */
+      double pressure_scaling;
+
+      /**
+       * If true, Newton terms are part of the operator.
+       */
+      bool enable_newton_derivatives;
+
+      /**
+       * Symmetrize the Newton system when it's true (i.e., the
+       * stabilization is symmetric or SPD).
+       */
+      bool symmetrize_newton_system;
+
+      /**
+       * If true, apply the stabilization on free surface faces.
+       */
+      bool apply_stabilization_free_surface_faces;
+
+      /**
+       * Table which stores viscosity values for each cell.
+       *
+       * If the second dimension is of size 1, the viscosity is
+       * assumed to be constant per cell.
+       */
+      Table<2, VectorizedArray<number>> viscosity;
+
+      /**
+       * Table which stores the strain rate for each cell to be used
+       * for the Newton terms.
+       */
+      Table<2, SymmetricTensor<2, dim, VectorizedArray<number>>> strain_rate_table;
+
+      /**
+       * Table which stores the product of the following three
+       * variables: viscosity derivative with respect to pressure,
+       * the Newton derivative scaling factor, and the averaging weight.
+       */
+      Table<2, VectorizedArray<number>> newton_factor_wrt_pressure_table;
+
+      /**
+       * Table which stores the product of the following four
+       * variables: viscosity derivative with respect to strain rate,
+       * newton derivative scaling factor, alpha, and the averaging
+       * weight. Here alpha is the spd factor when the stabilization
+       * is PD or SPD, otherwise, it is 1.
+       */
+      Table<2, SymmetricTensor<2, dim, VectorizedArray<number>>>
+      newton_factor_wrt_strain_rate_table;
+
+      /**
+       * Table which stores the product of the pressure perturbation
+       * and the normalized gravity. The size is n_face_boundary * n_face_q_points,
+       * but only those on the free surface are computed and stored.
+       */
+      Table<2, Tensor<1, dim, VectorizedArray<number>>> free_surface_stabilization_term_table;
+
+      /**
+       * Boundary indicators of those boundaries with a free surface.
+       */
+      std::set<types::boundary_id> free_surface_boundary_indicators;
+
+      /**
+       * Determine an estimate for the memory consumption (in bytes) of this
+       * object.
+       */
+      std::size_t
+      memory_consumption() const;
+
+      /**
+       * Reset the object and free all memory
+       */
+      void clear();
+    };
+
     /**
      * Operator for the entire Stokes block.
      */
     template <int dim, int degree_v, typename number>
     class StokesOperator
-      : public MatrixFreeOperators::Base<dim, dealii::LinearAlgebra::distributed::BlockVector<number> >
+      : public MatrixFreeOperators::Base<dim, dealii::LinearAlgebra::distributed::BlockVector<number>>
     {
       public:
 
@@ -72,20 +199,9 @@ namespace aspect
         void clear () override;
 
         /**
-         * Fills in the viscosity table, sets the value for the pressure scaling constant,
-         * and gives information regarding compressibility.
+         * Pass in a reference to the problem data.
          */
-        void fill_cell_data(const dealii::LinearAlgebra::distributed::Vector<number> &viscosity_values,
-                            const double pressure_scaling,
-                            const Triangulation<dim> &tria,
-                            const DoFHandler<dim> &dof_handler_for_projection,
-                            const bool is_compressible);
-
-        /**
-         * Returns the viscosity table.
-         */
-        const Table<1, VectorizedArray<number> > &
-        get_viscosity_x_2_table();
+        void set_cell_data (const OperatorCellData<dim,number> &data);
 
         /**
          * Computes the diagonal of the matrix. Since matrix-free operators have not access
@@ -112,19 +228,25 @@ namespace aspect
                           const std::pair<unsigned int, unsigned int> &cell_range) const;
 
         /**
-         * Table which stores a viscosity value for each cell.
+         * This function doesn't do anything, it's created to use the matrixfree loop.
          */
-        Table<1, VectorizedArray<number> > viscosity_x_2;
+        void local_apply_face (const dealii::MatrixFree<dim, number> &data,
+                               dealii::LinearAlgebra::distributed::BlockVector<number> &dst,
+                               const dealii::LinearAlgebra::distributed::BlockVector<number> &src,
+                               const std::pair<unsigned int, unsigned int> &face_range) const;
 
         /**
-         * Pressure scaling constant.
+         * Apply the stabilization on free surface faces.
          */
-        double pressure_scaling;
+        void local_apply_boundary_face (const dealii::MatrixFree<dim, number> &data,
+                                        dealii::LinearAlgebra::distributed::BlockVector<number> &dst,
+                                        const dealii::LinearAlgebra::distributed::BlockVector<number> &src,
+                                        const std::pair<unsigned int, unsigned int> &face_range) const;
 
         /**
-          * Information on the compressibility of the flow.
-          */
-        bool is_compressible;
+         * A pointer to the current cell data that contains viscosity and other required parameters per cell.
+         */
+        const OperatorCellData<dim,number> *cell_data;
     };
 
     /**
@@ -147,13 +269,9 @@ namespace aspect
         void clear () override;
 
         /**
-         * Fills in the viscosity table and sets the value for the pressure scaling constant.
+         * Pass in a reference to the problem data.
          */
-        void fill_cell_data (const dealii::LinearAlgebra::distributed::Vector<number> &viscosity_values,
-                             const double pressure_scaling,
-                             const Triangulation<dim> &tria,
-                             const DoFHandler<dim> &dof_handler_for_projection);
-
+        void set_cell_data (const OperatorCellData<dim,number> &data);
 
         /**
          * Computes the diagonal of the matrix. Since matrix-free operators have not access
@@ -179,24 +297,19 @@ namespace aspect
                           const dealii::LinearAlgebra::distributed::Vector<number> &src,
                           const std::pair<unsigned int, unsigned int> &cell_range) const;
 
+        /**
+         * This function contains the inner-most operation done on a single cell
+         */
+        void inner_cell_operation(FEEvaluation<dim,
+                                  degree_p,
+                                  degree_p+2,
+                                  1,
+                                  number> &pressure) const;
 
         /**
-         * Computes the diagonal contribution from a cell matrix.
+         * A pointer to the current cell data that contains viscosity and other required parameters per cell.
          */
-        void local_compute_diagonal (const MatrixFree<dim,number>                     &data,
-                                     dealii::LinearAlgebra::distributed::Vector<number>  &dst,
-                                     const unsigned int                               &dummy,
-                                     const std::pair<unsigned int,unsigned int>       &cell_range) const;
-
-        /**
-         * Table which stores a viscosity value for each cell.
-         */
-        Table<1, VectorizedArray<number> > one_over_viscosity;
-
-        /**
-         * Pressure scaling constant.
-         */
-        double pressure_scaling;
+        const OperatorCellData<dim,number> *cell_data;
     };
 
     /**
@@ -220,13 +333,9 @@ namespace aspect
         void clear () override;
 
         /**
-         * Fills in the viscosity table and gives information regarding compressibility.
+         * Pass in a reference to the problem data.
          */
-        void fill_cell_data(const dealii::LinearAlgebra::distributed::Vector<number> &viscosity_values,
-                            const Triangulation<dim> &tria,
-                            const DoFHandler<dim> &dof_handler_for_projection,
-                            const bool for_mg,
-                            const bool is_compressible);
+        void set_cell_data (const OperatorCellData<dim,number> &data);
 
         /**
          * Computes the diagonal of the matrix. Since matrix-free operators have not access
@@ -243,10 +352,30 @@ namespace aspect
         void set_diagonal (const dealii::LinearAlgebra::distributed::Vector<number> &diag);
 
       private:
+        /**
+         * Defines the inner-most operator on a single cell batch with
+         * the loop over quadrature points.
+         */
+        void inner_cell_operation(FEEvaluation<dim,
+                                  degree_v,
+                                  degree_v+1,
+                                  dim,
+                                  number> &velocity) const;
 
         /**
-         * Performs the application of the matrix-free operator. This function is called by
-         * vmult() functions MatrixFreeOperators::Base.
+         * Defines the operation on a single cell batch including
+         * load/store and calls inner_cell_operation().
+         */
+        void cell_operation(FEEvaluation<dim,
+                            degree_v,
+                            degree_v+1,
+                            dim,
+                            number> &velocity) const;
+
+        /**
+         * Performs the application of the matrix-free operator. This
+         * function is called by vmult() functions
+         * MatrixFreeOperators::Base.
          */
         void apply_add (dealii::LinearAlgebra::distributed::Vector<number> &dst,
                         const dealii::LinearAlgebra::distributed::Vector<number> &src) const override;
@@ -260,31 +389,17 @@ namespace aspect
                           const std::pair<unsigned int, unsigned int> &cell_range) const;
 
         /**
-         * Computes the diagonal contribution from a cell matrix.
+         * A pointer to the current cell data that contains viscosity and other required parameters per cell.
          */
-        void local_compute_diagonal (const MatrixFree<dim,number>                     &data,
-                                     dealii::LinearAlgebra::distributed::Vector<number>  &dst,
-                                     const unsigned int                               &dummy,
-                                     const std::pair<unsigned int,unsigned int>       &cell_range) const;
-
-        /**
-         * Table which stores a viscosity value for each cell.
-         */
-        Table<1, VectorizedArray<number> > viscosity_x_2;
-
-        /**
-          * Information on the compressibility of the flow.
-          */
-        bool is_compressible;
-
+        const OperatorCellData<dim,number> *cell_data;
     };
   }
 
   /**
-    * Base class for the matrix free GMG solver for the Stokes system. The
-    * actual implementation is found inside StokesMatrixFreeHandlerImplementation below.
-    */
-  template<int dim>
+   * Base class for the matrix free GMG solver for the Stokes system. The
+   * actual implementation is found inside StokesMatrixFreeHandlerImplementation below.
+   */
+  template <int dim>
   class StokesMatrixFreeHandler
   {
     public:
@@ -294,10 +409,15 @@ namespace aspect
       virtual ~StokesMatrixFreeHandler() = default;
 
       /**
-       * Solves the Stokes linear system matrix-free. This is called
-       * by Simulator<dim>::solve_stokes().
+       * Solves the Stokes linear system using the matrix-free
+       * solver.
+       *
+       * @param solution_vector The existing solution vector that will be
+       * updated with the new solution. This vector is expected to have the
+       * block structure of the full solution vector, and its velocity and
+       * pressure blocks will be updated with the new solution.
        */
-      virtual std::pair<double,double> solve()=0;
+      virtual std::pair<double,double> solve(LinearAlgebra::BlockVector &solution_vector) = 0;
 
       /**
        * Allocates and sets up the members of the StokesMatrixFreeHandler. This
@@ -306,21 +426,18 @@ namespace aspect
       virtual void setup_dofs()=0;
 
       /**
-       * Evalute the MaterialModel to query for the viscosity on the active cells,
-       * project this viscosity to the multigrid hierarchy, and cache the information
-       * for later usage. Also sets pressure scaling and information regarding the
-       * compressiblity of the flow.
+       * Perform various tasks to update the linear system to solve
+       * for. Note that we are not assembling a matrix (as this is a
+       * matrix-free algorithm), but we are evaluating the material
+       * model and storing the information necessary for a later call
+       * to solve().
        */
-      virtual void evaluate_material_model()=0;
+      virtual void assemble()=0;
 
       /**
-       * Add correction to system RHS for non-zero boundary condition.
-       */
-      virtual void correct_stokes_rhs()=0;
-
-      /**
-       * Computes and sets the diagonal for both the mass matrix operator and the A-block
-       * operators on each level for the purpose of smoothing inside the multigrid v-cycle.
+       * Computes and sets the diagonal for both the mass matrix
+       * operator and the A-block operators on each level for the
+       * purpose of smoothing inside the multigrid v-cycle.
        */
       virtual void build_preconditioner()=0;
 
@@ -329,6 +446,61 @@ namespace aspect
        */
       static
       void declare_parameters (ParameterHandler &prm);
+
+      /**
+       * Return a reference to the DoFHandler that is used for velocity in
+       * the block GMG solver.
+       */
+      virtual const DoFHandler<dim> &
+      get_dof_handler_v () const = 0;
+
+      /**
+       * Return a reference to the DoFHandler that is used for pressure in
+       * the block GMG solver.
+       */
+      virtual const DoFHandler<dim> &
+      get_dof_handler_p () const = 0;
+
+      /**
+       * Return a reference to the DoFHandler that is used for the coefficient
+       * projection in the block GMG solver.
+       */
+      virtual const DoFHandler<dim> &
+      get_dof_handler_projection () const = 0;
+
+      /**
+       * Return a pointer to the object that describes the velocity DoF
+       * constraints for the block GMG Stokes solver.
+       */
+      virtual const AffineConstraints<double> &
+      get_constraints_v () const = 0;
+
+      /**
+       * Return a pointer to the object that describes the pressure DoF
+       * constraints for the block GMG Stokes solver.
+       */
+      virtual const AffineConstraints<double> &
+      get_constraints_p () const = 0;
+
+      /**
+       * Return a pointer to the MGTransfer object used for the A block
+       * of the block GMG Stokes solver.
+       */
+      virtual const MGTransferMF<dim,GMGNumberType> &
+      get_mg_transfer_A () const = 0;
+
+      /**
+       * Return a pointer to the MGTransfer object used for the Schur
+       * complement block of the block GMG Stokes solver.
+       */
+      virtual const MGTransferMF<dim,GMGNumberType> &
+      get_mg_transfer_S () const = 0;
+
+      /**
+       * Return the memory consumption in bytes that are used to store
+       * equation data like viscosity to be able to apply the operators.
+       */
+      virtual std::size_t get_cell_data_memory_consumption() const = 0;
   };
 
   /**
@@ -341,7 +513,7 @@ namespace aspect
    * degree by using a pointer to the base class and we can pick the desired
    * velocity degree at runtime.
    */
-  template<int dim, int velocity_degree>
+  template <int dim, int velocity_degree>
   class StokesMatrixFreeHandlerImplementation: public StokesMatrixFreeHandler<dim>
   {
     public:
@@ -359,10 +531,15 @@ namespace aspect
       ~StokesMatrixFreeHandlerImplementation() override = default;
 
       /**
-       * Solves the Stokes linear system matrix-free. This is called
-       * by Simulator<dim>::solve_stokes().
+       * Solves the Stokes linear system using the matrix-free
+       * solver.
+       *
+       * @param solution_vector The existing solution vector that will be
+       * updated with the new solution. This vector is expected to have the
+       * block structure of the full solution vector, and its velocity and
+       * pressure blocks will be updated with the new solution.
        */
-      std::pair<double,double> solve() override;
+      std::pair<double,double> solve(LinearAlgebra::BlockVector &solution_vector) override;
 
       /**
        * Allocates and sets up the members of the StokesMatrixFreeHandler. This
@@ -371,17 +548,13 @@ namespace aspect
       void setup_dofs() override;
 
       /**
-       * Evalute the MaterialModel to query for the viscosity on the active cells,
-       * project this viscosity to the multigrid hierarchy, and cache the information
-       * for later usage. Also sets pressure scaling and information regarding the
-       * compressiblity of the flow.
+       * Perform various tasks to update the linear system to solve
+       * for. Note that we are not assembling a matrix (as this is a
+       * matrix-free algorithm), but we are evaluating the material
+       * model and storing the information necessary for a later call
+       * to solve().
        */
-      void evaluate_material_model() override;
-
-      /**
-       * Add correction to system RHS for non-zero boundary condition.
-       */
-      void correct_stokes_rhs() override;
+      void assemble() override;
 
       /**
        * Computes and sets the diagonal for both the mass matrix operator and the A-block
@@ -390,55 +563,146 @@ namespace aspect
       void build_preconditioner() override;
 
       /**
-       * Get the workload imbalance of the distribution
-       * of the level hierarchy.
-       */
-      double get_workload_imbalance();
-
-      /**
        * Declare parameters. (No actual parameters at the moment).
        */
       static
       void declare_parameters (ParameterHandler &prm);
 
+      /**
+       * Return a reference to the DoFHandler that is used for velocity in
+       * the block GMG solver.
+       */
+      const DoFHandler<dim> &
+      get_dof_handler_v () const override;
+
+      /**
+       * Return a reference to the DoFHandler that is used for pressure in
+       * the block GMG solver.
+       */
+      const DoFHandler<dim> &
+      get_dof_handler_p () const override;
+
+      /**
+       * Return a reference to the DoFHandler that is used for the coefficient
+       * projection in the block GMG solver.
+       */
+      const DoFHandler<dim> &
+      get_dof_handler_projection () const override;
+
+      /**
+       * Return a pointer to the object that describes the velocity DoF
+       * constraints for the block GMG Stokes solver.
+       */
+      const AffineConstraints<double> &
+      get_constraints_v () const override;
+
+      /**
+       * Return a pointer to the object that describes the pressure DoF
+       * constraints for the block GMG Stokes solver.
+       */
+      const AffineConstraints<double> &
+      get_constraints_p () const override;
+
+      /**
+       * Return a pointer to the MGTransfer object used for the A block
+       * of the block GMG Stokes solver.
+       */
+      const MGTransferMF<dim,GMGNumberType> &
+      get_mg_transfer_A () const override;
+
+      /**
+       * Return a pointer to the MGTransfer object used for the Schur
+       * complement block of the block GMG Stokes solver.
+       */
+      const MGTransferMF<dim,GMGNumberType> &
+      get_mg_transfer_S () const override;
+
+
+      /**
+       * Return the memory consumption in bytes that are used to store
+       * equation data like viscosity to be able to apply the operators.
+       */
+      std::size_t get_cell_data_memory_consumption() const override;
+
     private:
       /**
-       * Parse parameters. (No actual parameters at the moment).
+       * Parse parameters.
        */
       void parse_parameters (ParameterHandler &prm);
 
+      /**
+       * Evaluate the MaterialModel to query information like the viscosity and
+       * project this viscosity to the multigrid hierarchy. Also queries
+       * other parameters like pressure scaling.
+       */
+      void evaluate_material_model();
+
+      /**
+       * Add correction to system RHS for non-zero boundary condition. See description in
+       * StokesMatrixFreeHandler::correct_stokes_rhs() for more information.
+       */
+      void correct_stokes_rhs();
+
 
       Simulator<dim> &sim;
+
+      bool print_details;
+
+      /**
+       * If true, it will time the key components of this matrix-free implementation, such as
+       * vmult of different matrices, solver IDR with the cheap preconditioner, etc.
+       */
+      bool do_timings;
+
+      /**
+       * The max/min of the evaluated viscosities.
+       */
+      double minimum_viscosity;
+      double maximum_viscosity;
 
       DoFHandler<dim> dof_handler_v;
       DoFHandler<dim> dof_handler_p;
       DoFHandler<dim> dof_handler_projection;
 
-      FESystem<dim> stokes_fe;
       FESystem<dim> fe_v;
       FESystem<dim> fe_p;
       FESystem<dim> fe_projection;
 
-      typedef MatrixFreeStokesOperators::StokesOperator<dim,velocity_degree,double> StokesMatrixType;
-      typedef MatrixFreeStokesOperators::MassMatrixOperator<dim,velocity_degree-1,double> MassMatrixType;
-      typedef MatrixFreeStokesOperators::ABlockOperator<dim,velocity_degree,double> ABlockMatrixType;
+      /**
+       * Store the data for the Stokes operator (viscosity, etc.) for the active cells.
+       */
+      MatrixFreeStokesOperators::OperatorCellData<dim, GMGNumberType> active_cell_data;
+
+      /**
+       * Store the data for the Stokes operator (viscosity, etc.) for each multigrid level.
+       */
+      MGLevelObject<MatrixFreeStokesOperators::OperatorCellData<dim, GMGNumberType>> level_cell_data;
+
+      using StokesMatrixType = MatrixFreeStokesOperators::StokesOperator<dim,velocity_degree,double>;
+      using SchurComplementMatrixType = MatrixFreeStokesOperators::MassMatrixOperator<dim,velocity_degree-1,double>;
+      using ABlockMatrixType = MatrixFreeStokesOperators::ABlockOperator<dim,velocity_degree,double>;
+
+      using GMGSchurComplementMatrixType = MatrixFreeStokesOperators::MassMatrixOperator<dim,velocity_degree-1,GMGNumberType>;
+      using GMGABlockMatrixType = MatrixFreeStokesOperators::ABlockOperator<dim,velocity_degree,GMGNumberType>;
 
       StokesMatrixType stokes_matrix;
-      ABlockMatrixType velocity_matrix;
-      MassMatrixType mass_matrix;
+      ABlockMatrixType A_block_matrix;
+      SchurComplementMatrixType Schur_complement_block_matrix;
 
-      ConstraintMatrix constraints_v;
-      ConstraintMatrix constraints_p;
-      ConstraintMatrix constraints_projection;
+      AffineConstraints<double> constraints_v;
+      AffineConstraints<double> constraints_p;
 
-      MGLevelObject<ABlockMatrixType> mg_matrices;
-      MGConstrainedDoFs mg_constrained_dofs;
+      MGLevelObject<GMGABlockMatrixType> mg_matrices_A_block;
+      MGLevelObject<GMGSchurComplementMatrixType> mg_matrices_Schur_complement;
+
+      MGConstrainedDoFs mg_constrained_dofs_A_block;
+      MGConstrainedDoFs mg_constrained_dofs_Schur_complement;
       MGConstrainedDoFs mg_constrained_dofs_projection;
 
-      dealii::LinearAlgebra::distributed::Vector<double> active_coef_dof_vec;
-      MGLevelObject<dealii::LinearAlgebra::distributed::Vector<double> > level_coef_dof_vec;
+      MGTransferMF<dim,GMGNumberType> mg_transfer_A_block;
+      MGTransferMF<dim,GMGNumberType> mg_transfer_Schur_complement;
 
-      MGTransferMatrixFree<dim,double> mg_transfer;
+      std::vector<std::shared_ptr<MatrixFree<dim,double>>> matrix_free_objects;
   };
 }
 

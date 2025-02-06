@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -36,65 +36,19 @@ namespace aspect
    */
   namespace GravityModel
   {
-    using namespace dealii;
-
     /**
      * A base class for parameterizations of gravity models.
      *
      * @ingroup GravityModels
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Made virtual to enforce that derived classes also have
-         * virtual destructors.
-         */
-        virtual ~Interface();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         */
-        virtual void initialize ();
-
         /**
          * Return the gravity vector as a function of position.
          */
         virtual Tensor<1,dim> gravity_vector (const Point<dim> &position) const = 0;
-
-        /**
-         * A function that is called at the beginning of each time step and
-         * that allows the implementation to update internal data structures.
-         * This is useful, for example, if you have a gravity model that
-         * depends on time, or if you have a gravity model that depends on the
-         * solution of the previous step.
-         *
-         * The default implementation of this function does nothing.
-         */
-        virtual void update();
-
-        /**
-         * Declare the parameters this class takes through input files. The
-         * default implementation of this function does not describe any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation of this function does not read any
-         * parameters. Consequently, derived classes do not have to overload
-         * this function if they do not take any runtime parameters.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
     };
 
 
@@ -120,7 +74,7 @@ namespace aspect
     register_gravity_model (const std::string &name,
                             const std::string &description,
                             void (*declare_parameters_function) (ParameterHandler &),
-                            Interface<dim> *(*factory_function) ());
+                            std::unique_ptr<Interface<dim>> (*factory_function) ());
 
     /**
      * A function that given the name of a model returns a pointer to an
@@ -133,7 +87,7 @@ namespace aspect
      * @ingroup GravityModels
      */
     template <int dim>
-    Interface<dim> *
+    std::unique_ptr<Interface<dim>>
     create_gravity_model (ParameterHandler &prm);
 
 
@@ -173,10 +127,10 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_GRAVITY_MODEL_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::GravityModel::Interface<2>,classname<2> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::GravityModel::Interface<2>,classname<2>> \
     dummy_ ## classname ## _2d (&aspect::GravityModel::register_gravity_model<2>, \
                                 name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::GravityModel::Interface<3>,classname<3> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::GravityModel::Interface<3>,classname<3>> \
     dummy_ ## classname ## _3d (&aspect::GravityModel::register_gravity_model<3>, \
                                 name, description); \
   }

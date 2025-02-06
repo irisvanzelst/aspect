@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -34,7 +34,7 @@ namespace aspect
     evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
              MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      EquationOfStateOutputs<dim> eos_outputs (this->n_compositional_fields()+1);
+      EquationOfStateOutputs<dim> eos_outputs (this->introspection().get_number_of_fields_of_type(CompositionalFieldDescription::chemical_composition)+1);
 
       // Store which components to exclude during volume fraction computation.
       ComponentMask composition_mask(this->n_compositional_fields(), true);
@@ -43,13 +43,15 @@ namespace aspect
       for (unsigned int i=0; i < SymmetricTensor<2,dim>::n_independent_components; ++i)
         composition_mask.set(i,false);
 
-      std::vector<double> average_elastic_shear_moduli (in.temperature.size());
+      std::vector<double> average_elastic_shear_moduli (in.n_evaluation_points());
       std::vector<double> elastic_shear_moduli(elastic_rheology.get_elastic_shear_moduli());
 
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const std::vector<double> composition = in.composition[i];
-          const std::vector<double> volume_fractions = MaterialUtilities::compute_volume_fractions(composition, composition_mask);
+
+          const std::vector<double> volume_fractions = MaterialUtilities::compute_only_composition_fractions(composition,
+                                                       this->introspection().chemical_composition_field_indices());
 
           equation_of_state.evaluate(in, i, eos_outputs);
 
@@ -80,23 +82,15 @@ namespace aspect
                                                                                  average_elastic_shear_moduli[i]);
 
           // Fill the material properties that are part of the elastic additional outputs
-          if (ElasticAdditionalOutputs<dim> *elastic_out = out.template get_additional_output<ElasticAdditionalOutputs<dim> >())
+          if (ElasticAdditionalOutputs<dim> *elastic_out = out.template get_additional_output<ElasticAdditionalOutputs<dim>>())
             {
               elastic_out->elastic_shear_moduli[i] = average_elastic_shear_moduli[i];
             }
         }
 
-      elastic_rheology.fill_elastic_force_outputs(in, average_elastic_shear_moduli, out);
+      elastic_rheology.fill_elastic_outputs(in, average_elastic_shear_moduli, out);
       elastic_rheology.fill_reaction_outputs(in, average_elastic_shear_moduli, out);
 
-    }
-
-    template <int dim>
-    double
-    Viscoelastic<dim>::
-    reference_viscosity () const
-    {
-      return viscosities[0]; //background
     }
 
     template <int dim>
@@ -119,15 +113,19 @@ namespace aspect
           Rheology::Elasticity<dim>::declare_parameters (prm);
 
           prm.declare_entry ("Viscosities", "1.e21",
-                             Patterns::List(Patterns::Double(0)),
+                             Patterns::List(Patterns::Double (0.)),
                              "List of viscosities for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value. Units: $Pa s$");
+                             "for a total of N+1 values, where N is the number of all compositional fields or only "
+                             "those corresponding to chemical compositions. "
+                             "If only one value is given, then all use the same value. "
+                             "Units: \\si{\\pascal\\second}.");
           prm.declare_entry ("Thermal conductivities", "4.7",
-                             Patterns::List(Patterns::Double(0)),
+                             Patterns::List(Patterns::Double (0.)),
                              "List of thermal conductivities for background mantle and compositional fields, "
-                             "for a total of N+1 values, where N is the number of compositional fields. "
-                             "If only one value is given, then all use the same value. Units: $W/m/K$ ");
+                             "for a total of N+1 values, where N is the number of all compositional fields or only "
+                             "those corresponding to chemical compositions. "
+                             "If only one value is given, then all use the same value. "
+                             "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
           prm.declare_entry ("Viscosity averaging scheme", "harmonic",
                              Patterns::Selection("arithmetic|harmonic|geometric|maximum composition "),
                              "When more than one compositional field is present at a point "
@@ -144,13 +142,6 @@ namespace aspect
     void
     Viscoelastic<dim>::parse_parameters (ParameterHandler &prm)
     {
-
-      // Get the number of fields for composition-dependent material properties
-      const unsigned int n_fields = this->n_compositional_fields() + 1;
-
-      AssertThrow(this->get_parameters().enable_elasticity == true,
-                  ExcMessage ("Material model Viscoelastic only works if 'Enable elasticity' is set to true"));
-
       prm.enter_subsection("Material model");
       {
         prm.enter_subsection("Viscoelastic");
@@ -165,13 +156,19 @@ namespace aspect
           viscosity_averaging = MaterialUtilities::parse_compositional_averaging_operation ("Viscosity averaging scheme",
                                 prm);
 
-          // Parse viscoelastic properties
-          viscosities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Viscosities"))),
-                                                                n_fields,
-                                                                "Viscosities");
-          thermal_conductivities = Utilities::possibly_extend_from_1_to_N (Utilities::string_to_double(Utilities::split_string_list(prm.get("Thermal conductivities"))),
-                                                                           n_fields,
-                                                                           "Thermal conductivities");
+          // Make options file for parsing maps to double arrays
+          std::vector<std::string> chemical_field_names = this->introspection().chemical_composition_field_names();
+          chemical_field_names.insert(chemical_field_names.begin(),"background");
+
+          std::vector<std::string> compositional_field_names = this->introspection().get_composition_names();
+          compositional_field_names.insert(compositional_field_names.begin(),"background");
+
+          Utilities::MapParsing::Options options(chemical_field_names, "Viscosities");
+          options.list_of_allowed_keys = compositional_field_names;
+
+          viscosities = Utilities::MapParsing::parse_map_to_double_array (prm.get("Viscosities"), options);
+          options.property_name = "Thermal conductivities";
+          thermal_conductivities = Utilities::MapParsing::parse_map_to_double_array (prm.get("Thermal conductivities"), options);
         }
         prm.leave_subsection();
       }
@@ -213,13 +210,13 @@ namespace aspect
                                    "model is incompressible and allows specifying an arbitrary number "
                                    "of compositional fields, where each field represents a different "
                                    "rock type or component of the viscoelastic stress tensor. The stress "
-                                   "tensor in 2D and 3D, respectively, contains 3 or 6 components. The "
+                                   "tensor in 2d and 3d, respectively, contains 3 or 6 components. The "
                                    "compositional fields representing these components must be named "
                                    "and listed in a very specific format, which is designed to minimize "
                                    "mislabeling stress tensor components as distinct 'compositional "
-                                   "rock types' (or vice versa). For 2D models, the first three "
+                                   "rock types' (or vice versa). For 2d models, the first three "
                                    "compositional fields must be labeled 'stress\\_xx', 'stress\\_yy' and 'stress\\_xy'. "
-                                   "In 3D, the first six compositional fields must be labeled 'stress\\_xx', "
+                                   "In 3d, the first six compositional fields must be labeled 'stress\\_xx', "
                                    "'stress\\_yy', 'stress\\_zz', 'stress\\_xy', 'stress\\_xz', 'stress\\_yz'. "
                                    "\n\n "
                                    "Expanding the model to include non-linear viscous flow (e.g., "
@@ -238,9 +235,9 @@ namespace aspect
                                    "The overview below directly follows Moresi et al. (2003) eqns. 23-32. "
                                    "However, an important distinction between this material model and "
                                    "the studies above is the use of compositional fields, rather than "
-                                   "tracers, to track individual components of the viscoelastic stress "
+                                   "particles, to track individual components of the viscoelastic stress "
                                    "tensor. The material model will be updated when an option to track "
-                                   "and calculate viscoelastic stresses with tracers is implemented. "
+                                   "and calculate viscoelastic stresses with particles is implemented. "
                                    "\n\n "
                                    "Moresi et al. (2003) begins (eqn. 23) by writing the deviatoric "
                                    "rate of deformation ($\\hat{D}$) as the sum of elastic "
@@ -259,34 +256,34 @@ namespace aspect
                                    "$W_{ij} = \\frac{1}{2} \\left (\\frac{\\partial V_{i}}{\\partial x_{j}} - "
                                    "\\frac{\\partial V_{j}}{\\partial x_{i}} \\right )$. "
                                    "\n\n "
-                                   "The Jaumann stress-rate can also be approximated using terms from the time "
-                                   "at the previous time step ($t$) and current time step ($t + \\Delta t^{e}$): "
+                                   "The Jaumann stress-rate can also be approximated using terms from the "
+                                   "previous time step ($t$) and current time step ($t + \\Delta t^{e}$): "
                                    "$\\smash[t]{\\overset{\\nabla}{\\tau}}^{t + \\Delta t^{e}} \\approx "
                                    "\\frac{\\tau^{t + \\Delta t^{e} - \\tau^{t}}}{\\Delta t^{e}} - "
                                    "W^{t}\\tau^{t} + \\tau^{t}W^{t}$. "
                                    "In this material model, the size of the time step above ($\\Delta t^{e}$) "
                                    "can be specified as the numerical time step size or an independent fixed time "
-                                   "step. If the latter case is a selected, the user has an option to apply a "
+                                   "step. If the latter case is selected, the user has an option to apply a "
                                    "stress averaging scheme to account for the differences between the numerical "
                                    "and fixed elastic time step (eqn. 32). If one selects to use a fixed elastic time "
                                    "step throughout the model run, this can still be achieved by using CFL and "
                                    "maximum time step values that restrict the numerical time step to a specific time."
                                    "\n\n "
-                                   "The formulation above allows rewriting the total rate of deformation (eqn. 29) as "
-                                   "$\\tau^{t + \\Delta t^{e}} = \\eta_{eff} \\left ( "
+                                   "The formulation above allows rewriting the total deviatoric stress (eqn. 29) as\n "
+                                   "$\\tau^{t + \\Delta t^{e}} = \\eta_\\text{eff} \\left ( "
                                    "2\\hat{D}^{t + \\triangle t^{e}} + \\frac{\\tau^{t}}{\\mu \\Delta t^{e}} + "
                                    "\\frac{W^{t}\\tau^{t} - \\tau^{t}W^{t}}{\\mu}  \\right )$. "
                                    "\n\n "
                                    "The effective viscosity (eqn. 28) is a function of the viscosity ($\\eta$), "
                                    "elastic time step size ($\\Delta t^{e}$) and shear relaxation time "
                                    "($ \\alpha = \\frac{\\eta}{\\mu} $): "
-                                   "$\\eta_{eff} = \\eta \\frac{\\Delta t^{e}}{\\Delta t^{e} + \\alpha}$ "
+                                   "$\\eta_\\text{eff} = \\eta \\frac{\\Delta t^{e}}{\\Delta t^{e} + \\alpha}$ "
                                    "The magnitude of the shear modulus thus controls how much the effective "
                                    "viscosity is reduced relative to the initial viscosity. "
                                    "\n\n "
                                    "Elastic effects are introduced into the governing Stokes equations through "
                                    "an elastic force term (eqn. 30) using stresses from the previous time step: "
-                                   "$F^{e,t} = -\\frac{\\eta_{eff}}{\\mu \\Delta t^{e}} \\tau^{t}$. "
+                                   "$F^{e,t} = -\\frac{\\eta_\\text{eff}}{\\mu \\Delta t^{e}} \\tau^{t}$. "
                                    "This force term is added onto the right-hand side force vector in the "
                                    "system of equations. "
                                    "\n\n "
@@ -300,7 +297,7 @@ namespace aspect
                                    "For each material parameter the user supplies a comma delimited list of length "
                                    "N+1, where N is the number of compositional fields. The additional field corresponds "
                                    "to the value for background material. They should be ordered ''background, "
-                                   "composition1, composition2...''. However, the first 3 (2D) or 6 (3D) composition "
+                                   "composition1, composition2...''. However, the first 3 (2d) or 6 (3d) composition "
                                    "fields correspond to components of the elastic stress tensor and their material "
                                    "values will not contribute to the volume fractions. If a single value is given, then "
                                    "all the compositional fields are given that value. Other lengths of lists are not "

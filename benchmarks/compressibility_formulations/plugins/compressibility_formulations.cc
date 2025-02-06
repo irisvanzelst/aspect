@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2017 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2017 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,8 +31,8 @@ namespace aspect
   {
     /**
      * A material model that is identical to the simple compressible model,
-     * except that the density is tracked in a compositional field named
-     * 'density_field' using the prescribed field advection method. It also
+     * except that the density is tracked in a compositional field of type
+     * 'density' using the prescribed field advection method. It also
      * allows some modification to the density and thermal expansivity
      * calculation for the compressibility benchmarks.
      *
@@ -42,38 +42,30 @@ namespace aspect
     class CompressibilityFormulations : public MaterialModel::Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
-        virtual
-        void initialize();
+        void initialize() override;
 
-        virtual
-        void update();
+        void update() override;
 
-        virtual
-        bool is_compressible () const;
+        bool is_compressible () const override;
 
-        virtual
-        double reference_viscosity () const;
-
-        virtual
         void
         evaluate (const MaterialModelInputs<dim> &in,
-                  MaterialModelOutputs<dim> &out) const;
+                  MaterialModelOutputs<dim> &out) const override;
 
-        virtual
         void
-        create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const;
+        create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
         static void
         declare_parameters (ParameterHandler &prm);
 
-        virtual void
-        parse_parameters (ParameterHandler &prm);
+        void
+        parse_parameters (ParameterHandler &prm) override;
 
       private:
         /**
          * Pointer to the material model used as the base model
          */
-        std::shared_ptr<MaterialModel::Interface<dim> > base_model;
+        std::shared_ptr<MaterialModel::Interface<dim>> base_model;
 
         /**
          * The reference density
@@ -119,16 +111,6 @@ namespace aspect
 
 
     template <int dim>
-    double
-    CompressibilityFormulations<dim>::
-    reference_viscosity () const
-    {
-      return base_model->reference_viscosity();
-    }
-
-
-
-    template <int dim>
     bool
     CompressibilityFormulations<dim>::
     is_compressible () const
@@ -145,9 +127,9 @@ namespace aspect
     {
       base_model->evaluate(in,out);
 
-      const unsigned int density_field_index = this->introspection().compositional_index_for_name("density_field");
+      const unsigned int density_field_index = this->introspection().find_composition_type(Parameters<dim>::CompositionalFieldDescription::density);
 
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           double pressure_for_density = in.pressure[i];
 
@@ -173,7 +155,7 @@ namespace aspect
           if (this->get_parameters().formulation_mass_conservation ==
               Parameters<dim>::Formulation::MassConservation::isentropic_compression)
             {
-              out.compressibilities[i] = reference_compressibility - std::pow(thermal_expansivity, 2) * in.temperature[i]
+              out.compressibilities[i] = reference_compressibility - Utilities::fixed_power<2>(thermal_expansivity) * in.temperature[i]
                                          / (out.densities[i] * out.specific_heat[i]);
             }
         }
@@ -181,8 +163,8 @@ namespace aspect
       // prescribe the density field to the current value of the density. The actual projection
       // only happens inside Simulator<dim>::interpolate_material_output_into_compositional_field,
       // this just sets the correct term the field will be set to.
-      if (PrescribedFieldOutputs<dim> *prescribed_field_out = out.template get_additional_output<PrescribedFieldOutputs<dim> >())
-        for (unsigned int i=0; i < in.position.size(); ++i)
+      if (PrescribedFieldOutputs<dim> *prescribed_field_out = out.template get_additional_output<PrescribedFieldOutputs<dim>>())
+        for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
           prescribed_field_out->prescribed_field_outputs[i][density_field_index] = out.densities[i];
     }
 
@@ -192,11 +174,11 @@ namespace aspect
     void
     CompressibilityFormulations<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      if (out.template get_additional_output<PrescribedFieldOutputs<dim> >() == NULL)
+      if (out.template get_additional_output<PrescribedFieldOutputs<dim>>() == nullptr)
         {
-          const unsigned int n_points = out.viscosities.size();
+          const unsigned int n_points = out.n_evaluation_points();
           out.additional_outputs.push_back(
-            std::unique_ptr<MaterialModel::AdditionalMaterialOutputs<dim> >
+            std::unique_ptr<MaterialModel::AdditionalMaterialOutputs<dim>>
             (new MaterialModel::PrescribedFieldOutputs<dim> (n_points, this->n_compositional_fields())));
         }
     }
@@ -258,7 +240,7 @@ namespace aspect
       // create the base model and initialize its SimulatorAccess base
       // class; it will get a chance to read its parameters below after we
       // leave the current section
-      base_model.reset(create_material_model<dim>("simple compressible"));
+      base_model = create_material_model<dim>("simple compressible");
       if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(base_model.get()))
         sim->initialize_simulator (this->get_simulator());
       base_model->parse_parameters(prm);
@@ -275,10 +257,9 @@ namespace aspect
     ASPECT_REGISTER_MATERIAL_MODEL(CompressibilityFormulations,
                                    "compressibility formulations",
                                    "A material model that is identical to the simple compressible model, "
-                                   " except that the density is tracked in a compositional field named "
-                                   " 'density_field' using the prescribed field advection method. It also "
-                                   " allows some modification to the density and thermal expansivity "
-                                   " calculation for the compressibility benchmarks.")
+                                   "except that the density is tracked in a compositional field of type "
+                                   "'density' using the prescribed field advection method. It also "
+                                   "allows some modification to the density and thermal expansivity "
+                                   "calculation for the compressibility benchmarks.")
   }
 }
-

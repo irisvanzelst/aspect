@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,8 +32,6 @@ namespace aspect
 {
   namespace InitialComposition
   {
-    using namespace dealii;
-
     /**
      * A class that implements the prescribed compositional fields determined
      * from a AsciiData input file.
@@ -41,7 +39,7 @@ namespace aspect
      * @ingroup InitialCompositionModels
      */
     template <int dim>
-    class AsciiData : public Interface<dim>, public Utilities::AsciiDataInitial<dim>
+    class AsciiData : public Interface<dim>, public aspect::SimulatorAccess<dim>
     {
       public:
         /**
@@ -55,9 +53,6 @@ namespace aspect
          */
         void
         initialize () override;
-
-        // avoid -Woverloaded-virtual:
-        using Utilities::AsciiDataInitial<dim>::initialize;
 
         /**
          * Return the initial composition as a function of position. For the
@@ -79,6 +74,12 @@ namespace aspect
          */
         void
         parse_parameters (ParameterHandler &prm) override;
+
+      private:
+        /**
+         * The dataset that contains the initial composition.
+         */
+        std::unique_ptr<Utilities::AsciiDataInitial<dim>> ascii_data_initial;
     };
   }
 }

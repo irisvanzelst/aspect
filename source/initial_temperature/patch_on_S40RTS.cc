@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,7 +32,7 @@ namespace aspect
   {
     template <int dim>
     PatchOnS40RTS<dim>::PatchOnS40RTS ()
-    {}
+      = default;
 
 
     template <int dim>
@@ -116,22 +116,23 @@ namespace aspect
         prm.enter_subsection ("Patch on S40RTS");
         {
           prm.declare_entry ("Maximum grid depth", "700000.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The maximum depth of the Vs ascii grid. The model will read in  "
                              "Vs from S40RTS below this depth.");
           prm.declare_entry ("Smoothing length scale", "200000.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The depth range (above maximum grid depth) over which to smooth. "
                              "The boundary is smoothed using a depth weighted combination of Vs "
                              "values from the ascii grid and S40RTS at each point in the region of smoothing.");
-          prm.declare_entry ("Remove temperature heterogeneity down to specified depth", boost::lexical_cast<std::string>(-std::numeric_limits<double>::max()),
+          prm.declare_entry ("Remove temperature heterogeneity down to specified depth",
+                             boost::lexical_cast<std::string>(std::numeric_limits<double>::lowest()),
                              Patterns::Double (),
                              "This will set the heterogeneity prescribed by the Vs ascii grid and S40RTS to zero "
                              "down to the specified depth (in meters). Note that your resolution has "
                              "to be adequate to capture this cutoff. For example if you specify a depth "
-                             "of 660km, but your closest spherical depth layers are only at 500km and "
-                             "750km (due to a coarse resolution) it will only zero out heterogeneities "
-                             "down to 500km. Similar caution has to be taken when using adaptive meshing.");
+                             "of 660 km, but your closest spherical depth layers are only at 500 km and "
+                             "750 km (due to a coarse resolution) it will only zero out heterogeneities "
+                             "down to 500 km. Similar caution has to be taken when using adaptive meshing.");
 
           Utilities::AsciiDataBase<dim>::declare_parameters(prm,
                                                             "$ASPECT_SOURCE_DIR/data/initial-temperature/patch-on-S40RTS/test/",
@@ -161,10 +162,10 @@ namespace aspect
         prm.leave_subsection ();
       }
       prm.leave_subsection ();
-      s40rts.initialize_simulator (this->get_simulator());
 
-      // Note: parse_parameters will call initialize for us
+      s40rts.initialize_simulator (this->get_simulator());
       s40rts.parse_parameters(prm);
+      s40rts.initialize();
 
     }
   }

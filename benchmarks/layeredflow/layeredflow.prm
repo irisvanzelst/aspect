@@ -16,6 +16,7 @@ set Pressure normalization                 = volume
 
 subsection Geometry model
   set Model name = box
+
   subsection Box
     set X extent = 2
     set Y extent = 2
@@ -37,23 +38,20 @@ end
 
 subsection Gravity model
   set Model name = vertical
+
   subsection Vertical
     set Magnitude = 0
   end
 end
 
 subsection LayeredFlow benchmark
-   set Viscosity parameter beta = 0.001
-   set Viscosity parameter epsilon = 0.05
-end 
+  set Viscosity parameter beta = 0.001
+  set Viscosity parameter epsilon = 0.05
+end
 
 ############### Parameters describing the temperature field
 # As above, there is no need to set anything for the
 # temperature boundary conditions.
-
-subsection Boundary temperature model
-  set List of model names = box
-end
 
 subsection Initial temperature model
   set Model name = function
@@ -63,12 +61,11 @@ subsection Initial temperature model
   end
 end
 
-
 ############### Parameters describing the discretization
 # The following parameters describe how often we want to refine
 # the mesh globally and adaptively, what fraction of cells should
 # be refined in each adaptive refinement step, and what refinement
-# indicator to use when refining the mesh adaptively. 
+# indicator to use when refining the mesh adaptively.
 
 subsection Mesh refinement
   set Initial adaptive refinement        = 0
@@ -79,12 +76,17 @@ end
 
 ############### Parameters describing what to do with the solution
 # The final section allows us to choose which postprocessors to
-# run at the end of each time step. 
+# run at the end of each time step.
 
 subsection Postprocess
   set List of postprocessors = visualization, velocity statistics, LayeredFlowPostprocessor
+
   subsection Visualization
-    set List of output variables = viscosity, strain rate
+    set List of output variables = material properties, strain rate
+
+    subsection Material properties
+      set List of material properties = viscosity
+    end
   end
 end
 

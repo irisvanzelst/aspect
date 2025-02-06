@@ -5,61 +5,52 @@
 # MPI: 2
 
 set Dimension                              = 2
-set End time                               = 700
+set End time                               = 30
 set Use years in output instead of seconds = false
 
 subsection Geometry model
   set Model name = box
+
   subsection Box
     set X extent  = 1
     set Y extent  = 1
   end
 end
 
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = left, right
-end
-
-subsection Boundary velocity model
   set Zero velocity boundary indicators       = bottom, top
 end
 
-
 subsection Material model
   set Model name = simple
+
   subsection Simple model
     set Reference density             = 1010
     set Viscosity                     = 1e2
     set Thermal expansion coefficient = 0
+    set Density differential for compositional field 1 = -10
   end
 end
 
 subsection Gravity model
   set Model name = vertical
+
   subsection Vertical
     set Magnitude = 10
   end
 end
 
-
 ############### Parameters describing the temperature field
 # Note: The temperature plays no role in this model
 
-subsection Boundary temperature model
-  set List of model names = box
-end
-
 subsection Initial temperature model
   set Model name = function
+
   subsection Function
     set Function expression = 0
   end
 end
-
 
 ############### Parameters describing the compositional field
 # Note: The compositional field is what drives the flow
@@ -74,6 +65,7 @@ end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
     set Variable names      = x,z
     set Function constants  = pi=3.1415926
@@ -81,16 +73,9 @@ subsection Initial composition model
   end
 end
 
-subsection Material model
-  subsection Simple model
-    set Density differential for compositional field 1 = -10
-  end
-end
-
 subsection Discretization
   set Use discontinuous composition discretization = true
 end
-
 
 ############### Parameters describing the discretization
 
@@ -104,8 +89,6 @@ subsection Mesh refinement
   set Refinement fraction                = 0.5
 end
 
-
-
 ############### Parameters describing what to do with the solution
 
 subsection Postprocess
@@ -117,23 +100,22 @@ subsection Postprocess
   end
 
   subsection Particles
-    set Number of particles = 1000
     set Time between data output = 1
     set Data output format = none
-    set List of particle properties = initial composition
-    set Interpolation scheme = nearest neighbor
-    set Update ghost particles = true
-    set Maximum particles per cell = 10
-    set Minimum particles per cell = 10
+  end
+end
 
-    set Particle generator name = uniform box
-    set Load balancing strategy = add particles
+subsection Particles
+  set List of particle properties = initial composition
+  set Interpolation scheme = nearest neighbor
+  set Maximum particles per cell = 10
+  set Minimum particles per cell = 10
+  set Particle generator name = uniform box
+  set Load balancing strategy = add particles
 
-    subsection Generator
-      subsection Probability density function
-        set Variable names      = x,z
-        set Function expression = 1 #x*x*z
-      end
+  subsection Generator
+    subsection Uniform box
+      set Number of particles = 1000
     end
   end
 end

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,8 +30,6 @@ namespace aspect
 {
   namespace InitialTemperature
   {
-    using namespace dealii;
-
     /**
      * A class that describes a perturbed initial temperature field for the
      * spherical shell.
@@ -100,7 +98,7 @@ namespace aspect
         /**
          * Constructor.
          */
-        SphericalGaussianPerturbation<dim>();
+        SphericalGaussianPerturbation();
 
         /**
          * Return the initial temperature as a function of position.
@@ -127,7 +125,6 @@ namespace aspect
         double sigma;
         double sign;
         unsigned int npoint;
-        std::string initial_geotherm_table;
 
         std::vector<double> radial_position;
         std::vector<double> geotherm;

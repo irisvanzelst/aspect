@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2014 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2014 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,8 +30,6 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     /**
      * A material model that applies a given constant viscosity in the lithosphere.
      * Viscosity below this is taken from a ''base model'' chosen from any of the
@@ -77,24 +75,21 @@ namespace aspect
          */
         bool is_compressible () const override;
 
-        /**
-         * Method to calculate reference viscosity for the model. The reference
-         * viscosity is simply the reference  viscosity from the base model.
-         */
-        double reference_viscosity () const override;
+        void
+        create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const override;
 
       private:
 
         /**
-        * This parameter gives the viscosity set within the lithosphere.
-        */
+         * This parameter gives the viscosity set within the lithosphere.
+         */
         double lithosphere_viscosity;
 
 
         /**
          * Pointer to the material model used as the base model
          */
-        std::shared_ptr<MaterialModel::Interface<dim> > base_model;
+        std::unique_ptr<MaterialModel::Interface<dim>> base_model;
 
 
         InitialTemperature::LABDepth::LABDepthLookup<dim> lab_depth_lookup;

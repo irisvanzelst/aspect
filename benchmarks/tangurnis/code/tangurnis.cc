@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -39,10 +39,6 @@
 
 namespace aspect
 {
-  using namespace dealii;
-
-
-
   /**
    * This benchmark is from the article
    * @code
@@ -78,10 +74,10 @@ namespace aspect
          * @{
          */
 
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override
         {
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
               /**
                * @name Physical parameters used in the basic equations
@@ -90,10 +86,10 @@ namespace aspect
 
               const Point<dim> &pos = in.position[i];
               const double depth = 1.0 - pos[dim-1];
-              const double temperature = sin(numbers::PI*pos(dim-1))*cos(numbers::PI*wavenumber*pos(0));
+              const double temperature = std::sin(numbers::PI*pos(dim-1))*std::cos(numbers::PI*wavenumber*pos(0));
 
-              out.viscosities[i] = ( Di==0.0 ? 1.0 : Di ) * exp( a * depth );
-              out.densities[i] = ( Di==0.0 ? 1.0 : Di ) * (-1.0 * temperature ) * exp( Di/gamma * (depth) );
+              out.viscosities[i] = ( Di==0.0 ? 1.0 : Di ) * std::exp( a * depth );
+              out.densities[i] = ( Di==0.0 ? 1.0 : Di ) * (-1.0 * temperature ) * std::exp( Di/gamma * (depth) );
               out.specific_heat[i] = 1.0;
               out.thermal_conductivities[i] = 1.0;
               out.thermal_expansion_coefficients[i] = ( Di==0.0 ) ? 1.0 : Di;
@@ -114,25 +110,16 @@ namespace aspect
          * equation as $\nabla \cdot (\rho \mathbf u)=0$ (compressible Stokes)
          * or as $\nabla \cdot \mathbf{u}=0$ (incompressible Stokes).
          */
-        virtual bool is_compressible () const;
+        bool is_compressible () const override;
         /**
          * @}
          */
 
-        /**
-         * @name Reference quantities
-         * @{
-         */
-        virtual double reference_viscosity () const;
 
         double parameter_a() const;
         double parameter_wavenumber() const;
         double parameter_Di() const;
         double parameter_gamma() const;
-
-        /**
-         * @}
-         */
 
 
         /**
@@ -149,9 +136,8 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
         /**
          * @}
          */
@@ -180,14 +166,6 @@ namespace aspect
       gamma=1.0;
 
       wavenumber=1;
-    }
-
-    template <int dim>
-    double
-    TanGurnis<dim>::
-    reference_viscosity () const
-    {
-      return 1.0;
     }
 
 
@@ -307,19 +285,16 @@ namespace aspect
   class TanGurnisBoundary : public BoundaryTemperature::Interface<dim>
   {
     public:
-      virtual
       double boundary_temperature (const types::boundary_id /*boundary_indicator*/,
-                                   const Point<dim> &position) const
+                                   const Point<dim> &position) const override
       {
         double wavenumber=1;
-        return sin(numbers::PI*position(dim-1))*cos(numbers::PI*wavenumber*position(0));
+        return std::sin(numbers::PI*position(dim-1))*std::cos(numbers::PI*wavenumber*position(0));
       }
 
-      virtual
-      double minimal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const;
+      double minimal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const override;
 
-      virtual
-      double maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const;
+      double maximal_temperature (const std::set<types::boundary_id> &fixed_boundary_ids) const override;
   };
 
   template <int dim>
@@ -353,9 +328,8 @@ namespace aspect
   class TanGurnisPostprocessor : public Postprocess::Interface<dim>, public ::aspect::SimulatorAccess<dim>
   {
     public:
-      virtual
       std::pair<std::string,std::string>
-      execute (TableHandler &statistics);
+      execute (TableHandler &statistics) override;
   };
 
   template <int dim>
@@ -372,21 +346,20 @@ namespace aspect
     material_model = Plugins::get_plugin_as_type<const MaterialModel::TanGurnis<dim>>(this->get_material_model());
 
     double ref=1.0/this->get_triangulation().begin_active()->minimum_vertex_distance();
-    std::ofstream f ((this->get_output_directory() + "vel_" +
-                      Utilities::int_to_string(static_cast<unsigned int>(ref)) +
-                      ".csv").c_str());
-    f.precision (16);
-    f << material_model.parameter_Di() << ' '
-      << material_model.parameter_gamma() << ' '
-      << material_model.parameter_wavenumber() << ' '
-      << material_model.parameter_a();
 
-    // pad the first line to the same number of columns as the data below to make MATLAB happy
-    for (unsigned int i=4; i<7+this->get_heating_model_manager().get_active_heating_models().size(); ++i)
-      f << " -1";
+    std::stringstream output;
+    output.precision (16);
+    output << material_model.parameter_Di() << ' '
+           << material_model.parameter_gamma() << ' '
+           << material_model.parameter_wavenumber() << ' '
+           << material_model.parameter_a();
 
-    f << std::endl;
-    f << std::scientific;
+    // pad the first line to the same number ooutputcolumns as the data below to make MATLAB happy
+    for (unsigned int i=4; i<7+this->get_heating_model_manager().get_active_plugin_names().size(); ++i)
+      output<< " -1";
+
+    output<< std::endl;
+    output<< std::scientific;
 
 
     const QGauss<dim> quadrature_formula (this->introspection().polynomial_degree.velocities+2);
@@ -399,56 +372,59 @@ namespace aspect
     MaterialModel::MaterialModelInputs<dim> in(fe_values.n_quadrature_points, this->n_compositional_fields());
     MaterialModel::MaterialModelOutputs<dim> out(fe_values.n_quadrature_points, this->n_compositional_fields());
 
-    const std::list<std::unique_ptr<HeatingModel::Interface<dim> > > &heating_model_objects = this->get_heating_model_manager().get_active_heating_models();
+    const std::list<std::unique_ptr<HeatingModel::Interface<dim>>> &heating_model_objects = this->get_heating_model_manager().get_active_plugins();
 
     std::vector<HeatingModel::HeatingModelOutputs> heating_model_outputs (heating_model_objects.size(),
                                                                           HeatingModel::HeatingModelOutputs (n_q_points, this->n_compositional_fields()));
 
-    typename DoFHandler<dim>::active_cell_iterator
-    cell = this->get_dof_handler().begin_active(),
-    endc = this->get_dof_handler().end();
-    for (; cell != endc; ++cell)
-      {
-        fe_values.reinit (cell);
-        in.reinit(fe_values,cell,this->introspection(),this->get_solution(),true);
+    for (const auto &cell : this->get_dof_handler().active_cell_iterators())
+      if (cell->is_locally_owned())
+        {
+          fe_values.reinit (cell);
+          in.reinit(fe_values,cell,this->introspection(),this->get_solution());
 
-        this->get_material_model().evaluate(in, out);
+          this->get_material_model().evaluate(in, out);
 
-        if (this->get_parameters().formulation_temperature_equation ==
-            Parameters<dim>::Formulation::TemperatureEquation::reference_density_profile)
-          {
-            for (unsigned int q=0; q<n_q_points; ++q)
-              {
-                out.densities[q] = this->get_adiabatic_conditions().density(in.position[q]);
-              }
-          }
+          if (this->get_parameters().formulation_temperature_equation ==
+              Parameters<dim>::Formulation::TemperatureEquation::reference_density_profile)
+            {
+              for (unsigned int q=0; q<n_q_points; ++q)
+                {
+                  out.densities[q] = this->get_adiabatic_conditions().density(in.position[q]);
+                }
+            }
 
-        unsigned int index = 0;
-        for (typename std::list<std::unique_ptr<HeatingModel::Interface<dim> > >::const_iterator
-             heating_model = heating_model_objects.begin();
-             heating_model != heating_model_objects.end(); ++heating_model, ++index)
-          {
-            (*heating_model)->evaluate(in, out, heating_model_outputs[index]);
-          }
+          unsigned int index = 0;
+          for (typename std::list<std::unique_ptr<HeatingModel::Interface<dim>>>::const_iterator
+               heating_model = heating_model_objects.begin();
+               heating_model != heating_model_objects.end(); ++heating_model, ++index)
+            {
+              (*heating_model)->evaluate(in, out, heating_model_outputs[index]);
+            }
 
 
-        for (unsigned int q = 0; q < n_q_points; ++q)
-          {
-            f
-                <<  fe_values.quadrature_point (q) (0)
-                << ' ' << fe_values.quadrature_point (q) (1)
-                << ' ' << in.velocity[q][0]
-                << ' ' << in.velocity[q][1]
-                << ' ' << fe_values.JxW (q)
-                << ' ' << in.pressure[q]
-                << ' ' << in.temperature[q];
+          for (unsigned int q = 0; q < n_q_points; ++q)
+            {
+              output
+                  <<  fe_values.quadrature_point (q) (0)
+                  << ' ' << fe_values.quadrature_point (q) (1)
+                  << ' ' << in.velocity[q][0]
+                  << ' ' << in.velocity[q][1]
+                  << ' ' << fe_values.JxW (q)
+                  << ' ' << in.pressure[q]
+                  << ' ' << in.temperature[q];
 
-            for (unsigned int i = 0; i < heating_model_objects.size(); ++i)
-              f << ' ' << heating_model_outputs[i].heating_source_terms[q];
+              for (unsigned int i = 0; i < heating_model_objects.size(); ++i)
+                output << ' ' << heating_model_outputs[i].heating_source_terms[q];
 
-            f  << std::endl;
-          }
-      }
+              output << std::endl;
+            }
+        }
+
+    const std::string filename = this->get_output_directory() + "vel_" +
+                                 Utilities::int_to_string(static_cast<unsigned int>(ref)) +
+                                 ".csv";
+    Utilities::collect_and_write_file_content(filename, output.str(), this->get_mpi_communicator());
 
     return std::make_pair("writing:", "output.csv");
   }
@@ -464,7 +440,7 @@ namespace aspect
                                 "Tan Gurnis error",
                                 "A postprocessor that compares the solution of the benchmarks from "
                                 "the Tan/Gurnis (2007) paper with the one computed by ASPECT "
-                                "by outputing data that is compared using a matlab script.")
+                                "by outputting data that is compared using a matlab script.")
 
   namespace MaterialModel
   {

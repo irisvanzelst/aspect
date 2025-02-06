@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -34,17 +34,26 @@ namespace aspect
   namespace Postprocess
   {
     template <int dim>
+    void
+    HeatFluxStatistics<dim>::initialize ()
+    {
+      CitationInfo::add("cbfheatflux");
+    }
+
+
+
+    template <int dim>
     std::pair<std::string,std::string>
     HeatFluxStatistics<dim>::execute (TableHandler &statistics)
     {
-      std::vector<std::vector<std::pair<double, double> > > heat_flux_and_area =
+      std::vector<std::vector<std::pair<double, double>>> heat_flux_and_area =
         internal::compute_heat_flux_through_boundary_faces (*this);
 
       std::map<types::boundary_id, double> local_boundary_fluxes;
 
       for (const auto &cell : this->get_dof_handler().active_cell_iterators())
         if (cell->is_locally_owned())
-          for (unsigned int f=0; f<GeometryInfo<dim>::faces_per_cell; ++f)
+          for (const unsigned int f : cell->face_indices())
             if (cell->at_boundary(f))
               {
                 const types::boundary_id boundary_indicator
@@ -61,10 +70,9 @@ namespace aspect
         boundary_indicators
           = this->get_geometry_model().get_used_boundary_indicators ();
         std::vector<double> local_values;
-        for (std::set<types::boundary_id>::const_iterator
-             p = boundary_indicators.begin();
-             p != boundary_indicators.end(); ++p)
-          local_values.push_back (local_boundary_fluxes[*p]);
+        local_values.reserve(boundary_indicators.size());
+        for (const auto p : boundary_indicators)
+          local_values.emplace_back (local_boundary_fluxes[p]);
 
         // then collect contributions from all processors
         std::vector<double> global_values (local_values.size());
@@ -93,7 +101,7 @@ namespace aspect
                                    + " (W)";
           statistics.add_value (name, p->second);
 
-          // also make sure that the other columns filled by the this object
+          // also make sure that the other columns filled by this object
           // all show up with sufficient accuracy and in scientific notation
           statistics.set_precision (name, 8);
           statistics.set_scientific (name, true);
@@ -145,12 +153,14 @@ namespace aspect
                                   "the core into the mantle when the domain describes the "
                                   "mantle, then you need to multiply the result by -1."
                                   "\n\n"
-                                  "\\note{In geodynamics, the term ``heat flux'' is often understood "
+                                  ":::{note}\n"
+                                  "In geodynamics, the term ``heat flux'' is often understood "
                                   "to be the quantity $- k \\nabla T$, which is really a heat "
                                   "flux \\textit{density}, i.e., a vector-valued field. In contrast "
                                   "to this, the current postprocessor only computes the integrated "
                                   "flux over each part of the boundary. Consequently, the units of "
-                                  "the quantity computed here are $W=\\frac{J}{s}$.}"
+                                  "the quantity computed here are $W=\\frac{J}{s}$.\n"
+                                  ":::"
                                   "\n\n"
                                   "The ``heat flux densities'' postprocessor computes the same "
                                   "quantity as the one here, but divided by the area of "

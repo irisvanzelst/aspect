@@ -6,29 +6,29 @@ set Dimension                              = 2
 set Use years in output instead of seconds = true
 set End time                               = 1e6
 
-
 subsection Material model
   set Model name = depth dependent
+  set Material averaging = harmonic average
 
   subsection Depth dependent model
     set Base model = ascii reference profile
     set Depth dependence method = None
+    set Reference viscosity = 1e21
   end
 
   subsection Ascii reference profile
     set Thermal viscosity exponent = 0
     set Viscosity prefactors = 1.0, 1.0, 1.0, 1.0
+
     subsection Ascii data model
       set Data file name = example_isentrope.txt
       set Data directory = $ASPECT_SOURCE_DIR/data/adiabatic-conditions/ascii-data/
     end
   end
-
-  set Material averaging = harmonic average
 end
 
-# The geometry is a spherical shell with the inner and 
-# outer radius of the Earth's mantle. 
+# The geometry is a spherical shell with the inner and
+# outer radius of the Earth's mantle.
 subsection Geometry model
   set Model name = spherical shell
 
@@ -47,13 +47,13 @@ subsection Adiabatic conditions model
   end
 end
 
-
 # The gravity model reads an ascii data file that contains a gravity
-# profile consistent with the material properties computed using the 
-# Birch-Murnaghan equation of state. It automatically uses the same file 
+# profile consistent with the material properties computed using the
+# Birch-Murnaghan equation of state. It automatically uses the same file
 # specified in the adiabatic conditions model.
 subsection Gravity model
   set Model name = ascii data
+
   subsection Ascii data model
     set Data directory = $ASPECT_SOURCE_DIR/data/adiabatic-conditions/ascii-data/
     set Data file name = example_isentrope.txt
@@ -67,24 +67,13 @@ end
 
 # The present-day plate velocities are imposed on the upper model
 # boundary.
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
+
+
 
 subsection Boundary velocity model
   set Prescribed velocity boundary indicators = outer:gplates
-end
-
-subsection Boundary velocity model
   set Tangential velocity boundary indicators = inner
-end
 
-subsection Boundary temperature model
-  set Fixed temperature boundary indicators   = inner, outer
-end
-
-
-subsection Boundary velocity model
   subsection GPlates model
     set Data directory = $ASPECT_SOURCE_DIR/data/boundary-velocity/gplates/
     set Velocity file name = current_day.gpml
@@ -94,21 +83,22 @@ subsection Boundary velocity model
   end
 end
 
-
 subsection Boundary temperature model
+  set Fixed temperature boundary indicators   = inner, outer
   set List of model names = spherical constant
+
   subsection Spherical constant
-    set Inner temperature = 3500 
+    set Inner temperature = 3500
     set Outer temperature = 273
   end
 end
 
 # The initial temperature is an adiabatic profile, which is
-# taken from the adabatic conditions model. In this case, this is
+# taken from the adiabatic conditions model. In this case, this is
 # is the ascii data model that loads a file containing profiles
 # corresponding to the Birch-Murnaghan equation of state.
-# In addition to the adiabatic profile, there are thermal boundary 
-# layers at the sirface and the core-mantle boundary.
+# In addition to the adiabatic profile, there are thermal boundary
+# layers at the surface and the core-mantle boundary.
 subsection Initial temperature model
   set Model name = adiabatic
 
@@ -116,7 +106,6 @@ subsection Initial temperature model
     set Age top boundary layer = 5e7
   end
 end
-
 
 subsection Mesh refinement
   set Refinement fraction                = 0.4
@@ -126,7 +115,6 @@ subsection Mesh refinement
   set Strategy                           = temperature
   set Time steps between mesh refinement = 5
 end
-
 
 subsection Heating model
   set List of model names = adiabatic heating, shear heating

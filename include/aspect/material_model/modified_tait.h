@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,8 +30,6 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     /**
      * A compressible material model that implements the thermal modified Tait
      * equation of state as written in the paper of Holland and Powell, 2011
@@ -66,18 +64,9 @@ namespace aspect
          * context, compressibility means whether we should solve the continuity
          * equation as $\nabla \cdot (\rho \mathbf u)=0$ (compressible Stokes)
          * or as $\nabla \cdot \mathbf{u}=0$ (incompressible Stokes).
-        * This model is compressible.
+         * This model is compressible.
          */
         bool is_compressible () const override;
-        /**
-         * @}
-         */
-
-        /**
-         * @name Reference quantities
-         * @{
-         */
-        double reference_viscosity () const override;
         /**
          * @}
          */
@@ -105,8 +94,8 @@ namespace aspect
 
       private:
         /**
-          * The Tait parameters
-          */
+         * The Tait parameters
+         */
         double tait_a, tait_b, tait_c;
 
         /**

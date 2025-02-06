@@ -1,3 +1,23 @@
+/*
+  Copyright (C) 2022 - 2023 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
 #include <aspect/geometry_model/interface.h>
 #include <aspect/geometry_model/box.h>
 #include <aspect/geometry_model/chunk.h>
@@ -71,7 +91,6 @@ int f()
   // Chunk 2d
   {
     GeometryModel::Chunk<2> chunk;
-    InitialTopographyModel::ZeroTopography<2> zero_topo;
     ParameterHandler prm_chunk;
     chunk.declare_parameters(prm_chunk);
     prm_chunk.enter_subsection("Geometry model");
@@ -81,7 +100,6 @@ int f()
     prm_chunk.leave_subsection();
     prm_chunk.leave_subsection();
     chunk.parse_parameters(prm_chunk);
-    chunk.set_topography_model(&zero_topo);
 
     inter_point_2d = chunk.cartesian_to_natural_coordinates(point_2d);
     new_point_2d = chunk.natural_to_cartesian_coordinates(inter_point_2d);
@@ -147,7 +165,6 @@ int f()
   // Chunk 3d
   {
     GeometryModel::Chunk<3> chunk;
-    InitialTopographyModel::ZeroTopography<3> zero_topo;
     ParameterHandler prm_chunk;
     chunk.declare_parameters(prm_chunk);
     prm_chunk.enter_subsection("Geometry model");
@@ -157,7 +174,6 @@ int f()
     prm_chunk.leave_subsection();
     prm_chunk.leave_subsection();
     chunk.parse_parameters(prm_chunk);
-    chunk.set_topography_model(&zero_topo);
 
     inter_point_3d = chunk.cartesian_to_natural_coordinates(point_3d);
     new_point_3d = chunk.natural_to_cartesian_coordinates(inter_point_3d);

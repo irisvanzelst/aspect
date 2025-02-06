@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -38,35 +38,16 @@ namespace aspect
     namespace internal
     {
       template <int dim>
-      ChunkGeometry<dim>::ChunkGeometry()
+      ChunkGeometry<dim>::ChunkGeometry(const InitialTopographyModel::Interface<dim> &topo,
+                                        const double min_longitude,
+                                        const double min_radius,
+                                        const double max_depth)
         :
-        point1_lon(0.0),
-        inner_radius(3471e3),
-        max_depth(2900e3)
+        topo (&topo),
+        point1_lon(min_longitude),
+        inner_radius(min_radius),
+        max_depth(max_depth)
       {}
-
-
-
-      template <int dim>
-      ChunkGeometry<dim>::ChunkGeometry(const ChunkGeometry &other)
-        :
-        ChartManifold<dim,dim>(other),
-        point1_lon(other.point1_lon),
-        inner_radius(other.inner_radius),
-        max_depth(other.max_depth)
-      {
-        this->initialize(other.topo);
-      }
-
-
-
-      template <int dim>
-      void
-      ChunkGeometry<dim>::
-      initialize(const InitialTopographyModel::Interface<dim> *topo_pointer)
-      {
-        topo = topo_pointer;
-      }
 
 
 
@@ -91,6 +72,12 @@ namespace aspect
         Tensor<1,dim-1> topo_derivatives;
         if (const InitialTopographyModel::AsciiData<dim> *itm = dynamic_cast<const InitialTopographyModel::AsciiData<dim> *> (topo))
           topo_derivatives = itm->vector_gradient(push_forward_sphere(chart_point));
+        else if (dynamic_cast<const InitialTopographyModel::ZeroTopography<dim> *> (topo))
+          {
+            // Gradient is zero (which it is already initialized to from before)
+          }
+        else
+          Assert (false, ExcNotImplemented());
 
         // Construct surface point in lon(,lat) coordinates
         Point<dim-1> surface_point;
@@ -250,6 +237,62 @@ namespace aspect
 
 
       template <int dim>
+      Tensor<1, dim>
+      ChunkGeometry<dim>::
+      normal_vector(const typename Triangulation<dim>::face_iterator &face,
+                    const Point<dim> &p) const
+      {
+        // Let us first test whether we are on a "horizontal" face
+        // (tangential to the sphere).  In this case, the normal vector is
+        // easy to compute since it is proportional to the vector from the
+        // center to the point 'p'.
+        //
+        // We test whether a face is horizontal by checking that the vertices
+        // all have roughly the same distance from the center: If the
+        // maximum deviation for the distances from the vertices to the
+        // center is less than 1.e-5 of the distance between vertices (as
+        // measured by the minimum distance from any of the other vertices
+        // to the first vertex), then we call this a horizontal face.
+        constexpr unsigned int max_n_vertices_per_face = (dim==2 ? 2 : 4);
+        std::array<double, max_n_vertices_per_face>     distances_to_center {};
+        std::array<double, max_n_vertices_per_face - 1> distances_to_first_vertex {};
+        distances_to_center[0] = face->vertex(0).norm_square();
+        for (unsigned int i = 1; i < face->n_vertices(); ++i)
+          {
+            AssertIndexRange (i, distances_to_center.size());
+            AssertIndexRange (i-1, distances_to_first_vertex.size());
+
+            distances_to_center[i] = face->vertex(i).norm_square();
+            distances_to_first_vertex[i - 1] =
+              (face->vertex(i) - face->vertex(0)).norm_square();
+          }
+        const auto minmax_distance =
+          std::minmax_element(distances_to_center.begin(),
+                              distances_to_center.begin()+face->n_vertices());
+        const auto min_distance_to_first_vertex =
+          std::min_element(distances_to_first_vertex.begin(),
+                           distances_to_first_vertex.begin()+face->n_vertices()-1);
+
+        // So, if this is a "horizontal" face, then just compute the normal
+        // vector as the one from the center to the point 'p', adequately
+        // scaled.
+        if (*minmax_distance.second - *minmax_distance.first <
+            1.e-10 * *min_distance_to_first_vertex)
+          {
+            const Tensor<1, dim> unnormalized_spherical_normal = p;
+            const Tensor<1, dim> normalized_spherical_normal =
+              unnormalized_spherical_normal / unnormalized_spherical_normal.norm();
+            return normalized_spherical_normal;
+          }
+
+        // If it is not a horizontal face, just use the machinery of the
+        // base class.
+        return Manifold<dim>::normal_vector(face, p);
+      }
+
+
+
+      template <int dim>
       Point<dim>
       ChunkGeometry<dim>::
       pull_back_sphere(const Point<dim> &v) const
@@ -281,7 +324,7 @@ namespace aspect
               const double radius=v.norm();
               output_vertex[0] = radius;
               output_vertex[1] = std::atan2(v[1], v[0]);
-              // See 2D case
+              // See 2d case
               if (output_vertex[1] < 0.0)
                 if (output_vertex[1] < point1_lon - 100 * std::abs(point1_lon)*std::numeric_limits<double>::epsilon())
                   output_vertex[1] += 2.0 * numbers::PI;
@@ -297,21 +340,11 @@ namespace aspect
 
 
       template <int dim>
-      void
-      ChunkGeometry<dim>::
-      set_min_longitude(const double p1_lon)
-      {
-        point1_lon = p1_lon;
-      }
-
-
-
-      template <int dim>
-      std::unique_ptr<Manifold<dim,dim> >
+      std::unique_ptr<Manifold<dim,dim>>
       ChunkGeometry<dim>::
       clone() const
       {
-        return std_cxx14::make_unique<ChunkGeometry>(*this);
+        return std::make_unique<ChunkGeometry>(*this);
       }
 
 
@@ -328,9 +361,22 @@ namespace aspect
         Point<dim-1> surface_point;
         for (unsigned int d=0; d<dim-1; ++d)
           surface_point[d] = r_phi_theta[d+1];
-        // Convert latitude to colatitude
+
+        // While throughout ASPECT we use co-latitude as a convention when
+        // representing points in spherical coordinates (see for example
+        // the Utilities::Coordinates::cartesian_to_spherical_coordinates()
+        // function), the current class uses latitude in its pull back and
+        // push forward functions. As a consequence, the argument provided
+        // to this function has latitude as one coordinate (at least in 3d).
+        // On the other hand, the InitialTopography::Interface::value()
+        // function expects colatitude (=standard form spherical coordinates)
+        // for geometry models that are (parts of) spherical objects.
+        //
+        // So do the conversion:
         if (dim == 3)
           surface_point[1] = 0.5*numbers::PI - surface_point[1];
+
+        // Then query the topography at this point:
         const double topography = topo->value(surface_point);
 
         // adjust the radius based on the radius of the point
@@ -339,10 +385,10 @@ namespace aspect
         const double topo_radius = std::max(inner_radius,radius + (radius-inner_radius)/max_depth*topography);
 
         // return the point with adjusted radius
-        Point<dim> topor_phi_theta = r_phi_theta;
-        topor_phi_theta[0] = topo_radius;
+        Point<dim> topo_r_phi_theta = r_phi_theta;
+        topo_r_phi_theta[0] = topo_radius;
 
-        return topor_phi_theta;
+        return topo_r_phi_theta;
       }
 
 
@@ -350,26 +396,41 @@ namespace aspect
       template <int dim>
       Point<dim>
       ChunkGeometry<dim>::
-      pull_back_topo(const Point<dim> &topor_phi_theta) const
+      pull_back_topo(const Point<dim> &topo_r_phi_theta) const
       {
         // the radius of the point with topography
-        const double topo_radius = topor_phi_theta[0];
+        const double topo_radius = topo_r_phi_theta[0];
 
         // Grab lon,lat coordinates
         Point<dim-1> surface_point;
         for (unsigned int d=0; d<dim-1; ++d)
-          surface_point[d] = topor_phi_theta[d+1];
-        // Convert latitude to colatitude
+          surface_point[d] = topo_r_phi_theta[d+1];
+
+        // While throughout ASPECT we use co-latitude as a convention when
+        // representing points in spherical coordinates (see for example
+        // the Utilities::Coordinates::cartesian_to_spherical_coordinates()
+        // function), the current class uses latitude in its pull back and
+        // push forward functions. As a consequence, the argument provided
+        // to this function has latitude as one coordinate (at least in 3d).
+        // On the other hand, the InitialTopography::Interface::value()
+        // function expects colatitude (=standard form spherical coordinates)
+        // for geometry models that are (parts of) spherical objects.
+        //
+        // So do the conversion:
         if (dim == 3)
           surface_point[1] = 0.5*numbers::PI - surface_point[1];
+
+        // Then query the topography at this point:
         const double topography = topo->value(surface_point);
 
         // remove the topography (which scales with radius)
-        const double radius = std::max(inner_radius,(topo_radius*max_depth+inner_radius*topography)/(max_depth+topography));
+        const double radius = std::max(inner_radius,
+                                       (topo_radius*max_depth+inner_radius*topography)/(max_depth+topography));
 
         // return the point without topography
-        Point<dim> r_phi_theta = topor_phi_theta;
+        Point<dim> r_phi_theta = topo_r_phi_theta;
         r_phi_theta[0] = radius;
+
         return r_phi_theta;
       }
 
@@ -392,26 +453,6 @@ namespace aspect
         // return the outer radius at this phi, theta point including topography
         return topography + inner_radius + max_depth;
       }
-
-
-
-      template <int dim>
-      void
-      ChunkGeometry<dim>::
-      set_min_radius(const double p1_rad)
-      {
-        inner_radius = p1_rad;
-      }
-
-
-
-      template <int dim>
-      void
-      ChunkGeometry<dim>::
-      set_max_depth(const double p2_p1_rad)
-      {
-        max_depth = p2_p1_rad;
-      }
     }
 
 
@@ -420,25 +461,15 @@ namespace aspect
     void
     Chunk<dim>::initialize ()
     {
-      AssertThrow(dynamic_cast<const InitialTopographyModel::ZeroTopography<dim>*>(&this->get_initial_topography_model()) != nullptr ||
-                  dynamic_cast<const InitialTopographyModel::AsciiData<dim>*>(&this->get_initial_topography_model()) != nullptr,
+      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()) ||
+                  Plugins::plugin_type_matches<const InitialTopographyModel::AsciiData<dim>>(this->get_initial_topography_model()),
                   ExcMessage("At the moment, only the Zero or AsciiData initial topography model can be used with the Chunk geometry model."));
 
-      manifold.initialize(&(this->get_initial_topography_model()));
+      manifold = std::make_unique<internal::ChunkGeometry<dim>>(this->get_initial_topography_model(),
+                                                                 point1[1],
+                                                                 point1[0],
+                                                                 point2[0]-point1[0]);
     }
-
-
-    template <int dim>
-    void
-    Chunk<dim>::set_topography_model (const InitialTopographyModel::Interface<dim> *topo_pointer)
-    {
-      AssertThrow(dynamic_cast<const InitialTopographyModel::ZeroTopography<dim>*>(topo_pointer) != nullptr ||
-                  dynamic_cast<const InitialTopographyModel::AsciiData<dim>*>(topo_pointer) != nullptr,
-                  ExcMessage("At the moment, only the Zero or AsciiData initial topography model can be used with the Chunk geometry model."));
-
-      manifold.initialize(topo_pointer);
-    }
-
 
 
     template <int dim>
@@ -446,26 +477,28 @@ namespace aspect
     Chunk<dim>::
     create_coarse_mesh (parallel::distributed::Triangulation<dim> &coarse_grid) const
     {
-      std::vector<unsigned int> rep_vec(repetitions, repetitions+dim);
+      // First create a box in Cartesian coordinates:
+      const std::vector<unsigned int> rep_vec(repetitions.begin(), repetitions.end());
       GridGenerator::subdivided_hyper_rectangle (coarse_grid,
                                                  rep_vec,
                                                  point1,
                                                  point2,
                                                  true);
 
-      // Transform box into spherical chunk
+      // Then transform this box into a spherical chunk (possibly with
+      // topography -- the 'manifold' has that built in):
       GridTools::transform (
         [&](const Point<dim> &p) -> Point<dim>
       {
-        return manifold.push_forward(p);
+        return manifold->push_forward(p);
       },
       coarse_grid);
 
-      // Deal with a curved mesh
-      // Attach the real manifold to slot 15.
-      coarse_grid.set_manifold (15, manifold);
+      // Deal with a curved mesh by assigning a manifold. We arbitrarily
+      // choose manifold_id 15 for this.
+      coarse_grid.set_manifold (my_manifold_id, *manifold);
       for (const auto &cell : coarse_grid.active_cell_iterators())
-        cell->set_all_manifold_ids (15);
+        cell->set_all_manifold_ids (my_manifold_id);
     }
 
 
@@ -493,35 +526,31 @@ namespace aspect
         {
           case 2:
           {
-            static const std::pair<std::string,types::boundary_id> mapping[]
-              = { std::pair<std::string,types::boundary_id>("bottom", 0),
-                  std::pair<std::string,types::boundary_id>("top",    1),
-                  std::pair<std::string,types::boundary_id>("west",   2),
-                  std::pair<std::string,types::boundary_id>("east",   3)
-                };
-
-            return std::map<std::string,types::boundary_id> (&mapping[0],
-                                                             &mapping[sizeof(mapping)/sizeof(mapping[0])]);
+            return
+            {
+              {"bottom", 0},
+              {"top",    1},
+              {"west",   2},
+              {"east",   3}
+            };
           }
 
           case 3:
           {
-            static const std::pair<std::string,types::boundary_id> mapping[]
-              = { std::pair<std::string,types::boundary_id>("bottom", 0),
-                  std::pair<std::string,types::boundary_id>("top",    1),
-                  std::pair<std::string,types::boundary_id>("west",   2),
-                  std::pair<std::string,types::boundary_id>("east",   3),
-                  std::pair<std::string,types::boundary_id>("south",  4),
-                  std::pair<std::string,types::boundary_id>("north",  5)
-                };
-
-            return std::map<std::string,types::boundary_id> (&mapping[0],
-                                                             &mapping[sizeof(mapping)/sizeof(mapping[0])]);
+            return
+            {
+              {"bottom", 0},
+              {"top",    1},
+              {"west",   2},
+              {"east",   3},
+              {"south",  4},
+              {"north",  5}
+            };
           }
         }
 
       Assert (false, ExcNotImplemented());
-      return std::map<std::string,types::boundary_id>();
+      return {};
     }
 
 
@@ -554,20 +583,6 @@ namespace aspect
 
     template <int dim>
     double
-    Chunk<dim>::depth_wrt_topo(const Point<dim> &position) const
-    {
-      // depth is defined wrt the reference surface point2[0] + the topography
-      // depth is therefore always positive
-      const double outer_radius = manifold.get_radius(position);
-      const Point<dim> rtopo_phi_theta = manifold.pull_back_sphere(position);
-      Assert (rtopo_phi_theta[0] <= outer_radius, ExcMessage("The radius is bigger than the maximum radius."));
-      return std::max(0.0, outer_radius - rtopo_phi_theta[0]);
-    }
-
-
-
-    template <int dim>
-    double
     Chunk<dim>::height_above_reference_surface(const Point<dim> &position) const
     {
       return position.norm()-point2[0];
@@ -589,8 +604,9 @@ namespace aspect
       // at a depth beneath the top surface
       p[0] = point2[0]-depth;
 
-      // Now convert to Cartesian coordinates
-      return manifold.push_forward_sphere(p);
+      // Now convert to Cartesian coordinates. This ignores the surface topography,
+      // but that is as documented.
+      return manifold->push_forward_sphere(p);
     }
 
 
@@ -662,6 +678,11 @@ namespace aspect
     double
     Chunk<dim>::maximal_depth() const
     {
+      // The depth is defined as relative to a reference surface (without
+      // topography) and since we don't apply topography on the CMB,
+      // the maximal depth really is the formula below, unless one applies a
+      // topography that is always strictly below zero (i.e., where the
+      // actual surface lies strictly below the reference surface).
       return point2[0]-point1[0];
     }
 
@@ -698,23 +719,33 @@ namespace aspect
     bool
     Chunk<dim>::point_is_in_domain(const Point<dim> &point) const
     {
-      AssertThrow(!this->get_parameters().mesh_deformation_enabled ||
-                  // we are still before the first time step has started
-                  this->get_timestep_number() == 0 ||
-                  this->get_timestep_number() == numbers::invalid_unsigned_int,
-                  ExcMessage("After displacement of the mesh, this function can no longer be used to determine whether a point lies in the domain or not."));
+      // If mesh deformation is enabled, we have to loop over all the current
+      // grid cells to see if the given point lies in the domain.
+      // If mesh deformation is not enabled, or has not happened yet,
+      // we can use the global extents of the model domain with or without
+      // initial topography instead.
+      // This function only checks if the given point lies in the domain
+      // in its current shape at the current time. It can be called before
+      // mesh deformation is applied in the first timestep (e.g., by the boundary
+      // traction plugins), and therefore there is no guarantee
+      // that the point will still lie in the domain after initial mesh deformation.
+      if (this->get_parameters().mesh_deformation_enabled &&
+          this->simulator_is_past_initialization())
+        {
+          return Utilities::point_is_in_triangulation(this->get_mapping(), this->get_triangulation(), point, this->get_mpi_communicator());
+        }
+      // Without mesh deformation enabled, it is much cheaper to check whether the point lies in the domain.
+      else
+        {
+          const Point<dim> spherical_point = manifold->pull_back(point);
 
-      AssertThrow(Plugins::plugin_type_matches<const InitialTopographyModel::ZeroTopography<dim>>(this->get_initial_topography_model()),
-                  ExcMessage("After adding topography, this function can no longer be used to determine whether a point lies in the domain or not."));
+          for (unsigned int d = 0; d < dim; ++d)
+            if (spherical_point[d] > point2[d]+std::numeric_limits<double>::epsilon()*std::abs(point2[d]) ||
+                spherical_point[d] < point1[d]-std::numeric_limits<double>::epsilon()*std::abs(point2[d]))
+              return false;
 
-      const Point<dim> spherical_point = manifold.pull_back(point);
-
-      for (unsigned int d = 0; d < dim; ++d)
-        if (spherical_point[d] > point2[d]+std::numeric_limits<double>::epsilon()*std::abs(point2[d]) ||
-            spherical_point[d] < point1[d]-std::numeric_limits<double>::epsilon()*std::abs(point2[d]))
-          return false;
-
-      return true;
+          return true;
+        }
     }
 
 
@@ -723,14 +754,23 @@ namespace aspect
     std::array<double,dim>
     Chunk<dim>::cartesian_to_natural_coordinates(const Point<dim> &position_point) const
     {
-      // the chunk manifold has a order of radius, longitude, latitude.
+      // The chunk manifold uses (radius, longitude, latitude).
       // This is exactly what we need.
+
       // Ignore the topography to avoid a loop when calling the
       // AsciiDataBoundary for topography which uses this function....
-      const Point<dim> transformed_point = manifold.pull_back_sphere(position_point);
+      const Point<dim> transformed_point = manifold->pull_back_sphere(position_point);
       std::array<double,dim> position_array;
-      for (unsigned int i = 0; i < dim; i++)
+      for (unsigned int i = 0; i < dim; ++i)
         position_array[i] = transformed_point(i);
+
+      // Internally, the Chunk geometry uses longitudes in the range -pi...pi,
+      // and that is what pull_back_sphere() produces. But externally, we need
+      // to use 0...2*pi to match what Utilities::Coordinates::cartesian_to_spherical_coordinates()
+      // returns, for example, and what we document the AsciiBoundaryData class
+      // wants to see from input files.
+      if (position_array[1] < 0)
+        position_array[1] += 2*numbers::PI;
 
       return position_array;
     }
@@ -757,9 +797,9 @@ namespace aspect
       // Ignore the topography to avoid a loop when calling the
       // AsciiDataBoundary for topography which uses this function....
       Point<dim> position_point;
-      for (unsigned int i = 0; i < dim; i++)
+      for (unsigned int i = 0; i < dim; ++i)
         position_point[i] = position_tensor[i];
-      const Point<dim> transformed_point = manifold.push_forward_sphere(position_point);
+      const Point<dim> transformed_point = manifold->push_forward_sphere(position_point);
 
       return transformed_point;
     }
@@ -775,26 +815,26 @@ namespace aspect
       {
         prm.enter_subsection("Chunk");
         {
-          prm.declare_entry ("Chunk inner radius", "0",
-                             Patterns::Double (0),
-                             "Radius at the bottom surface of the chunk. Units: $\\si{m}$.");
-          prm.declare_entry ("Chunk outer radius", "1",
-                             Patterns::Double (0),
-                             "Radius at the top surface of the chunk. Units: $\\si{m}$.");
+          prm.declare_entry ("Chunk inner radius", "0.",
+                             Patterns::Double (0.),
+                             "Radius at the bottom surface of the chunk. Units: \\si{\\meter}.");
+          prm.declare_entry ("Chunk outer radius", "1.",
+                             Patterns::Double (0.),
+                             "Radius at the top surface of the chunk. Units: \\si{\\meter}.");
 
-          prm.declare_entry ("Chunk minimum longitude", "0",
-                             Patterns::Double (-180, 360), // enables crossing of either hemisphere
+          prm.declare_entry ("Chunk minimum longitude", "0.",
+                             Patterns::Double (-180., 360.), // enables crossing of either hemisphere
                              "Minimum longitude of the chunk. Units: degrees.");
-          prm.declare_entry ("Chunk maximum longitude", "1",
-                             Patterns::Double (-180, 360), // enables crossing of either hemisphere
+          prm.declare_entry ("Chunk maximum longitude", "1.",
+                             Patterns::Double (-180., 360.), // enables crossing of either hemisphere
                              "Maximum longitude of the chunk. Units: degrees.");
 
-          prm.declare_entry ("Chunk minimum latitude", "0",
-                             Patterns::Double (-90, 90),
+          prm.declare_entry ("Chunk minimum latitude", "0.",
+                             Patterns::Double (-90., 90.),
                              "Minimum latitude of the chunk. This value is ignored "
                              "if the simulation is in 2d. Units: degrees.");
-          prm.declare_entry ("Chunk maximum latitude", "1",
-                             Patterns::Double (-90, 90),
+          prm.declare_entry ("Chunk maximum latitude", "1.",
+                             Patterns::Double (-90., 90.),
                              "Maximum latitude of the chunk. This value is ignored "
                              "if the simulation is in 2d. Units: degrees.");
 
@@ -825,40 +865,24 @@ namespace aspect
       {
         prm.enter_subsection("Chunk");
         {
+          point1[0] = prm.get_double ("Chunk inner radius");
+          point2[0] = prm.get_double ("Chunk outer radius");
+          repetitions[0] = prm.get_integer ("Radius repetitions");
+          point1[1] = prm.get_double ("Chunk minimum longitude") * constants::degree_to_radians;
+          point2[1] = prm.get_double ("Chunk maximum longitude") * constants::degree_to_radians;
+          repetitions[1] = prm.get_integer ("Longitude repetitions");
 
-          const double degtorad = dealii::numbers::PI/180;
-
-          Assert (dim >= 2, ExcInternalError());
-          Assert (dim <= 3, ExcInternalError());
-
-          if (dim >= 2)
-            {
-              point1[0] = prm.get_double ("Chunk inner radius");
-              point2[0] = prm.get_double ("Chunk outer radius");
-              repetitions[0] = prm.get_integer ("Radius repetitions");
-              point1[1] = prm.get_double ("Chunk minimum longitude") * degtorad;
-              point2[1] = prm.get_double ("Chunk maximum longitude") * degtorad;
-              repetitions[1] = prm.get_integer ("Longitude repetitions");
-
-              AssertThrow (point1[0] < point2[0],
-                           ExcMessage ("Inner radius must be less than outer radius."));
-              AssertThrow (point1[1] < point2[1],
-                           ExcMessage ("Minimum longitude must be less than maximum longitude."));
-              AssertThrow (point2[1] - point1[1] < 2.*numbers::PI,
-                           ExcMessage ("Maximum - minimum longitude should be less than 360 degrees."));
-            }
-
-          // Inform the manifold about the minimum longitude
-          manifold.set_min_longitude(point1[1]);
-          // Inform the manifold about the minimum radius
-          manifold.set_min_radius(point1[0]);
-          // Inform the manifold about the maximum depth (without topo)
-          manifold.set_max_depth(point2[0]-point1[0]);
+          AssertThrow (point1[0] < point2[0],
+                       ExcMessage ("Inner radius must be less than outer radius."));
+          AssertThrow (point1[1] < point2[1],
+                       ExcMessage ("Minimum longitude must be less than maximum longitude."));
+          AssertThrow (point2[1] - point1[1] < 2.*numbers::PI,
+                       ExcMessage ("Maximum - minimum longitude should be less than 360 degrees."));
 
           if (dim == 3)
             {
-              point1[2] = prm.get_double ("Chunk minimum latitude") * degtorad;
-              point2[2] = prm.get_double ("Chunk maximum latitude") * degtorad;
+              point1[2] = prm.get_double ("Chunk minimum latitude") * constants::degree_to_radians;
+              point2[2] = prm.get_double ("Chunk maximum latitude") * constants::degree_to_radians;
               repetitions[2] = prm.get_integer ("Latitude repetitions");
 
               AssertThrow (point1[2] < point2[2],
@@ -882,6 +906,15 @@ namespace aspect
 {
   namespace GeometryModel
   {
+    namespace internal
+    {
+#define INSTANTIATE(dim) \
+  template class ChunkGeometry<dim>;
+      ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
+    }
+
     ASPECT_REGISTER_GEOMETRY_MODEL(Chunk,
                                    "chunk",
                                    "A geometry which can be described as a chunk of a spherical shell, "
@@ -909,9 +942,8 @@ namespace aspect
                                    "the velocity in direction of the cylinder axes is zero. "
                                    "This is consistent with the definition of what we consider "
                                    "the two-dimension case given in "
-                                   "Section~\\ref{sec:meaning-of-2d}. "
+                                   "Section~\\ref{sec:methods:2d-models}. "
                                    "It is also possible to add initial topography to the chunk geometry, "
                                    "based on an ascii data file. ")
   }
 }
-

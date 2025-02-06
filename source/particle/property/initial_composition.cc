@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2023 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -32,12 +32,23 @@ namespace aspect
       InitialComposition<dim>::initialize_one_particle_property(const Point<dim> &position,
                                                                 std::vector<double> &data) const
       {
-        for (unsigned int i = 0; i < this->n_compositional_fields(); i++)
+        for (unsigned int i = 0; i < this->n_compositional_fields(); ++i)
           data.push_back(this->get_initial_composition_manager().initial_composition(position,i));
       }
 
+
+
       template <int dim>
-      std::vector<std::pair<std::string, unsigned int> >
+      InitializationModeForLateParticles
+      InitialComposition<dim>::late_initialization_mode () const
+      {
+        return interpolate_respect_boundary;
+      }
+
+
+
+      template <int dim>
+      std::vector<std::pair<std::string, unsigned int>>
       InitialComposition<dim>::get_property_information() const
       {
         AssertThrow(this->n_compositional_fields() > 0,
@@ -46,9 +57,9 @@ namespace aspect
                                "Please add compositional fields to your model, or remove "
                                "this particle property."));
 
-        std::vector<std::pair<std::string,unsigned int> > property_information;
+        std::vector<std::pair<std::string,unsigned int>> property_information;
 
-        for (unsigned int i = 0; i < this->n_compositional_fields(); i++)
+        for (unsigned int i = 0; i < this->n_compositional_fields(); ++i)
           {
             std::ostringstream field_name;
             field_name << "initial " << this->introspection().name_for_compositional_index(i);
@@ -78,4 +89,3 @@ namespace aspect
     }
   }
 }
-

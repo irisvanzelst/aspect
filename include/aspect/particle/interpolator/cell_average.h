@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016 - 2017 by the authors of the ASPECT code.
+ Copyright (C) 2016 - 2022 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -43,9 +43,9 @@ namespace aspect
            * Return the cell-wise averaged properties of all particles of the cell containing the
            * given positions.
            */
-          std::vector<std::vector<double> >
+          std::vector<std::vector<double>>
           properties_at_points(const ParticleHandler<dim> &particle_handler,
-                               const std::vector<Point<dim> > &positions,
+                               const std::vector<Point<dim>> &positions,
                                const ComponentMask &selected_properties,
                                const typename parallel::distributed::Triangulation<dim>::active_cell_iterator &cell) const override;
 
@@ -53,15 +53,15 @@ namespace aspect
           using Interface<dim>::properties_at_points;
 
           /**
-          * @copydoc Interface<dim>::declare_parameters()
-          **/
+           * @copydoc Interface<dim>::declare_parameters()
+           */
           static
           void
           declare_parameters (ParameterHandler &prm);
 
           /**
            * @copydoc Interface<dim>::parse_parameters()
-           **/
+           */
           void
           parse_parameters (ParameterHandler &prm) override;
 

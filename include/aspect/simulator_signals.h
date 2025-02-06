@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -27,6 +27,7 @@
 #include <aspect/parameters.h>
 
 #include <deal.II/base/parameter_handler.h>
+#include <deal.II/numerics/data_out.h>
 
 #include <boost/signals2.hpp>
 
@@ -72,7 +73,7 @@ namespace aspect
      * that can be modified and will be used to construct the
      * final finite element system later.
      */
-    boost::signals2::signal<void (std::vector<VariableDeclaration<dim> > &)>
+    boost::signals2::signal<void (std::vector<VariableDeclaration<dim>> &)>
     edit_finite_element_variables;
 
     /**
@@ -92,6 +93,14 @@ namespace aspect
     boost::signals2::signal<void (const SimulatorAccess<dim> &)>  post_set_initial_state;
 
     /**
+     * A signal that is called at the beginning of each time step.
+     *
+     * The functions (slots) that can attach to this signal need to take one
+     * argument: A SimulatorAccess object that describes the simulator.
+     */
+    boost::signals2::signal<void (const SimulatorAccess<dim> &)>  start_timestep;
+
+    /**
      * A signal that is called at the end of setting up the
      * constraints for the current time step. This allows to add
      * more constraints on degrees of freedom, for example to fix
@@ -103,12 +112,12 @@ namespace aspect
      * argument that indicates the constraints to be computed.
      */
     boost::signals2::signal<void (const SimulatorAccess<dim> &,
-                                  ConstraintMatrix &)>  post_constraints_creation;
+                                  AffineConstraints<double> &)>  post_constraints_creation;
 
     /**
      * A signal that is called at the start of setup_dofs(). This allows for
      * editing of the parameters struct on the fly (such as changing boundary
-     * conditions) to give Aspect different behavior in mid-run than it
+     * conditions) to give ASPECT different behavior in mid-run than it
      * otherwise would have.
      *
      * The functions that connect to this signal must take two arguments, a
@@ -196,6 +205,20 @@ namespace aspect
     boost::signals2::signal<void (typename parallel::distributed::Triangulation<dim> &)>  post_resume_load_user_data;
 
     /**
+     * This signal is called whenever the pressure scaling is computed, see
+     * Simulator::compute_pressure_scaling_factor(), and allows inspection
+     * and/or modification of the computed factor.
+     *
+     * The argument @p pressure_scaling contains the computed pressure scaling (the ratio
+     * of the reference viscosity @p reference_viscosity computed by averaging
+     * the viscosity in the domain and the length scale @p length_scale reported
+     * by the geometry model). The return value of this functions will replace
+     * the computed value, therefore no changes are made if you return the value
+     * @p pressure_scaling.
+     */
+    boost::signals2::signal<double (const double pressure_scaling, const double reference_viscosity, const double length_scale)>  modify_pressure_scaling;
+
+    /**
      * A signal that is called at the beginning of the program. It
      * gives user extensions the ability to declare additional
      * parameters via the provided argument. User extensions connected to
@@ -224,9 +247,13 @@ namespace aspect
                                          ParameterHandler &)>  parse_additional_parameters;
 
     /**
-     * A signal that is fired when the iterative Stokes solver is done.
-     * Parameters are a reference to the SimulatorAccess, the number of
-     * preconditioner inner solver iterations for the S and A block of the
+     * A signal that is triggered when the iterative Stokes solver (either
+     * matrix-based or matrix-free) is done. The signal is not called when
+     * using a direct solver because the kind of information passed on by this
+     * signal does not exist when using a direct solver.
+     *
+     * Arguments to this signal are a reference to the SimulatorAccess, the number of
+     * preconditioner inner solver iterations for the $S$ and $A$ block of the
      * system, and two information objects that contain information
      * about the success of the solve, the number of outer GMRES iterations
      * and the residual history for the cheap and expensive solver phase.
@@ -238,8 +265,8 @@ namespace aspect
                                   const SolverControl &solver_control_expensive)> post_stokes_solver;
 
     /**
-     * A signal that is fired when the iterative advection solver is done.
-     * Parameters are a reference to the SimulatorAccess, a bool indicating
+     * A signal that is triggered when the iterative advection solver is done.
+     * Arguments are a reference to the SimulatorAccess, a bool indicating
      * whether the temperature field or a compositional field was solved,
      * a composition index that describes which compositional field
      * was solved, and an information object that contains information
@@ -251,13 +278,69 @@ namespace aspect
                                   const SolverControl &solver_control)> post_advection_solver;
 
     /**
-     * A signal that is fired at the end of the set_assemblers() function that
+     * A signal that is triggered when the nonlinear solver scheme is done.
+     * The signal parameter is an object that contains information
+     * about the final state (failure/success), number of
+     * iterations and history of residuals of the nonlinear solver.
+     * If there is no nonlinear solver (only a single solve), the
+     * SolverControl object will report a successful state, a single iteration
+     * and a remaining residual of zero.
+     */
+    boost::signals2::signal<void (const SolverControl &)> post_nonlinear_solver;
+
+    /**
+     * A signal that is triggered when ARKode is done solving an ODE.
+     * Arguments are a reference to the SimulatorAccess and
+     * an iteration count describing how many iterations ARKode required
+     * to solve the ODE.
+     */
+    boost::signals2::signal<void (const SimulatorAccess<dim> &,
+                                  const unsigned int iteration_count)> post_ARKode_solve;
+
+    /**
+     * A signal that is triggered when mesh deformation has occurred.
+     * The arguments to this signal is a reference to the SimulatorAccess
+     * object.
+     */
+    boost::signals2::signal<void (const SimulatorAccess<dim> &)> post_mesh_deformation;
+
+    /**
+     * A signal that is triggered at the end of the set_assemblers() function that
      * allows modification of the assembly objects active in this simulation.
      */
     boost::signals2::signal<void (const SimulatorAccess<dim> &,
                                   aspect::Assemblers::Manager<dim> &)>
     set_assemblers;
+
+    /**
+     * A signal that is called before the build_patches() function is called during
+     * the creation of the visualization output. This signal
+     * allows for registering functions that take a DataOut object and can for example
+     * be used to select only certain cells of the mesh to be built into patches through
+     * calling the DataOut member function set_cell_selection().
+     */
+    boost::signals2::signal<void (DataOut<dim> &)>  pre_data_out_build_patches;
   };
+
+
+  // Explain to the compiler that we instantiate this class elsewhere, along
+  // with its static members. This is necessary to avoid warnings by some
+  // compilers.
+  extern template struct SimulatorSignals<2>;
+  extern template
+  boost::signals2::signal<void (const unsigned int aspect_dim, ParameterHandler &prm)>
+  SimulatorSignals<2>::declare_additional_parameters;
+  extern template
+  boost::signals2::signal<void (const Parameters<2> &, ParameterHandler &)>
+  SimulatorSignals<2>::parse_additional_parameters;
+
+  extern template struct SimulatorSignals<3>;
+  extern template
+  boost::signals2::signal<void (const unsigned int aspect_dim, ParameterHandler &prm)>
+  SimulatorSignals<3>::declare_additional_parameters;
+  extern template
+  boost::signals2::signal<void (const Parameters<3> &, ParameterHandler &)>
+  SimulatorSignals<3>::parse_additional_parameters;
 
 
   namespace internals
@@ -302,14 +385,14 @@ namespace aspect
 #define ASPECT_REGISTER_SIGNALS_CONNECTOR(connector_function_2d,connector_function_3d) \
   namespace ASPECT_REGISTER_SIGNALS_CONNECTOR \
   { \
-    int dummy_do_register () \
-    { \
-      aspect::internals::SimulatorSignals::register_connector_function_2d (connector_function_2d); \
-      aspect::internals::SimulatorSignals::register_connector_function_3d (connector_function_3d); \
-      return /* anything will do = */42; \
-    } \
-    \
-    const int dummy_variable = dummy_do_register (); \
+    struct dummy_do_register \
+    {          \
+      dummy_do_register () \
+      { \
+        aspect::internals::SimulatorSignals::register_connector_function_2d (connector_function_2d); \
+        aspect::internals::SimulatorSignals::register_connector_function_3d (connector_function_3d); \
+      } \
+    } dummy_variable; \
   }
 
 
@@ -324,13 +407,13 @@ namespace aspect
 #define ASPECT_REGISTER_SIGNALS_PARAMETER_CONNECTOR(connector_function) \
   namespace ASPECT_REGISTER_SIGNALS_PARAMETER_CONNECTOR_ ## connector_function \
   { \
-    int dummy_do_register_ ## connector_function () \
+    struct dummy_do_register_ ## connector_function \
     { \
-      connector_function (); \
-      return /* anything will do = */42; \
-    } \
-    \
-    const int dummy_variable_ ## classname = dummy_do_register_ ## connector_function (); \
+      dummy_do_register_ ## connector_function () \
+      {                \
+        connector_function (); \
+      }          \
+    } dummy_variable_ ## classname; \
   }
 
 }

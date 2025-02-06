@@ -5,16 +5,11 @@
 ############### Global parameters
 
 set Additional shared libraries            = ./libinclusion_compositional_fields.so
-
-
 set Dimension                              = 2
-
 set Start time                             = 0
 set End time                               = 0
-
 set Pressure normalization                 = volume
 set Nonlinear solver scheme                = single Advection, single Stokes
-
 
 ############### Parameters describing the model
 
@@ -27,7 +22,6 @@ subsection Geometry model
   end
 end
 
-
 subsection Boundary velocity model
   set Prescribed velocity boundary indicators = left  : InclusionBoundary, \
                                                 right : InclusionBoundary, \
@@ -37,6 +31,7 @@ end
 
 subsection Material model
   set Model name = InclusionCompositionalMaterial
+
   subsection Inclusion
     set Viscosity jump = 1e3
   end
@@ -46,19 +41,12 @@ subsection Gravity model
   set Model name = vertical
 end
 
-
 ############### Parameters describing the temperature field
-
-subsection Boundary temperature model
-  set List of model names = box
-end
 
 
 subsection Initial temperature model
   set Model name = perturbed box
 end
-
-
 
 ############### Parameters describing the discretization
 
@@ -83,48 +71,52 @@ end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
-     set Variable names      = x,z
-     set Function constants  = eta_b=1e3, rmax=0.2
-     set Function expression = if((x-1.0)*(x-1.0)+(z-1.0)*(z-1.0)<=0.04,eta_b,1.0)
+    set Variable names      = x,z
+    set Function constants  = eta_b=1e3, rmax=0.2
+    set Function expression = if((x-1.0)*(x-1.0)+(z-1.0)*(z-1.0)<=0.04,eta_b,1.0)
   end
 end
-
-
 
 ############### Parameters describing what to do with the solution
 
 subsection Postprocess
   set List of postprocessors = particles, visualization, InclusionPostprocessor
+
   subsection Visualization
     set Output format                 = vtu
     set Number of grouped files       = 1
     set Time between graphical output = 0
-    set List of output variables = density, viscosity
+    set List of output variables = material properties
+
+    subsection Material properties
+      set List of material properties = density, viscosity
+    end
   end
 
   subsection Particles
-    set Number of particles = 16384
     set Time between data output = 0
     set Data output format = vtu
-    set List of particle properties = function
-    set Integration scheme = rk2
-    set Interpolation scheme = cell average
-    set Maximum particles per cell = 16384
-    set Update ghost particles = true
+  end
+end
 
-    subsection Function
-       set Variable names      = x,z
-       set Function constants  = eta_b=1e3, rmax=0.2
-       set Function expression = if((x-1.0)*(x-1.0)+(z-1.0)*(z-1.0)<=0.04,eta_b,1.0)
-    end
+subsection Particles
+  set List of particle properties = function
+  set Integration scheme = rk2
+  set Interpolation scheme = cell average
+  set Maximum particles per cell = 16384
+  set Particle generator name = reference cell
 
-    set Particle generator name = reference cell
+  subsection Function
+    set Variable names      = x,z
+    set Function constants  = eta_b=1e3, rmax=0.2
+    set Function expression = if((x-1.0)*(x-1.0)+(z-1.0)*(z-1.0)<=0.04,eta_b,1.0)
+  end
 
-    subsection Generator
-      subsection Reference cell
-        set Number of particles per cell per direction = 4
-      end
+  subsection Generator
+    subsection Reference cell
+      set Number of particles per cell per direction = 4
     end
   end
 end

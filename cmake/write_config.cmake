@@ -1,4 +1,4 @@
-# Copyright (C) 2013 - 2019 by the authors of the ASPECT code.
+# Copyright (C) 2013 - 2024 by the authors of the ASPECT code.
 #
 # This file is part of ASPECT.
 #
@@ -17,12 +17,12 @@
 # <http://www.gnu.org/licenses/>.
 
 
-SET(_log_detailed "${CMAKE_BINARY_DIR}/detailed.log")
-FILE(REMOVE ${_log_detailed})
+set(_log_detailed "${CMAKE_BINARY_DIR}/detailed.log")
+file(REMOVE ${_log_detailed})
 
-MACRO(_detailed)
-  FILE(APPEND ${_log_detailed} "${ARGN}")
-ENDMACRO()
+macro(_detailed)
+  file(APPEND ${_log_detailed} "${ARGN}")
+endmacro()
 
 _detailed(
 "###
@@ -30,51 +30,70 @@ _detailed(
 #  ASPECT configuration:
 #        ASPECT_VERSION:            ${ASPECT_PACKAGE_VERSION}
 #        GIT REVISION:              ${ASPECT_GIT_SHORTREV} (${ASPECT_GIT_BRANCH})
+#        CMAKE_BUILD_TYPE:          ${CMAKE_BUILD_TYPE}
+#
 #        DEAL_II_DIR:               ${deal.II_DIR}
 #        DEAL_II VERSION:           ${DEAL_II_PACKAGE_VERSION}
-#        ASPECT_USE_PETSC:          ${ASPECT_USE_PETSC}
 #        ASPECT_USE_FP_EXCEPTIONS:  ${ASPECT_USE_FP_EXCEPTIONS}
 #        ASPECT_RUN_ALL_TESTS:      ${ASPECT_RUN_ALL_TESTS}
 #        ASPECT_USE_SHARED_LIBS:    ${ASPECT_USE_SHARED_LIBS}
 #        ASPECT_HAVE_LINK_H:        ${ASPECT_HAVE_LINK_H}
-#        ASPECT_WITH_WORLD_BUILDER  ${ASPECT_WITH_WORLD_BUILDER} ${WORLD_BUILDER_SOURCE_DIR}
-#        CMAKE_BUILD_TYPE:          ${CMAKE_BUILD_TYPE}
+#        ASPECT_WITH_LIBDAP:        ${ASPECT_WITH_LIBDAP}
+#        ASPECT_WITH_NETCDF:        ${ASPECT_WITH_NETCDF}
+#        ASPECT_WITH_WORLD_BUILDER: ${ASPECT_WITH_WORLD_BUILDER} ${WORLD_BUILDER_SOURCE_DIR}
 #        ASPECT_PRECOMPILE_HEADERS: ${ASPECT_PRECOMPILE_HEADERS}
+#        ASPECT_UNITY_BUILD:        ${ASPECT_UNITY_BUILD}
+#
 #        CMAKE_INSTALL_PREFIX:      ${CMAKE_INSTALL_PREFIX}
-#        CMAKE_SOURCE_DIR:          ${CMAKE_SOURCE_DIR} 
+#        CMAKE_SOURCE_DIR:          ${CMAKE_SOURCE_DIR}
 #        CMAKE_BINARY_DIR:          ${CMAKE_BINARY_DIR}
 #        CMAKE_CXX_COMPILER:        ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} on platform ${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_PROCESSOR}
 #                                   ${CMAKE_CXX_COMPILER}
-#        PARAMETER_GUI_EXECUTABLE:  ${PARAMETER_GUI_EXECUTABLE}
 ")
-IF(CMAKE_C_COMPILER_WORKS)
+
+if(CMAKE_C_COMPILER_WORKS)
   _detailed(
 "#        CMAKE_C_COMPILER:          ${CMAKE_C_COMPILER}\n")
-ENDIF()
+endif()
 
 
-IF(DEAL_II_STATIC_EXECUTABLE)
-_detailed(
+if(DEAL_II_STATIC_EXECUTABLE)
+  _detailed(
 "#
 #        LINKAGE:                   STATIC
 ")
-ELSE()
+else()
 _detailed(
 "#
 #        LINKAGE:                   DYNAMIC
 ")
-ENDIF()
+endif()
 
-GET_PROPERTY(_COMPILE_FLAGS TARGET aspect PROPERTY COMPILE_FLAGS)
-_detailed("#
-#        COMPILE_FLAGS:             ${_COMPILE_FLAGS}
+foreach(_T ${TARGETS_EXECUTABLES})
+
+  get_property(ASPECT_COMPILE_OPTIONS TARGET ${_T} PROPERTY COMPILE_OPTIONS)
+  get_property(ASPECT_COMPILE_DEFINITIONS TARGET ${_T} PROPERTY COMPILE_DEFINITIONS)
+  get_property(ASPECT_INCLUDE_DIRECTORIES TARGET ${_T} PROPERTY INCLUDE_DIRECTORIES)
+  get_property(ASPECT_LINK_LIBRARIES TARGET ${_T} PROPERTY LINK_LIBRARIES)
+  get_property(ASPECT_COMPILE_FLAGS TARGET ${_T} PROPERTY COMPILE_FLAGS)
+
+  _detailed("#
+#        ${_T} target properties:
+#
+#          COMPILE_OPTIONS:         ${ASPECT_COMPILE_OPTIONS}
+#          COMPILE_DEFINITIONS:     ${ASPECT_COMPILE_DEFINITIONS}
+#          COMPILE_FLAGS:           ${ASPECT_COMPILE_FLAGS}
+#          LINK_LIBRARIES:          ${ASPECT_LINK_LIBRARIES}
+#          INCLUDE_DIRECTORIES:     ${ASPECT_INCLUDE_DIRECTORIES}
 ")
+endforeach()
 
 _detailed("#
-#        _WITH_CXX14:               ${DEAL_II_WITH_CXX14}
-#        _WITH_CXX17:               ${DEAL_II_WITH_CXX17}
-#        _MPI_VERSION:              ${DEAL_II_MPI_VERSION}
-#        _WITH_64BIT_INDICES:       ${DEAL_II_WITH_64BIT_INDICES}
+#        DEAL_II options:
+#          _WITH_CXX14:             ${DEAL_II_WITH_CXX14}
+#          _WITH_CXX17:             ${DEAL_II_WITH_CXX17}
+#          _MPI_VERSION:            ${DEAL_II_MPI_VERSION}
+#          _WITH_64BIT_INDICES:     ${DEAL_II_WITH_64BIT_INDICES}
 ")
 
 

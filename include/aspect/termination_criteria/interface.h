@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -32,8 +32,6 @@
 
 namespace aspect
 {
-  using namespace dealii;
-
   template <int dim> class Simulator;
 
 
@@ -62,23 +60,9 @@ namespace aspect
      * @ingroup TerminationCriteria
      */
     template <int dim>
-    class Interface
+    class Interface : public Plugins::InterfaceBase
     {
       public:
-        /**
-         * Destructor. Does nothing but is virtual so that derived classes'
-         * destructors are also virtual.
-         */
-        virtual
-        ~Interface ();
-
-        /**
-         * Initialization function. This function is called once at the
-         * beginning of the program after parse_parameters is run and after
-         * the SimulatorAccess (if applicable) is initialized.
-         */
-        virtual void initialize ();
-
         /**
          * Execute evaluation of the termination criterion.
          *
@@ -112,33 +96,6 @@ namespace aspect
          * argument put into this function.
          */
         virtual double check_for_last_time_step (const double time_step) const;
-
-        /**
-         * Declare the parameters this class takes through input files.
-         * Derived classes should overload this function if they actually do
-         * take parameters; this class declares a fall-back function that does
-         * nothing, so that classes that do not take any parameters do not
-         * have to do anything at all.
-         *
-         * This function is static (and needs to be static in derived classes)
-         * so that it can be called without creating actual objects (because
-         * declaring parameters happens before we read the input file and thus
-         * at a time when we don't even know yet which plugin objects we
-         * need).
-         */
-        static
-        void
-        declare_parameters (ParameterHandler &prm);
-
-        /**
-         * Read the parameters this class declares from the parameter file.
-         * The default implementation in this class does nothing, so that
-         * derived classes that do not need any parameters do not need to
-         * implement it.
-         */
-        virtual
-        void
-        parse_parameters (ParameterHandler &prm);
     };
 
 
@@ -153,17 +110,15 @@ namespace aspect
      * @ingroup TerminationCriteria
      */
     template <int dim>
-    class Manager : public ::aspect::SimulatorAccess<dim>
+    class Manager : public Plugins::ManagerBase<Interface<dim>>, public SimulatorAccess<dim>
     {
       public:
         /**
          * Execute all of the termination criteria objects that have been
          * requested in the input file.
          *
-         * The function returns a pair of values. The first part of the
-         * returned pair indicates whether the simulation should be
-         * terminated. The second part indicates whether a final checkpoint
-         * should be performed.
+         * The function returns a bool indicating whether the simulation should be
+         * terminated.
          *
          * To avoid undefined situations, this function only requires that a
          * single processor's termination request comes back positive for a
@@ -172,7 +127,7 @@ namespace aspect
          * that the simulation should be terminated, then this is enough.
          */
         virtual
-        std::pair<bool,bool>
+        bool
         execute () const;
 
         /**
@@ -204,7 +159,7 @@ namespace aspect
          * then let these objects read their parameters as well.
          */
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
         /**
          * A function that is used to register termination criteria objects in
@@ -228,7 +183,7 @@ namespace aspect
         register_termination_criterion (const std::string &name,
                                         const std::string &description,
                                         void (*declare_parameters_function) (ParameterHandler &),
-                                        Interface<dim> *(*factory_function) ());
+                                        std::unique_ptr<Interface<dim>> (*factory_function) ());
 
         /**
          * For the current plugin subsystem, write a connection graph of all of the
@@ -251,24 +206,6 @@ namespace aspect
                         << "Could not find entry <"
                         << arg1
                         << "> among the names of registered termination criteria objects.");
-      private:
-        /**
-         * A list of termination criterion objects that have been requested in
-         * the parameter file.
-         */
-        std::list<std::unique_ptr<Interface<dim> > > termination_objects;
-
-        /**
-         * A list of names corresponding to the termination criteria in the
-         * termination_objects.
-         */
-        std::list<std::string>                       termination_obj_names;
-
-        /**
-         * Whether to do a final checkpoint before termination. This is
-         * specified in the parameters.
-         */
-        bool do_checkpoint_on_terminate;
     };
 
 
@@ -285,10 +222,10 @@ namespace aspect
   template class classname<3>; \
   namespace ASPECT_REGISTER_TERMINATION_CRITERION_ ## classname \
   { \
-    aspect::internal::Plugins::RegisterHelper<aspect::TerminationCriteria::Interface<2>,classname<2> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::TerminationCriteria::Interface<2>,classname<2>> \
     dummy_ ## classname ## _2d (&aspect::TerminationCriteria::Manager<2>::register_termination_criterion, \
                                 name, description); \
-    aspect::internal::Plugins::RegisterHelper<aspect::TerminationCriteria::Interface<3>,classname<3> > \
+    aspect::internal::Plugins::RegisterHelper<aspect::TerminationCriteria::Interface<3>,classname<3>> \
     dummy_ ## classname ## _3d (&aspect::TerminationCriteria::Manager<3>::register_termination_criterion, \
                                 name, description); \
   }

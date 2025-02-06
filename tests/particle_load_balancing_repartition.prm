@@ -1,4 +1,4 @@
-# A test for the particle load balacing strategy 'repartition'.
+# A test for the particle load balancing strategy 'repartition'.
 #
 # The load is distributed according to a balanced weight defined
 # as: n_locally_owned_cells + particle_weight/1000 * n_locally_owned_particles.
@@ -11,8 +11,9 @@ include $ASPECT_SOURCE_DIR/tests/particle_load_balancing_none.prm
 set Dimension                              = 2
 
 subsection Postprocess
-  subsection Particles
-    set Load balancing strategy = repartition
-    set Particle weight = 10
-  end
+end
+
+subsection Particles
+  set Load balancing strategy = repartition
+  set Particle weight = 10
 end

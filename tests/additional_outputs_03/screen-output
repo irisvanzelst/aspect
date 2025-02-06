@@ -1,5 +1,5 @@
 
-Loading shared library <./libadditional_outputs_03.so>
+Loading shared library <./libadditional_outputs_03.debug.so>
 
 * Connecting signals
 * set_assemblers()
@@ -7,12 +7,16 @@ called without: 1000 with: 0
 Number of active cells: 4 (on 2 levels)
 Number of degrees of freedom: 84 (50+9+25)
 
-*** Timestep 0:  t=0 seconds
+*** Timestep 0:  t=0 seconds, dt=0 seconds
 * evaluate called without additional outputs!
 * evaluate called without additional outputs!
 * evaluate called without additional outputs!
 * evaluate called without additional outputs!
    Solving temperature system... 0 iterations.
+* evaluate called without additional outputs!
+* evaluate called without additional outputs!
+* evaluate called without additional outputs!
+* evaluate called without additional outputs!
 * create_additional_material_model_outputs() called
    creating additional output!
 * evaluate called with additional outputs!
@@ -34,12 +38,11 @@ averaging!
 averaging!
 * local_assemble_stokes call, have additional? 1
    value = 21 21
-   Rebuilding Stokes preconditioner...* evaluate called without additional outputs!
 * evaluate called without additional outputs!
 * evaluate called without additional outputs!
 * evaluate called without additional outputs!
-
-   Solving Stokes system... 9+0 iterations.
+* evaluate called without additional outputs!
+   Solving Stokes system (GMG)... 7+0 iterations.
 
    Postprocessing:
 * evaluate called without additional outputs!
@@ -51,8 +54,5 @@ averaging!
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 
-called without: 12 with: 4
+called without: 16 with: 4

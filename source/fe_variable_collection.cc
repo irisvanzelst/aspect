@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,7 +30,7 @@ namespace aspect
 
   template <int dim>
   VariableDeclaration<dim>::VariableDeclaration(const std::string &name,
-                                                const std::shared_ptr<FiniteElement<dim> > &fe,
+                                                const std::shared_ptr<FiniteElement<dim>> &fe,
                                                 const unsigned int multiplicity,
                                                 const unsigned int n_blocks)
     : name(name),
@@ -49,15 +49,7 @@ namespace aspect
 
   template <int dim>
   VariableDeclaration<dim>::VariableDeclaration()
-  {}
-
-  template <int dim>
-  VariableDeclaration<dim>::VariableDeclaration(const VariableDeclaration &other)
-    : name (other.name),
-      fe (other.fe),
-      multiplicity (other.multiplicity),
-      n_blocks (other.n_blocks)
-  {}
+    = default;
 
   template <int dim>
   unsigned int
@@ -106,12 +98,12 @@ namespace aspect
 
   template <int dim>
   FEVariableCollection<dim>::FEVariableCollection()
-  {}
+    = default;
 
 
 
   template <int dim>
-  FEVariableCollection<dim>::FEVariableCollection(const std::vector<VariableDeclaration<dim> > &variable_definitions)
+  FEVariableCollection<dim>::FEVariableCollection(const std::vector<VariableDeclaration<dim>> &variable_definitions)
   {
     initialize(variable_definitions);
   }
@@ -120,13 +112,10 @@ namespace aspect
 
   template <int dim>
   void
-  FEVariableCollection<dim>::initialize(const std::vector<VariableDeclaration<dim> > &variable_definitions)
+  FEVariableCollection<dim>::initialize(const std::vector<VariableDeclaration<dim>> &variable_definitions)
   {
     variables.clear();
     variables.reserve(variable_definitions.size());
-
-    // store names temporarily to make sure they are unique
-    std::set<std::string> names;
 
     unsigned int component_index = 0;
     unsigned int block_index = 0;
@@ -137,10 +126,6 @@ namespace aspect
                                             component_index, block_index, i));
         component_index+= variables[i].n_components();
         block_index += variables[i].n_blocks;
-
-        Assert(names.find(variables[i].name)==names.end(),
-               ExcMessage("Can not add two variables with the same name."));
-        names.insert(variables[i].name);
       }
 
     Assert(variables.back().n_blocks != 0
@@ -191,6 +176,20 @@ namespace aspect
 
 
   template <int dim>
+  std::vector<const FEVariable<dim>*>
+  FEVariableCollection<dim>::variables_with_name(const std::string &name) const
+  {
+    std::vector<const FEVariable<dim>*> result;
+    for (unsigned int i=0; i<variables.size(); ++i)
+      if (variables[i].name == name)
+        result.emplace_back(&variables[i]);
+
+    return result;
+  }
+
+
+
+  template <int dim>
   bool
   FEVariableCollection<dim>::variable_exists(const std::string &name) const
   {
@@ -204,7 +203,7 @@ namespace aspect
 
 
   template <int dim>
-  const std::vector<FEVariable<dim> > &
+  const std::vector<FEVariable<dim>> &
   FEVariableCollection<dim>::get_variables() const
   {
     return variables;
@@ -261,7 +260,9 @@ namespace aspect
 #define INSTANTIATE(dim) \
   template struct VariableDeclaration<dim>; \
   template struct FEVariable<dim>; \
-  template class FEVariableCollection<dim>; \
-   
+  template class FEVariableCollection<dim>;
+
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -40,7 +40,7 @@ namespace aspect
       //
       // iterate it 'degree' times to make sure our evaluation points are
       // in fact the support points.
-      const QIterated<dim> quadrature_formula (QTrapez<1>(),
+      const QIterated<dim> quadrature_formula (QTrapezoid<1>(),
                                                this->get_fe().base_element(this->introspection().base_elements.pressure).degree);
       const unsigned int n_q_points = quadrature_formula.size();
 
@@ -55,7 +55,7 @@ namespace aspect
 
       double local_pressure_integral = 0;
       double local_min_pressure      = std::numeric_limits<double>::max();
-      double local_max_pressure      = -std::numeric_limits<double>::max();
+      double local_max_pressure      = std::numeric_limits<double>::lowest();
 
       // compute the integral quantities by quadrature. note that compared to
       // the temperature statistics postprocessor, we can not just loop over
@@ -104,17 +104,17 @@ namespace aspect
       statistics.add_value ("Maximal pressure (Pa)",
                             global_max_pressure);
 
-      // also make sure that the other columns filled by the this object
+      // also make sure that the other columns filled by this object
       // all show up with sufficient accuracy and in scientific notation
       {
         const char *columns[] = { "Minimal pressure (Pa)",
                                   "Average pressure (Pa)",
                                   "Maximal pressure (Pa)"
                                 };
-        for (unsigned int i=0; i<sizeof(columns)/sizeof(columns[0]); ++i)
+        for (auto &column : columns)
           {
-            statistics.set_precision (columns[i], 8);
-            statistics.set_scientific (columns[i], true);
+            statistics.set_precision (column, 8);
+            statistics.set_scientific (column, true);
           }
       }
 

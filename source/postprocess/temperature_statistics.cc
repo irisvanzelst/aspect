@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,8 +25,6 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/fe/fe_values.h>
 
-#include <boost/archive/text_oarchive.hpp>
-#include <boost/archive/text_iarchive.hpp>
 
 
 namespace aspect
@@ -38,7 +36,7 @@ namespace aspect
     TemperatureStatistics<dim>::execute (TableHandler &statistics)
     {
       // create a quadrature formula based on the temperature element alone.
-      const QGauss<dim> quadrature_formula (this->get_fe().base_element(this->introspection().base_elements.temperature).degree+1);
+      const Quadrature<dim> &quadrature_formula = this->introspection().quadratures.temperature;
       const unsigned int n_q_points = quadrature_formula.size();
 
       FEValues<dim> fe_values (this->get_mapping(),
@@ -75,7 +73,7 @@ namespace aspect
       // points gives an inaccurate
       // picture of their true values
       double local_min_temperature = std::numeric_limits<double>::max();
-      double local_max_temperature = -std::numeric_limits<double>::max();
+      double local_max_temperature = std::numeric_limits<double>::lowest();
       const unsigned int temperature_block = this->introspection().block_indices.temperature;
       IndexSet range = this->get_solution().block(temperature_block).locally_owned_elements();
       for (unsigned int i=0; i<range.n_elements(); ++i)
@@ -124,17 +122,17 @@ namespace aspect
                                -
                                this->get_boundary_temperature_manager().minimal_temperature(this->get_fixed_temperature_boundary_indicators())));
 
-      // also make sure that the other columns filled by the this object
+      // also make sure that the other columns filled by this object
       // all show up with sufficient accuracy and in scientific notation
       {
         const char *columns[] = { "Minimal temperature (K)",
                                   "Average temperature (K)",
                                   "Maximal temperature (K)"
                                 };
-        for (unsigned int i=0; i<sizeof(columns)/sizeof(columns[0]); ++i)
+        for (auto &column : columns)
           {
-            statistics.set_precision (columns[i], 8);
-            statistics.set_scientific (columns[i], true);
+            statistics.set_precision (column, 8);
+            statistics.set_scientific (column, true);
           }
 
         if ((this->get_fixed_temperature_boundary_indicators().size() > 0)

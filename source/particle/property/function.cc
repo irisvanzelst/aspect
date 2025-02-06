@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -37,15 +37,15 @@ namespace aspect
       Function<dim>::initialize_one_particle_property(const Point<dim> &position,
                                                       std::vector<double> &data) const
       {
-        for (unsigned int i = 0; i < n_components; i++)
+        for (unsigned int i = 0; i < n_components; ++i)
           data.push_back(function->value(position, i));
       }
 
       template <int dim>
-      std::vector<std::pair<std::string, unsigned int> >
+      std::vector<std::pair<std::string, unsigned int>>
       Function<dim>::get_property_information() const
       {
-        const std::vector<std::pair<std::string,unsigned int> > property_information (1,std::make_pair("function",n_components));
+        const std::vector<std::pair<std::string,unsigned int>> property_information (1,std::make_pair("function",n_components));
         return property_information;
       }
 
@@ -54,21 +54,13 @@ namespace aspect
       void
       Function<dim>::declare_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
+        prm.enter_subsection("Function");
         {
-          prm.enter_subsection("Particles");
-          {
-            prm.enter_subsection("Function");
-            {
-              prm.declare_entry ("Number of components", "1",
-                                 Patterns::Integer (0),
-                                 "The number of function components where each component is described "
-                                 "by a function expression delimited by a ';'.");
-              Functions::ParsedFunction<dim>::declare_parameters (prm, 1);
-            }
-            prm.leave_subsection();
-          }
-          prm.leave_subsection();
+          prm.declare_entry ("Number of components", "1",
+                             Patterns::Integer (0),
+                             "The number of function components where each component is described "
+                             "by a function expression delimited by a ';'.");
+          Functions::ParsedFunction<dim>::declare_parameters (prm, 1);
         }
         prm.leave_subsection();
       }
@@ -78,29 +70,21 @@ namespace aspect
       void
       Function<dim>::parse_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
-        {
-          prm.enter_subsection("Particles");
+        prm.enter_subsection("Function");
+        n_components = prm.get_integer ("Number of components");
+        try
           {
-            prm.enter_subsection("Function");
-            n_components = prm.get_integer ("Number of components");
-            try
-              {
-                function = std_cxx14::make_unique<Functions::ParsedFunction<dim>>(n_components);
-                function->parse_parameters (prm);
-              }
-            catch (...)
-              {
-                std::cerr << "ERROR: FunctionParser failed to parse\n"
-                          << "\t'Postprocess.Particles.Function'\n"
-                          << "with expression\n"
-                          << "\t'" << prm.get("Function expression") << "'";
-                throw;
-              }
-            prm.leave_subsection();
+            function = std::make_unique<Functions::ParsedFunction<dim>>(n_components);
+            function->parse_parameters (prm);
           }
-          prm.leave_subsection();
-        }
+        catch (...)
+          {
+            std::cerr << "ERROR: FunctionParser failed to parse\n"
+                      << "\t'Particles.Function'\n"
+                      << "with expression\n"
+                      << "\t'" << prm.get("Function expression") << "'";
+            throw;
+          }
         prm.leave_subsection();
       }
     }
@@ -122,8 +106,8 @@ namespace aspect
                                         "function is defined in the parameters in section "
                                         "``Particles|Function''. The format of these "
                                         "functions follows the syntax understood by the "
-                                        "muparser library, see Section~\\ref{sec:muparser-format}.")
+                                        "muparser library, see "
+                                        "{ref}\\`sec:run-aspect:parameters-overview:muparser-format\\`.")
     }
   }
 }
-

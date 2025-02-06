@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -33,8 +33,6 @@ namespace aspect
 {
   namespace BoundaryVelocity
   {
-    using namespace dealii;
-
     namespace internal
     {
       /**
@@ -65,7 +63,7 @@ namespace aspect
            * file does not exist.
            */
           void load_file(const std::string &filename,
-                         const MPI_Comm &comm);
+                         const MPI_Comm comm);
 
           /**
            * Returns the computed surface velocity in cartesian coordinates.
@@ -80,7 +78,7 @@ namespace aspect
           /**
            * Interpolation functions to access the velocities.
            */
-          std::array<std::unique_ptr<typename Functions::InterpolatedUniformGridData<2> >, 2> velocities;
+          std::array<std::unique_ptr<Functions::InterpolatedUniformGridData<2>>, 2> velocities;
 
           /**
            * Distances between adjacent point in the Lat/Long grid
@@ -112,14 +110,6 @@ namespace aspect
           double
           rotation_axis_from_matrix (Tensor<1,3> &rotation_axis,
                                      const Tensor<2,3> &rotation_matrix) const;
-
-          /**
-           * A function that returns the corresponding euler angles for a
-           * rotation described by rotation axis and angle.
-           */
-          Tensor<2,3>
-          rotation_matrix_from_axis (const Tensor<1,3> &rotation_axis,
-                                     const double rotation_angle) const;
 
           /**
            * Convert a tensor of rank 1 and dimension in to rank 1 and
@@ -189,10 +179,6 @@ namespace aspect
         Tensor<1,dim>
         boundary_velocity (const types::boundary_id boundary_indicator,
                            const Point<dim> &position) const override;
-
-        // avoid -Woverloaded-virtual warning until the deprecated function
-        // is removed from the interface:
-        using Interface<dim>::boundary_velocity;
 
         /**
          * Initialization function. This function is called once at the
@@ -287,7 +273,7 @@ namespace aspect
         /**
          * Scale the velocity boundary condition by a scalar factor.
          */
-        double scale_factor;
+        double velocity_scaling_factor;
 
         /**
          * Two user defined points that prescribe the plane from which the 2D
@@ -318,13 +304,13 @@ namespace aspect
          * Pointer to an object that reads and processes data we get from
          * gplates files.
          */
-        std::unique_ptr<internal::GPlatesLookup<dim> > lookup;
+        std::unique_ptr<internal::GPlatesLookup<dim>> lookup;
 
         /**
          * Pointer to an object that reads and processes data we get from
          * gplates files. This saves the previous data time step.
          */
-        std::unique_ptr<internal::GPlatesLookup<dim> > old_lookup;
+        std::unique_ptr<internal::GPlatesLookup<dim>> old_lookup;
 
         /**
          * Handles the update of the velocity data in lookup. The input

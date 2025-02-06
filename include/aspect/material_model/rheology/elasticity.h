@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2019 by the authors of the ASPECT code.
+  Copyright (C) 2019 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -25,12 +25,12 @@
 #include <aspect/material_model/interface.h>
 #include <aspect/simulator_access.h>
 
+#include <deal.II/matrix_free/fe_point_evaluation.h>
+
 namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     /**
      * Additional output fields for the elastic shear modulus to be added to
      * the MaterialModel::MaterialModelOutputs structure and filled in the
@@ -87,9 +87,9 @@ namespace aspect
            * fill an additional material model outputs objects with the elastic force terms.
            */
           void
-          fill_elastic_force_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
-                                      const std::vector<double> &average_elastic_shear_moduli,
-                                      MaterialModel::MaterialModelOutputs<dim> &out) const;
+          fill_elastic_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
+                                const std::vector<double> &average_elastic_shear_moduli,
+                                MaterialModel::MaterialModelOutputs<dim> &out) const;
 
           /**
            * Given the stress of the previous time step in the material model inputs @p in,
@@ -107,16 +107,38 @@ namespace aspect
            * Return the values of the elastic shear moduli for each composition used in the
            * rheology model.
            */
-          std::vector<double>
+          const std::vector<double> &
           get_elastic_shear_moduli () const;
 
           /**
+           * Calculates the effective elastic viscosity (this is the equivalent viscosity of
+           * a material which was unstressed at the end of the previous timestep).
+           */
+          double
+          calculate_elastic_viscosity (const double shear_modulus) const;
+
+          /**
            * Given the (viscous or visco-plastic) viscosity and the shear modulus, compute the viscoelastic
-           * viscosity.
+           * viscosity (eqn 28 in Moresi et al., 2003, J. Comp. Phys.).
            */
           double
           calculate_viscoelastic_viscosity (const double viscosity,
                                             const double shear_modulus) const;
+
+          /**
+           * Calculate the effective deviatoric strain rate tensor,
+           * which equals the true deviatoric strain rate plus
+           * a fictional strain rate which would arise from stored elastic stresses.
+           * In ASPECT, this additional strain rate is
+           * supported by a fictional body force.
+           * This formulation allows the use of an isotropic effective viscosity
+           * by ensuring that the resulting strain rate tensor is equal to the
+           * total current stress tensor multiplied by a scalar.
+           */
+          SymmetricTensor<2,dim>
+          calculate_viscoelastic_strain_rate (const SymmetricTensor<2,dim> &strain_rate,
+                                              const SymmetricTensor<2,dim> &stored_stress,
+                                              const double shear_modulus) const;
 
           /**
            * Compute the elastic time step.
@@ -125,6 +147,12 @@ namespace aspect
           elastic_timestep () const;
 
         private:
+          /**
+           * Viscosity of a damper used to stabilize elasticity.
+           * A value of 0 Pas is equivalent to not using a damper.
+           */
+          double elastic_damper_viscosity;
+
           /**
            * Vector for field elastic shear moduli, read from parameter file.
            */
@@ -139,18 +167,27 @@ namespace aspect
           bool use_fixed_elastic_time_step;
 
           /**
-           * Bool indicating whether to use a stress averaging scheme to account
-           * for differences between the numerical and fixed elastic time step
-           * (if true). When set to false, the viscoelastic stresses are not
-           * modified to account for differences between the viscoelastic time
-           * step and the numerical time step. Read from parameter file.
-           */
-          bool use_stress_averaging;
-
-          /**
            * Double for fixed elastic time step value, read from parameter file
            */
           double fixed_elastic_time_step;
+
+          /**
+           * A stabilization factor for the elastic stresses that influences how
+           * fast elastic stresses adjust to deformation. 1.0 is equivalent to no
+           * stabilization, and infinity is equivalent to not applying elastic
+           * stresses at all. The factor is multiplied with the computational
+           * time step to create a time scale.
+           */
+          double stabilization_time_scale_factor;
+
+          /**
+           * We cache the evaluator that is necessary to evaluate the old velocity
+           * gradients. They are required to compute the elastic stresses, but
+           * are not provided by the material model.
+           * By caching the evaluator, we can avoid recreating it every time we
+           * need it.
+           */
+          mutable std::unique_ptr<FEPointEvaluation<dim, dim>> evaluator;
       };
     }
   }

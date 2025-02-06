@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,8 +30,6 @@ namespace aspect
 {
   namespace GeometryModel
   {
-    using namespace dealii;
-
     /**
      * A class that describes a box geometry of certain width, height, and
      * depth (in 3d), and, possibly, topography.
@@ -70,6 +68,13 @@ namespace aspect
          */
         virtual
         Point<dim> get_extents () const;
+
+        /**
+         * Return an integer array that denotes the number of repetitions of
+         * the box's coarse mesh.
+         */
+        const std::array<unsigned int, dim> &
+        get_repetitions () const;
 
         /**
          * Return a point that denotes the lower left corner of the box
@@ -152,8 +157,19 @@ namespace aspect
          * Return the set of periodic boundaries as described in the input
          * file.
          */
-        std::set< std::pair< std::pair<types::boundary_id, types::boundary_id>, unsigned int> >
+        std::set<std::pair<std::pair<types::boundary_id, types::boundary_id>, unsigned int>>
         get_periodic_boundary_pairs () const override;
+
+        /**
+         * @copydoc Interface::adjust_positions_for_periodicity
+         *
+         * Apply a translation to all points outside of the domain
+         * to account for periodicity.
+         */
+        void
+        adjust_positions_for_periodicity (Point<dim> &position,
+                                          const ArrayView<Point<dim>> &connected_positions = {},
+                                          const ArrayView<Tensor<1, dim>> &connected_velocities = {}) const override;
 
         /**
          * @copydoc Interface::has_curved_elements()
@@ -206,6 +222,11 @@ namespace aspect
 
       private:
         /**
+         * A pointer to the initial topography model.
+         */
+        InitialTopographyModel::Interface<dim> *topo_model;
+
+        /**
          * Extent of the box in x-, y-, and z-direction (in 3d).
          */
         Point<dim> extents;
@@ -218,18 +239,12 @@ namespace aspect
         /**
          * Flag whether the box is periodic in the x-, y-, and z-direction.
          */
-        bool periodic[dim];
+        std::array<bool, dim> periodic;
 
         /**
          * The number of cells in each coordinate direction.
          */
-        unsigned int repetitions[dim];
-
-        /**
-         * A pointer to the initial topography model.
-         */
-        InitialTopographyModel::Interface<dim> *topo_model;
-
+        std::array<unsigned int, dim> repetitions;
     };
   }
 }

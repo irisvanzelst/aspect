@@ -3,8 +3,8 @@
 #
 # The material model prescribes the temperature to be exactly the
 # pressure of the model
-# and is copied into the temperature field, 
-# so the minimum and maximum temperature should be 0.0 and 1.0, 
+# and is copied into the temperature field,
+# so the minimum and maximum temperature should be 0.0 and 1.0,
 # respectively.
 
 set Dimension = 2
@@ -18,12 +18,12 @@ subsection Temperature field
   set Temperature method                     = prescribed field
 end
 
-subsection Boundary temperature model
-  set List of model names = box
-end
-
 subsection Gravity model
   set Model name = vertical
+
+  subsection Vertical
+    set Magnitude = 1.0
+  end
 end
 
 subsection Geometry model
@@ -37,18 +37,11 @@ end
 
 subsection Initial temperature model
   set Model name = function
+
   subsection Function
     set Function expression = 0.5
   end
 end
-
-subsection Gravity model
-  set Model name = vertical
-  subsection Vertical
-    set Magnitude = 1.0
-  end
-end
-
 
 subsection Material model
   set Model name = prescribed field material
@@ -63,12 +56,10 @@ subsection Material model
   end
 end
 
-
 subsection Mesh refinement
   set Initial adaptive refinement        = 0
   set Initial global refinement          = 4
 end
-
 
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = 0, 1, 2, 3
@@ -79,10 +70,13 @@ subsection Postprocess
 
   subsection Visualization
     set Interpolate output = false
-
-    set List of output variables      = density
+    set List of output variables      = material properties
     set Number of grouped files       = 0
     set Output format                 = vtu
     set Time between graphical output = 0
+
+    subsection Material properties
+      set List of material properties = density
+    end
   end
 end

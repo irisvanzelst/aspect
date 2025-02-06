@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -44,9 +44,8 @@ namespace aspect
 
 
         const std::map<std::string, MaterialProperty>
-        property_map (&property_map_pairs[0],
-                      &property_map_pairs[0] +
-                      sizeof(property_map_pairs)/sizeof(property_map_pairs[0]));
+        property_map (std::begin(property_map_pairs),
+                      std::end(property_map_pairs));
       }
     }
 
@@ -94,7 +93,7 @@ namespace aspect
     Compositing<dim>::evaluate(const typename Interface<dim>::MaterialModelInputs &in,
                                typename Interface<dim>::MaterialModelOutputs &out) const
     {
-      typename Interface<dim>::MaterialModelOutputs base_output(out.viscosities.size(),
+      typename Interface<dim>::MaterialModelOutputs base_output(out.n_evaluation_points(),
                                                                 this->introspection().n_compositional_fields);
 
       // Move the additional outputs to base_output so that our models can fill them if desired:
@@ -200,7 +199,7 @@ namespace aspect
       models.resize(model_names.size());
       for (unsigned int i=0; i<model_names.size(); ++i)
         {
-          models[i].reset(create_material_model<dim>(model_names[i]));
+          models[i] = create_material_model<dim>(model_names[i]);
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(models[i].get()))
             sim->initialize_simulator (this->get_simulator());
           models[i]->parse_parameters(prm);
@@ -223,17 +222,6 @@ namespace aspect
       const unsigned int ind = model_property_map.find(Property::compressibility)->second;
       return models[ind]->is_compressible();
     }
-
-
-
-    template <int dim>
-    double
-    Compositing<dim>::
-    reference_viscosity() const
-    {
-      const unsigned int ind = model_property_map.at(Property::viscosity);
-      return models[ind]->reference_viscosity();
-    }
   }
 }
 
@@ -246,7 +234,12 @@ namespace aspect
                                    "compositing",
                                    "The ``compositing'' Material model selects material model properties from a "
                                    "given set of other material models, and is intended to make mixing different "
-                                   "material models easier."
+                                   "material models easier. This is useful, for example, when wanting to "
+                                   "use the melting parameterization of the ``melt simple'' model (which has "
+                                   "a relatively simple viscosity model that only allows for a "
+                                   "temperature- but not strain rate-dependent viscosity) with a more "
+                                   "realistic viscosity model such as that provided by the "
+                                   "``diffusion dislocation'' model."
                                    "\n\n"
                                    "Specifically, this material model works by allowing to specify "
                                    "the name of another material model for each coefficient that material "

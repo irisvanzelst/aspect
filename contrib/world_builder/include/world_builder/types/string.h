@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -17,14 +17,18 @@
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#ifndef _world_feature_types_string_h
-#define _world_feature_types_string_h
+#ifndef WORLD_BUILDER_TYPES_STRING_H
+#define WORLD_BUILDER_TYPES_STRING_H
 
-#include <world_builder/types/interface.h>
+#include <vector>
+
+#include "world_builder/types/interface.h"
 
 
 namespace WorldBuilder
 {
+  class Parameters;
+
   namespace Types
   {
 
@@ -34,23 +38,23 @@ namespace WorldBuilder
      * the returned temperature or composition of the temperature and composition
      * functions of this class will be.
      */
-    class String : public Interface
+    class String final: public Interface
     {
       public:
         /**
          * constructor
          */
-        String(const std::string default_value);
+        String(std::string default_value);
 
         /**
          * constructor
          */
-        String(const std::string default_value, const std::string restricted_value);
+        String(std::string default_value, const std::string &restricted_value);
 
         /**
          * constructor
          */
-        String(const std::string default_value, const std::vector<std::string> &restricted_values);
+        String(std::string default_value, std::vector<std::string> restricted_values);
 
         /**
          * constructor
@@ -64,31 +68,36 @@ namespace WorldBuilder
         String(std::string value, std::string default_value, std::string description);
 
         /**
+         * Copy constructor
+         */
+        String(String const &other);
+
+        /**
          * Destructor
          */
-        ~String();
+        ~String() final;
 
         /**
          * Todo
          */
-        virtual
         void write_schema(Parameters &prm,
                           const std::string &name,
-                          const std::string &documentation) const;
-
-        /**
-         * clone
-         */
-        virtual
-        std::unique_ptr<Interface> clone() const;
+                          const std::string &documentation) const override final;
 
 
         std::string value;
         std::string default_value;
         std::string description;
         std::vector<std::string> restricted_values;
+
+
+      protected:
+        String *clone_impl() const override final
+        {
+          return new String(*this);
+        };
     };
-  }
-}
+  } // namespace Types
+} // namespace WorldBuilder
 
 #endif

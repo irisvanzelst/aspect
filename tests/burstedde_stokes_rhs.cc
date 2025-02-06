@@ -1,3 +1,23 @@
+/*
+  Copyright (C) 2022 - 2024 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
 #include <aspect/material_model/simple.h>
 #include <aspect/boundary_velocity/interface.h>
 #include <aspect/postprocess/interface.h>
@@ -29,8 +49,6 @@ namespace aspect
    */
   namespace BursteddeBenchmark
   {
-    using namespace dealii;
-
     namespace AnalyticSolutions
     {
       Tensor<1,3>
@@ -78,8 +96,8 @@ namespace aspect
             beta_(beta)
           {}
 
-          virtual void vector_value (const Point< dim >   &pos,
-                                     Vector< double >   &values) const
+          virtual void vector_value (const Point<dim>   &pos,
+                                     Vector<double>   &values) const
           {
             Assert (dim == 3, ExcNotImplemented());
             Assert (values.size() >= 4, ExcInternalError());
@@ -170,16 +188,16 @@ namespace aspect
         {
 
           MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>
-          *force = out.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim> >();
+          *force = out.template get_additional_output<MaterialModel::AdditionalMaterialOutputsStokesRHS<dim>>();
 
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
               const Point<dim> &p = in.position[i];
 
               const double x=p[0];
               const double y=p[1];
               const double z=p[2];
-              const double mu=exp(1. - beta * (x*(1.-x)+y*(1.-y) + z*(1.-z)));
+              const double mu=std::exp(1. - beta * (x*(1.-x)+y*(1.-y) + z*(1.-z)));
 
               out.viscosities[i] = mu;
               out.thermal_conductivities[i] = 0.0;
@@ -208,20 +226,20 @@ namespace aspect
 
 
 
-                  force->rhs_u[i][0] = ((y*z+3.*std::pow(x,2)*std::pow(y,3)*z)- mu*(2.+6.*x*y))
-                                       -dmudx*(2.+4.*x+2.*y+6.*std::pow(x,2)*y)
-                                       -dmudy*(x+std::pow(x,3)+y+2.*x*std::pow(y,2))
+                  force->rhs_u[i][0] = ((y*z+3.*Utilities::fixed_power<2>(x)*Utilities::fixed_power<3>(y)*z)- mu*(2.+6.*x*y))
+                                       -dmudx*(2.+4.*x+2.*y+6.*Utilities::fixed_power<2>(x)*y)
+                                       -dmudy*(x+Utilities::fixed_power<3>(x)+y+2.*x*Utilities::fixed_power<2>(y))
                                        -dmudz*(-3.*z-10.*x*y*z);
 
-                  force->rhs_u[i][1] = ((x*z+3.*std::pow(x,3)*std::pow(y,2)*z)- mu*(2.+2.*std::pow(x,2)+2.*std::pow(y,2)))
-                                       -dmudx*(x+std::pow(x,3)+y+2.*x*std::pow(y,2))
-                                       -dmudy*(2.+2.*x+4.*y+4.*std::pow(x,2)*y)
-                                       -dmudz*(-3.*z-5.*std::pow(x,2)*z);
+                  force->rhs_u[i][1] = ((x*z+3.*Utilities::fixed_power<3>(x)*Utilities::fixed_power<2>(y)*z)- mu*(2.+2.*Utilities::fixed_power<2>(x)+2.*Utilities::fixed_power<2>(y)))
+                                       -dmudx*(x+Utilities::fixed_power<3>(x)+y+2.*x*Utilities::fixed_power<2>(y))
+                                       -dmudy*(2.+2.*x+4.*y+4.*Utilities::fixed_power<2>(x)*y)
+                                       -dmudz*(-3.*z-5.*Utilities::fixed_power<2>(x)*z);
 
-                  force->rhs_u[i][2] = ((x*y+std::pow(x,3)*std::pow(y,3)) - mu*(-10.*y*z))
+                  force->rhs_u[i][2] = ((x*y+Utilities::fixed_power<3>(x)*Utilities::fixed_power<3>(y)) - mu*(-10.*y*z))
                                        -dmudx*(-3.*z-10.*x*y*z)
-                                       -dmudy*(-3.*z-5.*std::pow(x,2)*z)
-                                       -dmudz*(-4.-6.*x-6.*y-10.*std::pow(x,2)*y);
+                                       -dmudy*(-3.*z-5.*Utilities::fixed_power<2>(x)*z)
+                                       -dmudz*(-4.-6.*x-6.*y-10.*Utilities::fixed_power<2>(x)*y);
                 }
 
             }
@@ -267,14 +285,6 @@ namespace aspect
         parse_parameters (ParameterHandler &prm);
 
         /**
-         * @name Reference quantities
-         * @{
-         */
-        virtual double reference_viscosity () const;
-        /**
-         * @}
-         */
-        /**
          * Returns the viscosity value in the inclusion
          */
         double get_beta() const;
@@ -284,16 +294,6 @@ namespace aspect
          */
         double beta;
     };
-
-
-
-    template <int dim>
-    double
-    BursteddeMaterial<dim>::
-    reference_viscosity () const
-    {
-      return 1.;
-    }
 
 
 
@@ -377,13 +377,13 @@ namespace aspect
     std::pair<std::string,std::string>
     BursteddePostprocessor<dim>::execute (TableHandler &statistics)
     {
-      std::unique_ptr<Function<dim> > ref_func;
+      std::unique_ptr<Function<dim>> ref_func;
       {
         const BursteddeMaterial<dim> *
         material_model
           = dynamic_cast<const BursteddeMaterial<dim> *>(&this->get_material_model());
 
-        ref_func = std_cxx14::make_unique<AnalyticSolutions::FunctionBurstedde<dim>>(material_model->get_beta());
+        ref_func = std::make_unique<AnalyticSolutions::FunctionBurstedde<dim>>(material_model->get_beta());
       }
 
       const QGauss<dim> quadrature_formula (this->introspection().polynomial_degree.velocities+2);
@@ -468,4 +468,3 @@ namespace aspect
                                   "and reports the error. See the manual for more information.")
   }
 }
-

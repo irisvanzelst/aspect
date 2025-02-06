@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,15 +22,16 @@
 #define _aspect_material_model_steinberger_h
 
 #include <aspect/material_model/interface.h>
+#include <aspect/material_model/equation_of_state/thermodynamic_table_lookup.h>
+#include <aspect/material_model/thermal_conductivity/interface.h>
 
 #include <aspect/simulator_access.h>
+#include <deal.II/fe/component_mask.h>
 
 namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     namespace internal
     {
       /**
@@ -48,7 +49,7 @@ namespace aspect
            * Read in a file.
            */
           LateralViscosityLookup(const std::string &filename,
-                                 const MPI_Comm &comm);
+                                 const MPI_Comm comm);
 
           /**
            * Returns a temperature-dependency for a given depth.
@@ -87,7 +88,7 @@ namespace aspect
            * Constructor. Reads in the given file.
            */
           RadialViscosityLookup(const std::string &filename,
-                                const MPI_Comm &comm);
+                                const MPI_Comm comm);
 
           /**
            * Return the viscosity for a given depth.
@@ -116,7 +117,8 @@ namespace aspect
      * The viscosity of this model is based on the paper
      * Steinberger & Calderwood 2006: "Models of large-scale viscous flow in the
      * Earth's mantle with constraints from mineral physics and surface
-     * observations". The thermal conductivity is constant and the other
+     * observations". The thermal conductivity is constant or follows a
+     * pressure-temperature dependent approximation and the other
      * parameters are provided via lookup tables from the software PERPLEX.
      *
      * @ingroup MaterialModels
@@ -147,55 +149,6 @@ namespace aspect
                                   const std::vector<double>    &compositional_fields,
                                   const SymmetricTensor<2,dim> &strain_rate,
                                   const Point<dim>             &position) const;
-
-        virtual double density (const double temperature,
-                                const double pressure,
-                                const std::vector<double> &compositional_fields,
-                                const Point<dim> &position) const;
-
-        virtual double compressibility (const double temperature,
-                                        const double pressure,
-                                        const std::vector<double> &compositional_fields,
-                                        const Point<dim> &position) const;
-
-        virtual double specific_heat (const double temperature,
-                                      const double pressure,
-                                      const std::vector<double> &compositional_fields,
-                                      const Point<dim> &position) const;
-
-        virtual double thermal_conductivity (const double temperature,
-                                             const double pressure,
-                                             const std::vector<double> &compositional_fields,
-                                             const Point<dim> &position) const;
-
-        virtual double thermal_expansion_coefficient (const double      temperature,
-                                                      const double      pressure,
-                                                      const std::vector<double> &compositional_fields,
-                                                      const Point<dim> &position) const;
-
-        virtual double seismic_Vp (const double      temperature,
-                                   const double      pressure,
-                                   const std::vector<double> &compositional_fields,
-                                   const Point<dim> &position) const;
-
-        virtual double seismic_Vs (const double      temperature,
-                                   const double      pressure,
-                                   const std::vector<double> &compositional_fields,
-                                   const Point<dim> &position) const;
-
-        /**
-         * Returns the cell-wise averaged enthalpy derivatives for the evaluate
-         * function and postprocessors. The function returns two pairs, the
-         * first one represents the temperature derivative, the second one the
-         * pressure derivative. The first member of each pair is the derivative,
-         * the second one the number of vertex combinations the function could
-         * use to compute the derivative. The second member is useful to handle
-         * the case no suitable combination of vertices could be found (e.g.
-         * if the temperature and pressure on all vertices of the current
-         * cell is identical.
-         */
-        std::array<std::pair<double, unsigned int>,2>
-        enthalpy_derivative (const typename Interface<dim>::MaterialModelInputs &in) const;
         /**
          * @}
          */
@@ -219,18 +172,8 @@ namespace aspect
          */
 
         /**
-         * @name Reference quantities
-         * @{
-         */
-        double reference_viscosity () const override;
-        /**
-         * @}
-         */
-
-        /**
          * Function to compute the material properties in @p out given the
-         * inputs in @p in. If MaterialModelInputs.strain_rate has the length
-         * 0, then the viscosity does not need to be computed.
+         * inputs in @p in.
          */
         void
         evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
@@ -261,26 +204,57 @@ namespace aspect
 
 
       private:
-        bool interpolation;
-        bool latent_heat;
+        /**
+         * Whether the compositional fields representing mass fractions
+         * should be normalized to one when computing their fractions
+         * (if false), or whether there is an additional composition
+         * (the background field) that is not represented by a
+         * compositional field, and makes up the remaining fraction of
+         * material if the compositional fields add up to less than one
+         * at any given location (if true).
+         */
+        bool has_background_field;
+
+        /**
+         * Pointer to a composition mask, which is meant to be filled with
+         * one entry per compositional field that determines if this
+         * field is considered to represent a mass fractions (if the entry
+         * is set to true) or not (if set to false). This is needed for
+         * averaging of material properties.
+         */
+        std::unique_ptr<ComponentMask> composition_mask;
+
+        /**
+         * The thermodynamic lookup equation of state.
+         */
+        EquationOfState::ThermodynamicTableLookup<dim> equation_of_state;
+
+        /**
+         * Boolean describing whether to use the lateral average temperature
+         * for computing the viscosity, rather than the temperature
+         * on the reference adiabat.
+         */
         bool use_lateral_average_temperature;
 
         /**
-         * Reference viscosity. Only used for pressure scaling purposes
-         * and returned by the reference_viscosity() function.
+         * The thermal conductivity parametrization to use. This material
+         * model supports either a constant thermal conductivity or a
+         * pressure- and temperature-dependent thermal conductivity.
          */
-        double reference_eta;
+        std::unique_ptr<ThermalConductivity::Interface<dim>> thermal_conductivity;
 
         /**
-         * The value for thermal conductivity. This model only
-         * implements a constant thermal conductivity for the whole domain.
+         * Compositional prefactors with which to multiply the reference viscosity.
+         * Volume fractions are used to weight the prefactors according to the
+         * assigned viscosity averaging scheme.
          */
-        double thermal_conductivity_value;
+        std::vector<double> viscosity_prefactors;
+        MaterialUtilities::CompositionalAveragingOperation viscosity_averaging_scheme;
 
         /**
          * Information about lateral temperature averages.
          */
-        std::vector<double> avg_temp;
+        std::vector<double> average_temperature;
         unsigned int n_lateral_slices;
 
         /**
@@ -295,15 +269,8 @@ namespace aspect
          * Information about the location of data files.
          */
         std::string data_directory;
-        std::vector<std::string> material_file_names;
         std::string radial_viscosity_file_name;
         std::string lateral_viscosity_file_name;
-
-        /**
-         * List of pointers to objects that read and process data we get from
-         * Perplex files.
-         */
-        std::vector<std::unique_ptr<MaterialModel::MaterialUtilities::Lookup::PerplexReader> > material_lookup;
 
         /**
          * Pointer to an object that reads and processes data for the lateral
@@ -316,6 +283,17 @@ namespace aspect
          * viscosity profile.
          */
         std::unique_ptr<internal::RadialViscosityLookup> radial_viscosity_lookup;
+
+        /**
+         * A function that fills the prescribed additional outputs in the
+         * MaterialModelOutputs object that is handed over, if it exists,
+         * in this case, densities for the projected density approximation.
+         * Does nothing otherwise.
+         */
+        void fill_prescribed_outputs (const unsigned int i,
+                                      const std::vector<double> &volume_fractions,
+                                      const MaterialModel::MaterialModelInputs<dim> &in,
+                                      MaterialModel::MaterialModelOutputs<dim> &out) const;
 
     };
   }

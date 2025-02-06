@@ -2,20 +2,18 @@
 Number of active cells: 64 (on 4 levels)
 Number of degrees of freedom: 948 (578+81+289)
 
-*** Timestep 0:  t=0 seconds
+*** Timestep 0:  t=0 seconds, dt=0 seconds
    Solving temperature system... 0 iterations.
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 13+0 iterations.
+   Solving Stokes system (GMG)... 10+0 iterations.
 
    Postprocessing:
      RMS, max velocity:       6.6e-05 m/s, 0.000142 m/s
      Pressure min/avg/max:    -0.002306 Pa, 0.4999 Pa, 0.9979 Pa
      Temperature min/avg/max: 0 K, 0.8632 K, 2 K
 
-*** Timestep 1:  t=400 seconds
+*** Timestep 1:  t=400 seconds, dt=400 seconds
    Solving temperature system... 11 iterations.
-   Rebuilding Stokes preconditioner...
-   Solving Stokes system... 13+0 iterations.
+   Solving Stokes system (GMG)... 10+0 iterations.
 
    Postprocessing:
      RMS, max velocity:       6.46e-05 m/s, 0.000137 m/s
@@ -25,7 +23,4 @@ Number of degrees of freedom: 948 (578+81+289)
 Termination requested by criterion: end time
 
 
-+---------------------------------------------+------------+------------+
-+---------------------------------+-----------+------------+------------+
-+---------------------------------+-----------+------------+------------+
 

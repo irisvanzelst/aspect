@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2015 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2015 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -35,13 +35,13 @@ namespace aspect
     {
       /**
        * A class derived from DataPostprocessor that takes an output vector
-       * and computes a variable that represents the 3 or 6 independent
+       * and computes a variable that represents the 4 or 9
        * components (in 2d and 3d, respectively) of the strain rate tensor at every
-       * point. The strain rate is defined as $\varepsilon(\mathbf u)
-       * - \tfrac 13 \textrm{trace}\ \varepsilon(\mathbf u) \mathbf 1 =
-       * \varepsilon(\mathbf u) - \frac 13 (\nabla \cdot \mathbf u)
-       * \mathbf I$.  The second term is zero if the
-       * model is incompressible.
+       * point.
+       * The strain rate is defined as $\varepsilon(\mathbf u)$ in the incompressible
+       * case and as $\varepsilon(\mathbf u)
+       * - \tfrac 13 (\textrm{trace}\ \varepsilon(\mathbf u)) \mathbf I$
+       * in the compressible case.
        *
        * The member functions are all implementations of those declared in the
        * base class. See there for their meaning.
@@ -57,7 +57,7 @@ namespace aspect
 
           void
           evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                                std::vector<Vector<double> > &computed_quantities) const override;
+                                std::vector<Vector<double>> &computed_quantities) const override;
       };
     }
   }

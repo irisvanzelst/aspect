@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2022 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -24,13 +24,12 @@
 #include <aspect/material_model/interface.h>
 #include <aspect/material_model/rheology/constant_viscosity.h>
 #include <aspect/material_model/equation_of_state/linearized_incompressible.h>
+#include <aspect/material_model/thermal_conductivity/constant.h>
 
 namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     /**
      * A material model that consists of globally constant values for all
      * material parameters except the density, which depends linearly on the
@@ -47,8 +46,6 @@ namespace aspect
       public:
 
         bool is_compressible () const override;
-
-        double reference_viscosity () const override;
 
         void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
                       MaterialModel::MaterialModelOutputs<dim> &out) const override;
@@ -76,9 +73,7 @@ namespace aspect
          */
 
       private:
-        double reference_T;
-        double k_value;
-
+        ThermalConductivity::Constant<dim> thermal_conductivity;
         Rheology::ConstantViscosity constant_rheology;
         EquationOfState::LinearizedIncompressible<dim> equation_of_state;
     };

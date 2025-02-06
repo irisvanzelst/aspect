@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,8 +30,6 @@ namespace aspect
 {
   namespace BoundaryTraction
   {
-    using namespace dealii;
-
     /**
      * A class that implements traction boundary conditions by prescribing
      * the lithostatic pressure as the normal traction component.
@@ -58,8 +56,9 @@ namespace aspect
          * a second argument.
          */
         Tensor<1,dim>
-        traction (const Point<dim> &position,
-                  const Tensor<1,dim> &normal_vector) const override;
+        boundary_traction (const types::boundary_id boundary_indicator,
+                           const Point<dim> &position,
+                           const Tensor<1,dim> &normal_vector) const override;
 
 
         /**
@@ -105,7 +104,18 @@ namespace aspect
          */
         double interpolate_pressure (const Point<dim> &p) const;
 
+        /**
+         * The id of the bottom boundary.
+         */
+        types::boundary_id bottom_boundary_id;
 
+        /**
+         * Whether or not to prescribe the
+         * largest pressure in the lithostatic pressure
+         * profile at the bottom boundary independent of
+         * actual depth.
+         */
+        bool prescribe_constant_pressure_at_bottom_boundary;
     };
   }
 }

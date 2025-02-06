@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -36,8 +36,6 @@ namespace aspect
 {
   namespace DoneaHuertaBenchmark
   {
-    using namespace dealii;
-
     namespace AnalyticSolutions
     {
 
@@ -67,8 +65,8 @@ namespace aspect
             Function<dim>(dim+2)
           {}
 
-          virtual void vector_value (const Point< dim >   &pos,
-                                     Vector< double >   &values) const
+          void vector_value (const Point<dim>   &pos,
+                             Vector<double>   &values) const override
           {
             Assert (dim == 2, ExcNotImplemented());
             Assert (values.size() >= 4, ExcInternalError());
@@ -97,10 +95,9 @@ namespace aspect
         /**
          * Return the boundary velocity as a function of position.
          */
-        virtual
         Tensor<1,dim>
         boundary_velocity (const types::boundary_id ,
-                           const Point<dim> &position) const;
+                           const Point<dim> &position) const override;
     };
 
 
@@ -119,10 +116,10 @@ namespace aspect
          * @name Physical parameters used in the basic equations
          * @{
          */
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override
         {
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
               out.viscosities[i] = 1.;
               out.densities[i] = 1;
@@ -150,7 +147,7 @@ namespace aspect
          * (compressible Stokes) or as $\nabla \cdot \mathbf{u}=0$
          * (incompressible Stokes).
          */
-        virtual bool is_compressible () const;
+        bool is_compressible () const override;
         /**
          * @}
          */
@@ -164,30 +161,9 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
-
-
-
-        /**
-         * @name Reference quantities
-         * @{
-         */
-        virtual double reference_viscosity () const;
-        /**
-         * @}
-         */
+        parse_parameters (ParameterHandler &prm) override;
     };
-
-
-    template <int dim>
-    double
-    DoneaHuertaMaterial<dim>::
-    reference_viscosity () const
-    {
-      return 1.;
-    }
 
 
     template <int dim>
@@ -251,7 +227,7 @@ namespace aspect
     class DoneaHuertaGravity : public aspect::GravityModel::Interface<dim>
     {
       public:
-        virtual Tensor<1,dim> gravity_vector (const Point<dim> &pos) const;
+        Tensor<1,dim> gravity_vector (const Point<dim> &pos) const override;
     };
 
 
@@ -284,20 +260,16 @@ namespace aspect
         /**
          * Generate graphical output from the current solution.
          */
-        virtual
         std::pair<std::string,std::string>
-        execute (TableHandler &statistics);
+        execute (TableHandler &statistics) override;
     };
 
     template <int dim>
     std::pair<std::string,std::string>
     DoneaHuertaPostprocessor<dim>::execute (TableHandler &)
     {
-      std::unique_ptr<Function<dim> > ref_func;
-      {
-
-        ref_func.reset (new AnalyticSolutions::FunctionDoneaHuerta<dim>());
-      }
+      std::unique_ptr<Function<dim>> ref_func =
+        std::make_unique<AnalyticSolutions::FunctionDoneaHuerta<dim>>();
 
       const QGauss<dim> quadrature_formula (this->introspection().polynomial_degree.velocities+2);
 
@@ -386,4 +358,3 @@ namespace aspect
                                   "See the manual for more information.")
   }
 }
-

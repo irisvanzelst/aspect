@@ -1,5 +1,5 @@
 # This test is used to check if the shear heating
-# of melt, in particular advective transport of heat due 
+# of melt, in particular advective transport of heat due
 # to melt migration, is calculated correctly.
 # There is no in- or outflux of solid material, but melt
 # is allowed to flow in freely, so that it moves upwards
@@ -11,7 +11,7 @@
 # porosity \rho_f C_p (u_f \cdot \nabla T).
 #
 # With the material properties in this benchmark, both heating
-# rates should be the same (0.1), and the temperature should stay 
+# rates should be the same (0.1), and the temperature should stay
 # in equilibrium.
 #
 set Dimension                              = 2
@@ -20,8 +20,7 @@ set Nonlinear solver scheme                = iterated Advection and Stokes
 # There are several global variables that have to do with what
 # time system we want to work in and what the end time is.
 set Use years in output instead of seconds = false
-set End time                               = 0.1
-
+set End time                               = 0.03125
 set Pressure normalization                 = surface
 set Surface pressure                       = 0
 set Adiabatic surface temperature          = 1600
@@ -30,7 +29,6 @@ subsection Discretization
   set Stokes velocity polynomial degree    = 2
   set Composition polynomial degree        = 1
 end
-
 
 subsection Geometry model
   set Model name = box
@@ -48,14 +46,16 @@ end
 
 subsection Initial temperature model
   set Model name = function
-    subsection Function
-      set Function expression       = 1 + y
-      set Variable names        = x,y
+
+  subsection Function
+    set Function expression       = 1 + y
+    set Variable names        = x,y
   end
 end
 
 subsection Initial composition model
   set Model name = function
+
   subsection Function
     set Function expression = 0.1; 0.0
   end
@@ -63,39 +63,24 @@ end
 
 subsection Boundary temperature model
   set List of model names = initial temperature
+  set Fixed temperature boundary indicators   = 2
 end
 
 subsection Boundary composition model
   set List of model names = initial composition
+  set Fixed composition boundary indicators   = 2
 end
 
 subsection Boundary velocity model
+  set Tangential velocity boundary indicators = 0,1,2,3
+
   subsection Function
     set Function expression = 0;0
   end
 end
 
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
-subsection Boundary velocity model
-  set Tangential velocity boundary indicators = 0,1,2,3
-end
-
-subsection Boundary temperature model
-  set Fixed temperature boundary indicators   = 2
-end
-
-subsection Boundary composition model
-  set Fixed composition boundary indicators   = 2
-end
-
 subsection Melt settings
   set Include melt transport                  = true
-end
-
-subsection Melt settings
   set Heat advection by melt = true
 end
 
@@ -115,7 +100,6 @@ subsection Gravity model
   end
 end
 
-
 subsection Material model
   set Model name = melt global advection
 
@@ -123,7 +107,7 @@ subsection Material model
     set Reference solid density    = 2
     set Reference melt density     = 1
     set Reference specific heat    = 1
-    set Reference temperature      = 1600 
+    set Reference temperature      = 1600
     set Thermal conductivity       = 0.0
     set Surface solidus            = 10000.0
     set Include melting and freezing = false
@@ -136,13 +120,11 @@ subsection Material model
   end
 end
 
-
 subsection Mesh refinement
   set Initial global refinement                = 4
   set Initial adaptive refinement              = 0
   set Time steps between mesh refinement       = 0
 end
-
 
 subsection Postprocess
   set List of postprocessors = temperature statistics, heating statistics, visualization
@@ -150,7 +132,11 @@ subsection Postprocess
   subsection Visualization
     set Interpolate output = false
     set Time between graphical output = 0.01
-    set List of output variables = viscosity, density, nonadiabatic temperature, heating
+    set List of output variables = material properties, nonadiabatic temperature, heating
+
+    subsection Material properties
+      set List of material properties = viscosity, density
+    end
   end
 end
 

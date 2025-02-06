@@ -1,3 +1,23 @@
+/*
+  Copyright (C) 2022 - 2024 by the authors of the ASPECT code.
+
+  This file is part of ASPECT.
+
+  ASPECT is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2, or (at your option)
+  any later version.
+
+  ASPECT is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ASPECT; see the file LICENSE.  If not see
+  <http://www.gnu.org/licenses/>.
+*/
+
 #include <aspect/simulator.h>
 #include <aspect/simulator_access.h>
 #include <aspect/particle/property/interface.h>
@@ -24,7 +44,7 @@ namespace aspect
           initialize ()
           {
             std::cout << "initialize" << std::endl;
-            const Particle::Property::Manager<dim> &manager = this->get_particle_world().get_property_manager();
+            const Particle::Property::Manager<dim> &manager = this->get_particle_manager(this->get_particle_manager_index()).get_property_manager();
             post_initialized_info = manager.get_data_info().get_field_index_by_name("initial position");
             std::cout << "initial position: post_initialized_info = " << post_initialized_info << std::endl;
 
@@ -37,10 +57,10 @@ namespace aspect
           }
 
           virtual
-          std::vector<std::pair<std::string, unsigned int> >
+          std::vector<std::pair<std::string, unsigned int>>
           get_property_information() const
           {
-            return std::vector<std::pair<std::string, unsigned int> >();
+            return std::vector<std::pair<std::string, unsigned int>>();
           }
 
         private:

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -51,8 +51,6 @@ namespace aspect
    */
   namespace BursteddeBenchmark
   {
-    using namespace dealii;
-
     namespace AnalyticSolutions
     {
       Tensor<1,3>
@@ -96,8 +94,8 @@ namespace aspect
             beta_(beta)
           {}
 
-          virtual void vector_value (const Point< dim >   &pos,
-                                     Vector< double >   &values) const
+          void vector_value (const Point<dim>   &pos,
+                             Vector<double>   &values) const override
           {
             Assert (dim == 3, ExcNotImplemented());
             Assert (values.size() >= 4, ExcInternalError());
@@ -131,10 +129,9 @@ namespace aspect
         /**
          * Return the boundary velocity as a function of position.
          */
-        virtual
         Tensor<1,dim>
         boundary_velocity (const types::boundary_id boundary_indicator,
-                           const Point<dim> &position) const;
+                           const Point<dim> &position) const override;
 
       private:
         const double beta;
@@ -183,17 +180,17 @@ namespace aspect
     class BursteddeMaterial : public MaterialModel::Interface<dim>
     {
       public:
-        virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
-                              MaterialModel::MaterialModelOutputs<dim> &out) const
+        void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
+                      MaterialModel::MaterialModelOutputs<dim> &out) const override
         {
-          for (unsigned int i=0; i < in.position.size(); ++i)
+          for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
             {
               const Point<dim> &p = in.position[i];
 
               const double x=p[0];
               const double y=p[1];
               const double z=p[2];
-              const double mu=exp(1. - beta * (x*(1.-x)+y*(1.-y) + z*(1.-z)));
+              const double mu=std::exp(1. - beta * (x*(1.-x)+y*(1.-y) + z*(1.-z)));
 
               out.viscosities[i] = mu;
               out.thermal_conductivities[i] = 0.0;
@@ -238,7 +235,7 @@ namespace aspect
          * (compressible Stokes) or as $\nabla \cdot \mathbf{u}=0$
          * (incompressible Stokes).
          */
-        virtual bool is_compressible () const;
+        bool is_compressible () const override;
         /**
          * @}
          */
@@ -252,18 +249,9 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
          */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
-        /**
-         * @name Reference quantities
-         * @{
-         */
-        virtual double reference_viscosity () const;
-        /**
-         * @}
-         */
         /**
          * Returns the viscosity value in the inclusion
          */
@@ -274,16 +262,6 @@ namespace aspect
          */
         double beta;
     };
-
-
-
-    template <int dim>
-    double
-    BursteddeMaterial<dim>::
-    reference_viscosity () const
-    {
-      return 1.;
-    }
 
 
 
@@ -348,7 +326,7 @@ namespace aspect
     class BursteddeGravity : public aspect::GravityModel::Interface<dim>
     {
       public:
-        virtual Tensor<1,dim> gravity_vector (const Point<dim> &pos) const;
+        Tensor<1,dim> gravity_vector (const Point<dim> &pos) const override;
 
         static
         void
@@ -357,9 +335,8 @@ namespace aspect
         /**
          * Read the parameters this class declares from the parameter file.
         */
-        virtual
         void
-        parse_parameters (ParameterHandler &prm);
+        parse_parameters (ParameterHandler &prm) override;
 
         double beta;
     };
@@ -373,7 +350,7 @@ namespace aspect
       const double x=pos[0];
       const double y=pos[1];
       const double z=pos[2];
-      const double mu=exp(1. - beta * (x*(1.-x)+y*(1.-y) + z*(1.-z)));
+      const double mu=std::exp(1. - beta * (x*(1.-x)+y*(1.-y) + z*(1.-z)));
 
       const double dmudx=-beta*(1.-2.*x)*mu;
       const double dmudy=-beta*(1.-2.*y)*mu;
@@ -381,20 +358,20 @@ namespace aspect
 
       Tensor<1,dim> g;
 
-      g[0]=((y*z+3.*std::pow(x,2)*std::pow(y,3)*z)- mu*(2.+6.*x*y))
-           -dmudx*(2.+4.*x+2.*y+6.*std::pow(x,2)*y)
-           -dmudy*(x+std::pow(x,3)+y+2.*x*std::pow(y,2))
+      g[0]=((y*z+3.*Utilities::fixed_power<2>(x)*Utilities::fixed_power<3>(y)*z)- mu*(2.+6.*x*y))
+           -dmudx*(2.+4.*x+2.*y+6.*Utilities::fixed_power<2>(x)*y)
+           -dmudy*(x+Utilities::fixed_power<3>(x)+y+2.*x*Utilities::fixed_power<2>(y))
            -dmudz*(-3.*z-10.*x*y*z);
 
-      g[1]=((x*z+3.*std::pow(x,3)*std::pow(y,2)*z)- mu*(2.+2.*std::pow(x,2)+2.*std::pow(y,2)))
-           -dmudx*(x+std::pow(x,3)+y+2.*x*std::pow(y,2))
-           -dmudy*(2.+2.*x+4.*y+4.*std::pow(x,2)*y)
-           -dmudz*(-3.*z-5.*std::pow(x,2)*z);
+      g[1]=((x*z+3.*Utilities::fixed_power<3>(x)*Utilities::fixed_power<2>(y)*z)- mu*(2.+2.*Utilities::fixed_power<2>(x)+2.*Utilities::fixed_power<2>(y)))
+           -dmudx*(x+Utilities::fixed_power<3>(x)+y+2.*x*Utilities::fixed_power<2>(y))
+           -dmudy*(2.+2.*x+4.*y+4.*Utilities::fixed_power<2>(x)*y)
+           -dmudz*(-3.*z-5.*Utilities::fixed_power<2>(x)*z);
 
-      g[2]=((x*y+std::pow(x,3)*std::pow(y,3)) - mu*(-10.*y*z))
+      g[2]=((x*y+Utilities::fixed_power<3>(x)*Utilities::fixed_power<3>(y)) - mu*(-10.*y*z))
            -dmudx*(-3.*z-10.*x*y*z)
-           -dmudy*(-3.*z-5.*std::pow(x,2)*z)
-           -dmudz*(-4.-6.*x-6.*y-10.*std::pow(x,2)*y);
+           -dmudy*(-3.*z-5.*Utilities::fixed_power<2>(x)*z)
+           -dmudz*(-4.-6.*x-6.*y-10.*Utilities::fixed_power<2>(x)*y);
 
       return g;
     }
@@ -432,22 +409,21 @@ namespace aspect
         /**
          * Generate graphical output from the current solution.
          */
-        virtual
         std::pair<std::string,std::string>
-        execute (TableHandler &statistics);
+        execute (TableHandler &statistics) override;
     };
 
     template <int dim>
     std::pair<std::string,std::string>
     BursteddePostprocessor<dim>::execute (TableHandler &)
     {
-      std::unique_ptr<Function<dim> > ref_func;
+      std::unique_ptr<Function<dim>> ref_func;
       {
         const BursteddeMaterial<dim> &
         material_model
           = Plugins::get_plugin_as_type<const BursteddeMaterial<dim>>(this->get_material_model());
 
-        ref_func.reset (new AnalyticSolutions::FunctionBurstedde<dim>(material_model.get_beta()));
+        ref_func = std::make_unique<AnalyticSolutions::FunctionBurstedde<dim>>(material_model.get_beta());
       }
 
       const QGauss<dim> quadrature_formula (this->introspection().polynomial_degree.velocities+2);

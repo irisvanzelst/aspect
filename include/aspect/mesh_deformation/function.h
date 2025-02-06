@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the ASPECT code.
+  Copyright (C) 2018 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -29,11 +29,15 @@
 
 namespace aspect
 {
-  using namespace dealii;
-
   namespace MeshDeformation
   {
-    template<int dim>
+    /**
+     * A class that represents a mesh deformation function that can be
+     * prescribed on the boundary of the domain.
+     *
+     * @ingroup MeshDeformation
+     */
+    template <int dim>
     class BoundaryFunction : public Interface<dim>, public SimulatorAccess<dim>
     {
       public:
@@ -55,8 +59,13 @@ namespace aspect
          */
         void
         compute_velocity_constraints_on_boundary(const DoFHandler<dim> &mesh_deformation_dof_handler,
-                                                 ConstraintMatrix &mesh_velocity_constraints,
+                                                 AffineConstraints<double> &mesh_velocity_constraints,
                                                  const std::set<types::boundary_id> &boundary_id) const override;
+
+        /**
+         * Returns whether or not the plugin requires surface stabilization
+         */
+        bool needs_surface_stabilization () const override;
 
         /**
          * Declare parameters for the free surface handling.

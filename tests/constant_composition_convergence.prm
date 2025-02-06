@@ -5,7 +5,6 @@
 set Dimension                              = 2
 set End time                               = 2e8
 set Use years in output instead of seconds = true
-
 set Adiabatic surface temperature          = 1600
 
 subsection Geometry model
@@ -17,16 +16,8 @@ subsection Geometry model
   end
 end
 
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
 subsection Boundary velocity model
   set Tangential velocity boundary indicators = 0, 1, 2 ,3
-end
-
-subsection Boundary temperature model
-  set List of model names = initial temperature
 end
 
 subsection Boundary composition model
@@ -35,6 +26,7 @@ end
 
 subsection Gravity model
   set Model name = vertical
+
   subsection Vertical
     set Magnitude = 10.0
   end
@@ -52,7 +44,7 @@ end
 
 subsection Initial composition model
   set Model name = function
-  
+
   subsection Function
     set Function expression = 0.5
   end
@@ -74,16 +66,12 @@ subsection Material model
   end
 end
 
-
 subsection Mesh refinement
   set Initial adaptive refinement        = 0
   set Initial global refinement          = 3
   set Time steps between mesh refinement = 0
 end
 
-
 subsection Postprocess
   set List of postprocessors = velocity statistics, temperature statistics
 end
-
-

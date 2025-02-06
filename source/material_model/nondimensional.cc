@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -62,7 +62,7 @@ namespace aspect
     evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
              MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      for (unsigned int i=0; i < in.temperature.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const Point<dim> position = in.position[i];
           const double temperature_deviation = in.temperature[i] - this->get_adiabatic_conditions().temperature(position);
@@ -94,15 +94,6 @@ namespace aspect
     }
 
 
-    template <int dim>
-    double
-    Nondimensional<dim>::
-    reference_viscosity () const
-    {
-      return compressible ? (Di/Ra) : (1.0/Ra);
-    }
-
-
 
     template <int dim>
     bool
@@ -123,27 +114,28 @@ namespace aspect
         prm.enter_subsection("Nondimensional model");
         {
           prm.declare_entry ("Reference density", "1.0",
-                             Patterns::Double (0),
-                             "Reference density $\\rho_0$. Units: $kg/m^3$.");
+                             Patterns::Double (0.),
+                             "Reference density $\\rho_0$. "
+                             "Units: \\si{\\kilogram\\per\\meter\\cubed}.");
           prm.declare_entry ("Ra", "1e4",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Rayleigh number Ra");
           prm.declare_entry ("Di", "0.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Dissipation number. Pick 0.0 for incompressible "
                              "computations.");
           prm.declare_entry ("gamma", "1.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Grueneisen parameter");
           prm.declare_entry ("Reference specific heat", "1.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The value of the specific heat $C_p$. "
-                             "Units: $J/kg/K$.");
+                             "Units: \\si{\\joule\\per\\kelvin\\per\\kilogram}.");
           prm.declare_entry ("Viscosity temperature prefactor", "0.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Exponential temperature prefactor for viscosity.");
           prm.declare_entry ("Viscosity depth prefactor", "0.0",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "Exponential depth prefactor for viscosity.");
           prm.declare_entry ("Use TALA", "false",
                              Patterns::Bool (),
@@ -206,17 +198,17 @@ namespace aspect
                                    "to be used with the Boussinesq, ALA, or TALA "
                                    "formulation."
                                    "\n\n"
-                                   "The viscosity is defined as \\[\\eta = \\text{Di} / \\text{Ra} \\cdot \\exp(-b T' + c z)\\] "
-                                   "where $T'$ is the temperature variation from the "
+                                   "The viscosity is defined as $\\eta = \\text{Di} / \\text{Ra} \\cdot \\exp(-b T^\\prime + c z)$ "
+                                   "where $T^\\prime$ is the temperature variation from the "
                                    "adiabatic temperature, $z$ is the depth, "
                                    "$b$ is given by ``Viscosity temperature prefactor'', "
                                    "and $c$ by ``Viscosity depth prefactor''. If "
                                    "$\\text{Di}$ is zero, it will be replaced by 1.0 in $\\eta$."
                                    "\n\n"
-                                   "The density is defined as \\[\\rho = \\exp(\\text{Di}/\\gamma \\cdot z) "
-                                   " (1.0 - \\alpha T' + \\text{Di} \\gamma p'),\\] where "
+                                   "The density is defined as $\\rho = \\exp(\\text{Di}/\\gamma \\cdot z) "
+                                   " (1.0 - \\alpha T^\\prime + \\text{Di} \\gamma p^\\prime),$ where "
                                    "$\\alpha=\\text{Di}$ is the thermal expansion coefficient, "
-                                   "$\\gamma$ is the Grueneisen parameter, and $p'$ is "
+                                   "$\\gamma$ is the Grueneisen parameter, and $p^\\prime$ is "
                                    "the pressure variation from the adiabatic "
                                    "pressure. The pressure dependent term is not present "
                                    "if ``TALA'' is enabled.")

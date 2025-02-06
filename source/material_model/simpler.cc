@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2023 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -36,14 +36,6 @@ namespace aspect
     }
 
     template <int dim>
-    double
-    Simpler<dim>::
-    reference_viscosity () const
-    {
-      return constant_rheology.compute_viscosity();
-    }
-
-    template <int dim>
     void
     Simpler<dim>::
     evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
@@ -52,7 +44,9 @@ namespace aspect
       // The Simpler model does not depend on composition
       EquationOfStateOutputs<dim> eos_outputs (1);
 
-      for (unsigned int i=0; i<in.position.size(); ++i)
+      thermal_conductivity.evaluate(in,out);
+
+      for (unsigned int i=0; i<in.n_evaluation_points(); ++i)
         {
           equation_of_state.evaluate(in, i, eos_outputs);
 
@@ -60,7 +54,6 @@ namespace aspect
           out.densities[i] = eos_outputs.densities[0];
           out.thermal_expansion_coefficients[i] = eos_outputs.thermal_expansion_coefficients[0];
           out.specific_heat[i] = eos_outputs.specific_heat_capacities[0];
-          out.thermal_conductivities[i] = k_value;
           out.compressibilities[i] = eos_outputs.compressibilities[0];
 
           for (unsigned int c=0; c<in.composition[i].size(); ++c)
@@ -79,15 +72,7 @@ namespace aspect
         prm.enter_subsection("Simpler model");
         {
           EquationOfState::LinearizedIncompressible<dim>::declare_parameters (prm);
-
-          prm.declare_entry ("Reference temperature", "293",
-                             Patterns::Double (0),
-                             "The reference temperature $T_0$. The reference temperature is used "
-                             "in the density formula. Units: $\\si{K}$.");
-          prm.declare_entry ("Thermal conductivity", "4.7",
-                             Patterns::Double (0),
-                             "The value of the thermal conductivity $k$. "
-                             "Units: $W/m/K$.");
+          ThermalConductivity::Constant<dim>::declare_parameters (prm);
           Rheology::ConstantViscosity::declare_parameters(prm,5e24);
         }
         prm.leave_subsection();
@@ -106,10 +91,7 @@ namespace aspect
         prm.enter_subsection("Simpler model");
         {
           equation_of_state.parse_parameters (prm);
-
-          reference_T                = prm.get_double ("Reference temperature");
-          k_value                    = prm.get_double ("Thermal conductivity");
-
+          thermal_conductivity.parse_parameters (prm);
           constant_rheology.parse_parameters(prm);
         }
         prm.leave_subsection();
@@ -135,12 +117,10 @@ namespace aspect
                                    "simpler",
                                    "A material model that has constant values "
                                    "except for density, which depends linearly on temperature: "
-                                   "\\begin{align}"
-                                   "  \\rho(p,T) &= \\left(1-\\alpha (T-T_0)\\right)\\rho_0."
-                                   "\\end{align}"
+                                   "$ \\rho(p,T) = \\left(1-\\alpha (T-T_0)\\right)\\rho_0.$ "
                                    "\n\n"
-                                   "\\note{This material model fills the role the ``simple'' material "
+                                   "Note that this material model fills the role the ``simple'' material "
                                    "model was originally intended to fill, before the latter acquired "
-                                   "all sorts of complicated temperature and compositional dependencies.}")
+                                   "all sorts of complicated temperature and compositional dependencies. ")
   }
 }

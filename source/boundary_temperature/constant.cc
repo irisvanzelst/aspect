@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -128,18 +128,17 @@ namespace aspect
             = Utilities::split_string_list(prm.get ("Boundary indicator to temperature mappings"));
 
 
-          for (std::vector<std::string>::const_iterator it = x_boundary_temperatures.begin();
-               it != x_boundary_temperatures.end(); ++it)
+          for (const auto &boundary_id_string : x_boundary_temperatures)
             {
               // each entry has the format (white space is optional):
               // <id> : <value (might have spaces)>
-              const std::vector<std::string> parts = Utilities::split_string_list (*it, ':');
+              const std::vector<std::string> parts = Utilities::split_string_list (boundary_id_string, ':');
 
               AssertThrow (parts.size() == 2,
                            ExcMessage (std::string("Invalid entry trying to describe boundary "
                                                    "temperatures. Each entry needs to have the form "
                                                    "<boundary_id : name>, "
-                                                   "but there is an entry of the form <") + *it + ">"));
+                                                   "but there is an entry of the form <") + boundary_id_string + ">"));
 
               types::boundary_id boundary_id;
               try
@@ -151,9 +150,15 @@ namespace aspect
                 {
                   AssertThrow (false, ExcMessage ("While parsing the entry <Boundary temperature model/Constant>, "
                                                   "there was an error. Specifically, "
-                                                  "the conversion function complained as follows: "
+                                                  "the conversion function complained as follows:\n\n"
                                                   + error));
                 }
+
+              AssertThrow((this->get_fixed_temperature_boundary_indicators().find(boundary_id) != this->get_fixed_temperature_boundary_indicators().end()),
+                          ExcMessage ("You have indicated a temperature mapping for "
+                                      "boundary indicator " + parts[0] + ", but that "
+                                      "indicator isn't in the "
+                                      "list of Fixed temperature boundary indicators."));
 
               AssertThrow (boundary_temperatures.find(boundary_id) == boundary_temperatures.end(),
                            ExcMessage ("Boundary indicator <" + Utilities::int_to_string(boundary_id) +

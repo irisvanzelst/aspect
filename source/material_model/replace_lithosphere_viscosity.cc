@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -51,7 +51,7 @@ namespace aspect
     {
       base_model->evaluate(in,out);
 
-      for (unsigned int i=0; i < in.position.size(); ++i)
+      for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
         {
           const double depth = this->SimulatorAccess<dim>::get_geometry_model().depth(in.position[i]);
           const double lab_depth = lab_depth_lookup.get_lab_depth(in.position[i]);
@@ -79,7 +79,7 @@ namespace aspect
                             "``Material models/Model name'' parameter. See the documentation for "
                             "more information.");
           prm.declare_entry ("Lithosphere viscosity", "1e23",
-                             Patterns::Double (0),
+                             Patterns::Double (0.),
                              "The viscosity within lithosphere, applied above"
                              "the maximum lithosphere depth.");
 
@@ -109,7 +109,7 @@ namespace aspect
           // create the base model and initialize its SimulatorAccess base
           // class; it will get a chance to read its parameters below after we
           // leave the current section
-          base_model.reset(create_material_model<dim>(prm.get("Base model")));
+          base_model = create_material_model<dim>(prm.get("Base model"));
           if (SimulatorAccess<dim> *sim = dynamic_cast<SimulatorAccess<dim>*>(base_model.get()))
             sim->initialize_simulator (this->get_simulator());
 
@@ -136,12 +136,10 @@ namespace aspect
     }
 
     template <int dim>
-    double
-    ReplaceLithosphereViscosity<dim>::
-    reference_viscosity() const
+    void
+    ReplaceLithosphereViscosity<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
     {
-      /* Return reference viscosity from base model*/
-      return base_model->reference_viscosity();
+      base_model->create_additional_named_outputs(out);
     }
   }
 }
@@ -166,7 +164,7 @@ namespace aspect
                                    "\n"
                                    "Note the required format of the input data file: The first lines may "
                                    "contain any number of comments if they begin with ‘#’, but one of these lines "
-                                   "needs to contain the number of grid points in each dimension as for example"
+                                   "needs to contain the number of grid points in each dimension as for example "
                                    "‘# POINTS: 3 3’. For a spherical model, the order of the data columns has to be"
                                    "'phi', 'theta','depth (m)', where phi is the  azimuth angle and theta is the "
                                    "polar angle measured positive from the north pole.")

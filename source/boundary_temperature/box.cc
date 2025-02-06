@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2021 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -70,7 +70,7 @@ namespace aspect
         return *std::max_element(temperature_, temperature_+2*dim);
       else
         {
-          double max = -std::numeric_limits<double>::max();
+          double max = std::numeric_limits<double>::lowest();
           for (const auto id : fixed_boundary_ids)
             max = std::max(max,temperature_[id]);
           return max;
@@ -85,26 +85,26 @@ namespace aspect
       {
         prm.enter_subsection("Box");
         {
-          prm.declare_entry ("Left temperature", "1",
+          prm.declare_entry ("Left temperature", "1.",
                              Patterns::Double (),
-                             "Temperature at the left boundary (at minimal $x$-value). Units: $\\si{K}$.");
-          prm.declare_entry ("Right temperature", "0",
+                             "Temperature at the left boundary (at minimal $x$-value). Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Right temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the right boundary (at maximal $x$-value). Units: $\\si{K}$.");
-          prm.declare_entry ("Bottom temperature", "0",
+                             "Temperature at the right boundary (at maximal $x$-value). Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Bottom temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the bottom boundary (at minimal $z$-value). Units: $\\si{K}$.");
-          prm.declare_entry ("Top temperature", "0",
+                             "Temperature at the bottom boundary (at minimal $z$-value). Units: \\si{\\kelvin}.");
+          prm.declare_entry ("Top temperature", "0.",
                              Patterns::Double (),
-                             "Temperature at the top boundary (at maximal $x$-value). Units: $\\si{K}$.");
+                             "Temperature at the top boundary (at maximal $x$-value). Units: \\si{\\kelvin}.");
           if (dim==3)
             {
-              prm.declare_entry ("Front temperature", "0",
+              prm.declare_entry ("Front temperature", "0.",
                                  Patterns::Double (),
-                                 "Temperature at the front boundary (at minimal $y$-value). Units: $\\si{K}$.");
-              prm.declare_entry ("Back temperature", "0",
+                                 "Temperature at the front boundary (at minimal $y$-value). Units: \\si{\\kelvin}.");
+              prm.declare_entry ("Back temperature", "0.",
                                  Patterns::Double (),
-                                 "Temperature at the back boundary (at maximal $y$-value). Units: $\\si{K}$.");
+                                 "Temperature at the back boundary (at maximal $y$-value). Units: \\si{\\kelvin}.");
             }
         }
         prm.leave_subsection ();

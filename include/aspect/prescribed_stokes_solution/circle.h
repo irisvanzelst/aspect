@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -30,8 +30,6 @@ namespace aspect
 {
   namespace PrescribedStokesSolution
   {
-    using namespace dealii;
-
     /**
      * A class that implements a circular, divergence-free flow field
      * around the origin of the coordinate system.

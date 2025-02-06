@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2018 by the authors of the World Builder code.
+  Copyright (C) 2018-2024 by the authors of the World Builder code.
 
   This file is part of the World Builder.
 
@@ -16,11 +16,10 @@
    You should have received a copy of the GNU Lesser General Public License
    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
+#ifndef WORLD_BUILDER_ASSERT_H_
+#define WORLD_BUILDER_ASSERT_H_
 
-#include <iostream>
-#include <string>
 #include <sstream>
-#include <stdexcept>
 
 namespace WorldBuilder
 {
@@ -30,7 +29,7 @@ namespace WorldBuilder
       if (! (condition)) { \
           std::stringstream smessage; \
           smessage << "Assert `" #condition "` failed in " << __FILE__ \
-                   << " at line " << __LINE__ << ": " << message << std::endl; \
+                   << " at line " << __LINE__ << ": " << message << std::endl << std::endl << "Error not recoverable, aborting program."; \
           throw std::runtime_error(smessage.str()); \
         } \
     } while (false)
@@ -43,7 +42,7 @@ namespace WorldBuilder
       if (! (condition)) { \
           std::stringstream smessage; \
           smessage << "AssertThrow `" #condition "` failed in " << __FILE__ \
-                   << " at line " << __LINE__ << ": " << message << std::endl; \
+                   << " at line " << __LINE__ << ": " << message << std::endl << std::endl << "Error not recoverable, aborting program."; \
           throw std::runtime_error(smessage.str()); \
         } \
     } while (false)
@@ -59,4 +58,6 @@ namespace WorldBuilder
           throw std::runtime_error(smessage.str()); \
         } \
     } while (false)
-}
+} // namespace WorldBuilder
+
+#endif

@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2017 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -41,6 +41,12 @@ namespace aspect
     class HeatFluxDensities : public Interface<dim>, public ::aspect::SimulatorAccess<dim>
     {
       public:
+        /**
+         * Initialize the postprocessor.
+         */
+        void
+        initialize() override;
+
         /**
          * Evaluate.
          */

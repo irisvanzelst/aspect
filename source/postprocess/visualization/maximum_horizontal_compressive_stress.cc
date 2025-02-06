@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2016 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2016 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -31,10 +31,19 @@ namespace aspect
     namespace VisualizationPostprocessors
     {
       template <int dim>
+      MaximumHorizontalCompressiveStress<dim>::
+      MaximumHorizontalCompressiveStress ()
+        :
+        Interface<dim>("Pa")
+      {}
+
+
+
+      template <int dim>
       void
       MaximumHorizontalCompressiveStress<dim>::
       evaluate_vector_field(const DataPostprocessorInputs::Vector<dim> &input_data,
-                            std::vector<Vector<double> > &computed_quantities) const
+                            std::vector<Vector<double>> &computed_quantities) const
       {
         const unsigned int n_quadrature_points = input_data.solution_values.size();
         Assert (computed_quantities.size() == n_quadrature_points,    ExcInternalError());
@@ -48,6 +57,9 @@ namespace aspect
         MaterialModel::MaterialModelOutputs<dim> out(n_quadrature_points,
                                                      this->n_compositional_fields());
 
+        // We do not need to compute anything but the viscosity
+        in.requested_properties = MaterialModel::MaterialProperties::viscosity;
+
         // Compute the viscosity...
         this->get_material_model().evaluate(in, out);
 
@@ -56,7 +68,7 @@ namespace aspect
         for (unsigned int q=0; q<n_quadrature_points; ++q)
           {
             const SymmetricTensor<2,dim> strain_rate = in.strain_rate[q];
-            const SymmetricTensor<2,dim> compressible_strain_rate
+            const SymmetricTensor<2,dim> deviatoric_strain_rate
               = (this->get_material_model().is_compressible()
                  ?
                  strain_rate - 1./3 * trace(strain_rate) * unit_symmetric_tensor<dim>()
@@ -73,7 +85,7 @@ namespace aspect
             //
             // note that the *compressive* stress is simply the
             // negative stress
-            const SymmetricTensor<2,dim> compressive_stress = -2*eta*compressible_strain_rate;
+            const SymmetricTensor<2,dim> compressive_stress = -2*eta*deviatoric_strain_rate;
 
             // then find a set of (dim-1) horizontal, unit-length, mutually orthogonal vectors
             const Tensor<1,dim> gravity = this->get_gravity_model().gravity_vector (in.position[q]);
@@ -122,14 +134,14 @@ namespace aspect
                   // then check the sign of f''(alpha) to determine
                   // which of the two stationary points is the maximum
                   const double f_double_prime_1 = 2*(b-a)*std::cos(2*alpha_1)
-                                                  - 2*c*sin(2*alpha_1);
+                                                  - 2*c*std::sin(2*alpha_1);
                   double alpha;
                   if (f_double_prime_1 < 0)
                     alpha = alpha_1;
                   else
                     {
                       Assert (/* f_double_prime_2 = */
-                        2*(b-a)*std::cos(2*alpha_2) - 2*c*sin(2*alpha_2) <= 0,
+                        2*(b-a)*std::cos(2*alpha_2) - 2*c*std::sin(2*alpha_2) <= 0,
                         ExcInternalError());
                       alpha = alpha_2;
                     }
@@ -253,7 +265,7 @@ namespace aspect
                                                   "    +(\\mathbf v^T \\sigma_c \\mathbf v)(\\sin\\alpha)^2."
                                                   "\\end{align*}"
                                                   "\n\n"
-                                                  "The maximum of $f(\\alpha)$ is attained where $f'(\\alpha)=0$. "
+                                                  "The maximum of $f(\\alpha)$ is attained where $f^\\prime(\\alpha)=0$. "
                                                   "Evaluating the derivative and using trigonometric identities, "
                                                   "one finds that $\\alpha$ has to satisfy the equation "
                                                   "\\begin{align*}"
@@ -271,7 +283,7 @@ namespace aspect
                                                   "$\\alpha_2=\\alpha_1+\\frac{\\pi}{2}$, one of which will "
                                                   "correspond to a minimum and the other to a maximum of "
                                                   "$f(\\alpha)$. One checks the sign of "
-                                                  "$f''(\\alpha)=-2(\\mathbf u^T \\sigma_c \\mathbf u - "
+                                                  "$f^{\\prime\\prime}(\\alpha)=-2(\\mathbf u^T \\sigma_c \\mathbf u - "
                                                   "\\mathbf v^T \\sigma_c \\mathbf v)\\cos(2\\alpha) "
                                                   "- 2 (\\mathbf u^T \\sigma_c \\mathbf v) \\sin(2\\alpha)$ for "
                                                   "each of these to determine the $\\alpha$ that maximizes "
@@ -346,6 +358,8 @@ namespace aspect
                                                   "    is zero at these points.}"
                                                   "  \\label{fig:max-horizontal-compressive-stress}"
                                                   "\\end{figure}"
+                                                  "\n\n"
+                                                  "Physical units: \\si{\\pascal}."
                                                  )
     }
   }

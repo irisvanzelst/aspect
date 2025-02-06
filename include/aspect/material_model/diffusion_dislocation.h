@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2018 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -23,13 +23,12 @@
 
 #include <aspect/material_model/interface.h>
 #include <aspect/simulator_access.h>
+#include <aspect/material_model/rheology/diffusion_dislocation.h>
 
 namespace aspect
 {
   namespace MaterialModel
   {
-    using namespace dealii;
-
     /**
      * A material model based on a viscous rheology including diffusion and
      * dislocation creep.
@@ -96,8 +95,6 @@ namespace aspect
          */
         bool is_compressible () const override;
 
-        double reference_viscosity () const override;
-
         static
         void
         declare_parameters (ParameterHandler &prm);
@@ -106,48 +103,20 @@ namespace aspect
         parse_parameters (ParameterHandler &prm) override;
 
       private:
+        /**
+         * Object for computing viscous creep viscosities.
+         */
+        Rheology::DiffusionDislocation<dim> diffusion_dislocation;
 
         double reference_T;
 
-        /**
-         * Defining a minimum strain rate stabilizes the viscosity calculation,
-         * which involves a division by the strain rate. Units: $1/s$.
-         */
-        double min_strain_rate;
-        double min_visc;
-        double max_visc;
-        double veff_coefficient;
-        double ref_visc;
-
-        double strain_rate_residual_threshold;
-        unsigned int stress_max_iteration_number;
-
         double thermal_diffusivity;
         double heat_capacity;
-        double grain_size;
 
         std::vector<double> densities;
         std::vector<double> thermal_expansivities;
 
         MaterialUtilities::CompositionalAveragingOperation viscosity_averaging;
-
-        std::vector<double>
-        calculate_isostrain_viscosities ( const std::vector<double> &volume_fractions,
-                                          const double &pressure,
-                                          const double &temperature,
-                                          const SymmetricTensor<2,dim> &strain_rate) const;
-
-
-        std::vector<double> prefactors_diffusion;
-        std::vector<double> stress_exponents_diffusion;
-        std::vector<double> grain_size_exponents_diffusion;
-        std::vector<double> activation_energies_diffusion;
-        std::vector<double> activation_volumes_diffusion;
-
-        std::vector<double> prefactors_dislocation;
-        std::vector<double> stress_exponents_dislocation;
-        std::vector<double> activation_energies_dislocation;
-        std::vector<double> activation_volumes_dislocation;
 
     };
 

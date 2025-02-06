@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2017 by the authors of the ASPECT code.
+  Copyright (C) 2017 - 2024 by the authors of the ASPECT code.
 
  This file is part of ASPECT.
 
@@ -19,9 +19,6 @@
  */
 
 #include <aspect/particle/interpolator/harmonic_average.h>
-#include <aspect/particle/property/interface.h>
-#include <aspect/postprocess/particles.h>
-#include <aspect/simulator.h>
 
 #include <deal.II/grid/grid_tools.h>
 #include <deal.II/base/signaling_nan.h>
@@ -33,36 +30,14 @@ namespace aspect
     namespace Interpolator
     {
       template <int dim>
-      std::vector<std::vector<double> >
+      std::vector<std::vector<double>>
       HarmonicAverage<dim>::properties_at_points(const ParticleHandler<dim> &particle_handler,
-                                                 const std::vector<Point<dim> > &positions,
+                                                 const std::vector<Point<dim>> &positions,
                                                  const ComponentMask &selected_properties,
                                                  const typename parallel::distributed::Triangulation<dim>::active_cell_iterator &cell) const
       {
-        typename parallel::distributed::Triangulation<dim>::active_cell_iterator found_cell;
-
-        if (cell == typename parallel::distributed::Triangulation<dim>::active_cell_iterator())
-          {
-            // We can not simply use one of the points as input for find_active_cell_around_point
-            // because for vertices of mesh cells we might end up getting ghost_cells as return value
-            // instead of the local active cell. So make sure we are well in the inside of a cell.
-            Assert(positions.size() > 0,
-                   ExcMessage("The particle property interpolator was not given any "
-                              "positions to evaluate the particle properties at."));
-
-            const Point<dim> approximated_cell_midpoint = std::accumulate (positions.begin(), positions.end(), Point<dim>())
-                                                          / static_cast<double> (positions.size());
-
-            found_cell =
-              (GridTools::find_active_cell_around_point<> (this->get_mapping(),
-                                                           this->get_triangulation(),
-                                                           approximated_cell_midpoint)).first;
-          }
-        else
-          found_cell = cell;
-
         const typename ParticleHandler<dim>::particle_iterator_range particle_range =
-          particle_handler.particles_in_cell(found_cell);
+          particle_handler.particles_in_cell(cell);
 
         const unsigned int n_particles = std::distance(particle_range.begin(),particle_range.end());
         const unsigned int n_particle_properties = particle_handler.n_properties_per_particle();
@@ -75,14 +50,17 @@ namespace aspect
 
         if (n_particles > 0)
           {
-            for (typename ParticleHandler<dim>::particle_iterator particle = particle_range.begin();
-                 particle != particle_range.end(); ++particle)
+            for (const auto &particle : particle_range)
               {
-                const ArrayView<const double> &particle_properties = particle->get_properties();
+                const ArrayView<const double> &particle_properties = particle.get_properties();
 
                 for (unsigned int i = 0; i < particle_properties.size(); ++i)
                   if (selected_properties[i])
-                    cell_properties[i] += 1/particle_properties[i];
+                    {
+                      AssertThrow(particle_properties[i] > 0,
+                                  ExcMessage ("All particle property values must be greater than 0 for harmonic averaging!"));
+                      cell_properties[i] += 1/particle_properties[i];
+                    }
               }
 
             for (unsigned int i = 0; i < n_particle_properties; ++i)
@@ -96,7 +74,7 @@ namespace aspect
         else
           {
             std::vector<typename parallel::distributed::Triangulation<dim>::active_cell_iterator> neighbors;
-            GridTools::get_active_neighbors<parallel::distributed::Triangulation<dim> >(found_cell,neighbors);
+            GridTools::get_active_neighbors<parallel::distributed::Triangulation<dim>>(cell,neighbors);
 
             unsigned int non_empty_neighbors = 0;
             for (unsigned int i=0; i<neighbors.size(); ++i)
@@ -107,13 +85,17 @@ namespace aspect
                   continue;
 
                 const std::vector<double> neighbor_properties = properties_at_points(particle_handler,
-                                                                                     std::vector<Point<dim> > (1,neighbors[i]->center(true,false)),
+                                                                                     std::vector<Point<dim>> (1,neighbors[i]->center(true,false)),
                                                                                      selected_properties,
                                                                                      neighbors[i])[0];
 
                 for (unsigned int i = 0; i < n_particle_properties; ++i)
                   if (selected_properties[i])
-                    cell_properties[i] += 1/neighbor_properties[i];
+                    {
+                      AssertThrow(neighbor_properties[i] > 0,
+                                  ExcMessage ("All particle property values must be greater than 0 for harmonic averaging!"));
+                      cell_properties[i] += 1/neighbor_properties[i];
+                    }
 
                 ++non_empty_neighbors;
               }
@@ -137,7 +119,7 @@ namespace aspect
 
           }
 
-        return std::vector<std::vector<double> > (positions.size(),cell_properties);
+        return std::vector<std::vector<double>> (positions.size(),cell_properties);
       }
 
 
@@ -146,19 +128,12 @@ namespace aspect
       void
       HarmonicAverage<dim>::declare_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
-        {
-          prm.enter_subsection("Particles");
-          {
-            prm.declare_entry ("Allow cells without particles", "false",
-                               Patterns::Bool (),
-                               "By default, every cell needs to contain particles to use this interpolator "
-                               "plugin. If this parameter is set to true, cells are allowed to have no particles, "
-                               "in which case the interpolator will return 0 for the cell's properties.");
-          }
-          prm.leave_subsection ();
-        }
-        prm.leave_subsection ();
+        prm.declare_entry ("Allow cells without particles", "false",
+                           Patterns::Bool (),
+                           "By default, every cell needs to contain particles to use this interpolator "
+                           "plugin. If this parameter is set to true, cells are allowed to have no particles. "
+                           "In case both the current cell and its neighbors are empty, "
+                           "the interpolator will return 0 for the current cell's properties.");
       }
 
 
@@ -167,15 +142,7 @@ namespace aspect
       void
       HarmonicAverage<dim>::parse_parameters (ParameterHandler &prm)
       {
-        prm.enter_subsection("Postprocess");
-        {
-          prm.enter_subsection("Particles");
-          {
-            allow_cells_without_particles = prm.get_bool("Allow cells without particles");
-          }
-          prm.leave_subsection ();
-        }
-        prm.leave_subsection ();
+        allow_cells_without_particles = prm.get_bool("Allow cells without particles");
       }
     }
   }
@@ -193,7 +160,10 @@ namespace aspect
                                             "harmonic average",
                                             "Return the harmonic average of all particle properties in the "
                                             "given cell. If the cell contains no particles, return the "
-                                            "harmonic average of the properties in the neighboring cells.")
+                                            "harmonic average of the properties in the neighboring cells. "
+                                            "In case the neighboring cells are also empty, and 'Allow cells "
+                                            "without particles' is set to true, the interpolator returns 0. "
+                                            "Otherwise, an exception is thrown. ")
     }
   }
 }

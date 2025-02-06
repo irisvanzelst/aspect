@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -22,6 +22,7 @@
 #include <aspect/geometry_model/initial_topography_model/function.h>
 #include <aspect/geometry_model/interface.h>
 #include <aspect/geometry_model/box.h>
+#include <aspect/geometry_model/two_merged_boxes.h>
 #include <aspect/geometry_model/sphere.h>
 #include <aspect/geometry_model/spherical_shell.h>
 #include <aspect/geometry_model/chunk.h>
@@ -40,31 +41,55 @@ namespace aspect
       coordinate_system(Utilities::Coordinates::CoordinateSystem::cartesian)
     {}
 
+
+
     template <int dim>
     double
     Function<dim>::
     value (const Point<dim-1> &surface_point) const
     {
+      // In a first step, create a global 'dim'-dimensional point that we can pass to the
+      // function expression as input -- because the function is a dim-dimensional
+      // function.
+      //
+      // Different geometry models pass the surface point in in different ways.
+      // In the following, we will first normalize the input to a dim-dimensional
+      // point with a dummy vertical/radial coordinate that, one would hope,
+      // the function expression will then simply ignore.
       Point<dim> global_point;
-      if (Plugins::plugin_type_matches<GeometryModel::Box<dim> >(this->get_geometry_model()))
+
+      if (Plugins::plugin_type_matches<GeometryModel::Box<dim>>(this->get_geometry_model()) ||
+          Plugins::plugin_type_matches<const GeometryModel::TwoMergedBoxes<dim>> (this->get_geometry_model()))
         {
-          // No need to set the vertical coordinate correctly,
-          // because it will be thrown away in get_data_component anyway
-          for (unsigned int d=0; d<dim-1; d++)
+          for (unsigned int d=0; d<dim-1; ++d)
             global_point[d] = surface_point[d];
+
+          // Now for the vertical component:
+          global_point[dim-1] = 0;
+
+          // The point as it is would have to be translated into a different
+          // coordinate system if that was requested in the input file.
+          // This is not currently implemented.
+          Assert (coordinate_system == Utilities::Coordinates::CoordinateSystem::cartesian,
+                  ExcNotImplemented());
         }
-      else if (Plugins::plugin_type_matches<GeometryModel::Sphere<dim> >(this->get_geometry_model()) ||
-               Plugins::plugin_type_matches<GeometryModel::SphericalShell<dim> >(this->get_geometry_model()) ||
-               Plugins::plugin_type_matches<GeometryModel::Chunk<dim> >(this->get_geometry_model()) )
+      else if (Plugins::plugin_type_matches<GeometryModel::Sphere<dim>>(this->get_geometry_model()) ||
+               Plugins::plugin_type_matches<GeometryModel::SphericalShell<dim>>(this->get_geometry_model()) ||
+               Plugins::plugin_type_matches<GeometryModel::Chunk<dim>>(this->get_geometry_model()) )
         {
-          // No need to set the radial coordinate correctly,
-          // because it will be thrown away in get_data_component anyway
           std::array<double, dim> point;
           point[0] = 6371000.0;
-          for (unsigned int d=0; d<dim-1; d++)
+          for (unsigned int d=0; d<dim-1; ++d)
             point[d+1] = surface_point[d];
 
           global_point = Utilities::Coordinates::spherical_to_cartesian_coordinates<dim>(point);
+
+          // The point as it is would have to be translated into a different
+          // coordinate system (or, perhaps, better just left in the spherical
+          // coordinates we received) if that was requested in the input file.
+          // This is not currently implemented.
+          Assert (coordinate_system == Utilities::Coordinates::CoordinateSystem::cartesian,
+                  ExcNotImplemented());
         }
       else
         AssertThrow(false, ExcNotImplemented());
@@ -80,7 +105,7 @@ namespace aspect
     Function<dim>::
     max_topography () const
     {
-      return 0;
+      return max_topo;
     }
 
 
@@ -94,8 +119,8 @@ namespace aspect
         {
           prm.enter_subsection("Function");
           {
-            prm.declare_entry ("Maximum topography value", "2000",
-                               Patterns::Double (0),
+            prm.declare_entry ("Maximum topography value", "2000.",
+                               Patterns::Double (0.),
                                "The maximum value the topography given by "
                                "the function can take. ");
             prm.declare_entry ("Coordinate system", "cartesian",
@@ -103,7 +128,7 @@ namespace aspect
                                "A selection that determines the assumed coordinate "
                                "system for the function variables. Allowed values "
                                "are `cartesian' and `spherical'. `spherical' coordinates "
-                               "are interpreted as r,phi or r,phi,theta in 2D/3D "
+                               "are interpreted as r,phi or r,phi,theta in 2d/3d "
                                "respectively with theta being the polar angle. ");
 
             Functions::ParsedFunction<dim>::declare_parameters (prm, 1);
@@ -160,6 +185,6 @@ namespace aspect
     ASPECT_REGISTER_INITIAL_TOPOGRAPHY_MODEL(Function,
                                              "function",
                                              "Implementation of a model in which the initial topography "
-                                             "is described by a function in cartesian or spherical coordinates. ")
+                                             "is described by a function in Cartesian or spherical coordinates. ")
   }
 }

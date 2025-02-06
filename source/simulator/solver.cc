@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -23,18 +23,12 @@
 #include <aspect/global.h>
 #include <aspect/melt.h>
 #include <aspect/stokes_matrix_free.h>
+#include <aspect/mesh_deformation/interface.h>
 
 #include <deal.II/base/signaling_nan.h>
 #include <deal.II/lac/solver_gmres.h>
-
-#ifdef ASPECT_USE_PETSC
+#include <deal.II/lac/solver_bicgstab.h>
 #include <deal.II/lac/solver_cg.h>
-#else
-#include <deal.II/lac/trilinos_solver.h>
-#endif
-
-#include <deal.II/lac/pointer_matrix.h>
-
 #include <deal.II/fe/fe_values.h>
 
 namespace aspect
@@ -173,7 +167,7 @@ namespace aspect
     /**
      * Implement the block Schur preconditioner for the Stokes system.
      */
-    template <class PreconditionerA, class PreconditionerMp>
+    template <class AInvOperator, class SInvOperator>
     class BlockSchurPreconditioner : public Subscriptor
     {
       public:
@@ -184,23 +178,14 @@ namespace aspect
          * @param Spre The matrix whose blocks are used in the definition of
          *     the preconditioning of the Stokes matrix, i.e. containing approximations
          *     of the A and S blocks.
-         * @param Mppreconditioner Preconditioner object for the Schur complement,
-         *     typically chosen as the mass matrix.
-         * @param Apreconditioner Preconditioner object for the matrix A.
-         * @param do_solve_A A flag indicating whether we should actually solve with
-         *     the matrix $A$, or only apply one preconditioner step with it.
-         * @param A_block_tolerance The tolerance for the CG solver which computes
-         *     the inverse of the A block.
-         * @param S_block_tolerance The tolerance for the CG solver which computes
-         *     the inverse of the S block (Schur complement matrix).
+         * @param S_inverse_operator Approximation for the inverse Schur complement,
+         * can be chosen as the mass matrix.
+         * @param A_inv_operator Preconditioner object for the matrix A.
          **/
-        BlockSchurPreconditioner (const LinearAlgebra::BlockSparseMatrix  &S,
-                                  const LinearAlgebra::BlockSparseMatrix  &Spre,
-                                  const PreconditionerMp                     &Mppreconditioner,
-                                  const PreconditionerA                      &Apreconditioner,
-                                  const bool                                  do_solve_A,
-                                  const double                                A_block_tolerance,
-                                  const double                                S_block_tolerance);
+        BlockSchurPreconditioner (const LinearAlgebra::BlockSparseMatrix     &S,
+                                  const LinearAlgebra::BlockSparseMatrix     &Spre,
+                                  const SInvOperator                         &S_inverse_operator,
+                                  const AInvOperator                         &A_inv_operator);
 
         /**
          * Matrix vector product with this preconditioner object.
@@ -208,119 +193,44 @@ namespace aspect
         void vmult (LinearAlgebra::BlockVector       &dst,
                     const LinearAlgebra::BlockVector &src) const;
 
-        unsigned int n_iterations_A() const;
-        unsigned int n_iterations_S() const;
-
       private:
         /**
          * References to the various matrix object this preconditioner works on.
          */
         const LinearAlgebra::BlockSparseMatrix &stokes_matrix;
         const LinearAlgebra::BlockSparseMatrix &stokes_preconditioner_matrix;
-        const PreconditionerMp                    &mp_preconditioner;
-        const PreconditionerA                     &a_preconditioner;
-
-        /**
-         * Whether to actually invert the $\tilde A$ part of the preconditioner matrix
-         * or to just apply a single preconditioner step with it.
-         **/
-        const bool do_solve_A;
-        mutable unsigned int n_iterations_A_;
-        mutable unsigned int n_iterations_S_;
-        const double A_block_tolerance;
-        const double S_block_tolerance;
+        const SInvOperator                     &S_inv_operator;
+        const AInvOperator                     &A_inv_operator;
     };
 
 
-    template <class PreconditionerA, class PreconditionerMp>
-    BlockSchurPreconditioner<PreconditionerA, PreconditionerMp>::
-    BlockSchurPreconditioner (const LinearAlgebra::BlockSparseMatrix  &S,
-                              const LinearAlgebra::BlockSparseMatrix  &Spre,
-                              const PreconditionerMp                     &Mppreconditioner,
-                              const PreconditionerA                      &Apreconditioner,
-                              const bool                                  do_solve_A,
-                              const double                                A_block_tolerance,
-                              const double                                S_block_tolerance)
+    template <class AInvOperator, class SInvOperator>
+    BlockSchurPreconditioner<AInvOperator, SInvOperator>::
+    BlockSchurPreconditioner (const LinearAlgebra::BlockSparseMatrix     &S,
+                              const LinearAlgebra::BlockSparseMatrix     &Spre,
+                              const SInvOperator                         &S_inv_operator,
+                              const AInvOperator                         &A_inv_operator)
       :
-      stokes_matrix     (S),
-      stokes_preconditioner_matrix     (Spre),
-      mp_preconditioner (Mppreconditioner),
-      a_preconditioner  (Apreconditioner),
-      do_solve_A        (do_solve_A),
-      n_iterations_A_(0),
-      n_iterations_S_(0),
-      A_block_tolerance(A_block_tolerance),
-      S_block_tolerance(S_block_tolerance)
+      stokes_matrix (S),
+      stokes_preconditioner_matrix (Spre),
+      S_inv_operator (S_inv_operator),
+      A_inv_operator (A_inv_operator)
     {}
 
-    template <class PreconditionerA, class PreconditionerMp>
-    unsigned int
-    BlockSchurPreconditioner<PreconditionerA, PreconditionerMp>::
-    n_iterations_A() const
-    {
-      return n_iterations_A_;
-    }
 
-    template <class PreconditionerA, class PreconditionerMp>
-    unsigned int
-    BlockSchurPreconditioner<PreconditionerA, PreconditionerMp>::
-    n_iterations_S() const
-    {
-      return n_iterations_S_;
-    }
 
-    template <class PreconditionerA, class PreconditionerMp>
+    template <class AInvOperator, class SInvOperator>
     void
-    BlockSchurPreconditioner<PreconditionerA, PreconditionerMp>::
+    BlockSchurPreconditioner<AInvOperator, SInvOperator>::
     vmult (LinearAlgebra::BlockVector       &dst,
            const LinearAlgebra::BlockVector &src) const
     {
       LinearAlgebra::Vector utmp(src.block(0));
 
-      // first solve with the bottom left block, which we have built
+      // first solve with the bottom right block, which we have built
       // as a mass matrix with the inverse of the viscosity
       {
-        SolverControl solver_control(1000, src.block(1).l2_norm() * S_block_tolerance);
-
-#ifdef ASPECT_USE_PETSC
-        SolverCG<LinearAlgebra::Vector> solver(solver_control);
-#else
-        TrilinosWrappers::SolverCG solver(solver_control);
-#endif
-        // Trilinos reports a breakdown
-        // in case src=dst=0, even
-        // though it should return
-        // convergence without
-        // iterating. We simply skip
-        // solving in this case.
-        if (src.block(1).l2_norm() > 1e-50)
-          {
-            try
-              {
-                dst.block(1) = 0.0;
-                solver.solve(stokes_preconditioner_matrix.block(1,1),
-                             dst.block(1), src.block(1),
-                             mp_preconditioner);
-                n_iterations_S_ += solver_control.last_step();
-              }
-            // if the solver fails, report the error from processor 0 with some additional
-            // information about its location, and throw a quiet exception on all other
-            // processors
-            catch (const std::exception &exc)
-              {
-                if (Utilities::MPI::this_mpi_process(src.block(0).get_mpi_communicator()) == 0)
-                  AssertThrow (false,
-                               ExcMessage (std::string("The iterative (bottom right) solver in BlockSchurPreconditioner::vmult "
-                                                       "did not converge to a tolerance of "
-                                                       + Utilities::to_string(solver_control.tolerance()) +
-                                                       ". It reported the following error:\n\n")
-                                           +
-                                           exc.what()))
-                  else
-                    throw QuietException();
-              }
-          }
-
+        S_inv_operator.vmult(dst.block(1),src.block(1));
         dst.block(1) *= -1.0;
       }
 
@@ -331,88 +241,363 @@ namespace aspect
         utmp += src.block(0);
       }
 
-      // now either solve with the top left block (if do_solve_A==true)
+      A_inv_operator.vmult(dst.block(0), utmp);
+    }
+
+
+    /**
+      * This class is used in the implementation of the right preconditioner
+      * as an approximation for the inverse of the velocity (A) block.
+      * This operator can either just apply the preconditioner (AMG)
+      * or perform an inner CG solve with the same preconditioner.
+      */
+    template <class PreconditionerA>
+    class InverseVelocityBlock
+    {
+      public:
+        /**
+         * Constructor.
+         * @param matrix The matrix that contains A (from the system matrix)
+         * @param preconditioner The preconditioner to be used
+         * @param do_solve_A A flag indicating whether we should actually solve with
+         *     the matrix $A$, or only apply one preconditioner step with it.
+         * @param A_block_is_symmetric A flag indicating whether the matrix $A$ is symmetric.
+         * @param A_block_tolerance The tolerance for the CG solver which computes
+         *     the inverse of the A block.
+        */
+        InverseVelocityBlock(const TrilinosWrappers::SparseMatrix &matrix,
+                             const PreconditionerA &preconditioner,
+                             const bool do_solve_A,
+                             const bool A_block_is_symmetric,
+                             const double solver_tolerance);
+
+        void vmult(TrilinosWrappers::MPI::Vector &dst,
+                   const TrilinosWrappers::MPI::Vector &src) const;
+
+        unsigned int n_iterations() const;
+
+      private:
+        mutable unsigned int n_iterations_;
+        const TrilinosWrappers::SparseMatrix &matrix;
+        const PreconditionerA &preconditioner;
+        const bool do_solve_A;
+        const bool A_block_is_symmetric;
+        const double solver_tolerance;
+    };
+
+
+
+    template <class PreconditionerA>
+    InverseVelocityBlock<PreconditionerA>::InverseVelocityBlock(
+      const TrilinosWrappers::SparseMatrix &matrix,
+      const PreconditionerA &preconditioner,
+      const bool do_solve_A,
+      const bool A_block_is_symmetric,
+      const double solver_tolerance)
+      : n_iterations_ (0),
+        matrix (matrix),
+        preconditioner (preconditioner),
+        do_solve_A (do_solve_A),
+        A_block_is_symmetric (A_block_is_symmetric),
+        solver_tolerance (solver_tolerance)
+    {}
+
+
+
+    template <class PreconditionerA>
+    void InverseVelocityBlock<PreconditionerA>::vmult(TrilinosWrappers::MPI::Vector &dst,
+                                                      const TrilinosWrappers::MPI::Vector &src) const
+    {
+      // Either solve with the top left block
       // or just apply one preconditioner sweep (for the first few
       // iterations of our two-stage outer GMRES iteration)
       if (do_solve_A == true)
         {
-          SolverControl solver_control(10000, utmp.l2_norm() * A_block_tolerance);
-#ifdef ASPECT_USE_PETSC
-          SolverCG<LinearAlgebra::Vector> solver(solver_control);
-#else
-          TrilinosWrappers::SolverCG solver(solver_control);
-#endif
+          SolverControl solver_control(10000, src.l2_norm() * solver_tolerance);
+          PrimitiveVectorMemory<LinearAlgebra::Vector> mem;
+
           try
             {
-              dst.block(0) = 0.0;
-              solver.solve(stokes_matrix.block(0,0), dst.block(0), utmp,
-                           a_preconditioner);
-              n_iterations_A_ += solver_control.last_step();
+              dst = 0.0;
+
+              if (A_block_is_symmetric)
+                {
+                  SolverCG<LinearAlgebra::Vector> solver(solver_control, mem);
+                  solver.solve(matrix, dst, src, preconditioner);
+                }
+              else
+                {
+                  // Use BiCGStab for non-symmetric matrices.
+                  // BiCGStab can also solve indefinite systems if necessary.
+                  // Do not compute the exact residual, as this
+                  // is more expensive, and we only need an approximate solution.
+                  SolverBicgstab<LinearAlgebra::Vector>
+                  solver(solver_control,
+                         mem,
+                         SolverBicgstab<LinearAlgebra::Vector>::AdditionalData(/*exact_residual=*/ false));
+                  solver.solve(matrix, dst, src, preconditioner);
+                }
+              n_iterations_ += solver_control.last_step();
+            }
+          catch (const std::exception &exc)
+            {
+              // if the solver fails, report the error from processor 0 with some additional
+              // information about its location, and throw a quiet exception on all other
+              // processors
+              Utilities::throw_linear_solver_failure_exception("iterative (top left) solver",
+                                                               "BlockSchurPreconditioner::vmult",
+                                                               std::vector<SolverControl> {solver_control},
+                                                               exc,
+                                                               src.get_mpi_communicator());
+            }
+        }
+      else
+        {
+          preconditioner.vmult (dst, src);
+          n_iterations_ += 1;
+        }
+    }
+
+
+
+    template <class PreconditionerA>
+    unsigned int InverseVelocityBlock<PreconditionerA>::n_iterations() const
+    {
+      return n_iterations_;
+    }
+
+    /**
+     * Base class for Schur Complement operators.
+    */
+    class SchurComplementOperator
+    {
+      public:
+        virtual ~SchurComplementOperator() = default;
+
+        virtual void vmult(TrilinosWrappers::MPI::Vector &dst,
+                           const TrilinosWrappers::MPI::Vector &src) const=0;
+        virtual unsigned int n_iterations() const=0;
+
+    };
+
+    /**
+     * This class approximates the Schur Complement inverse operator
+     * by S^{-1} = (BC^{-1}B^T)^{-1}(BC^{-1}AD^{-1}B^T)(BD^{-1}B^T)^{-1},
+     * which is known as the weighted BFBT method. Here,
+     * C^{-1} and D^{-1} are chosen to be the inverse weighted lumped
+     * velocity mass matrix.
+    */
+    template <class PreconditionerMp>
+    class WeightedBFBT: public SchurComplementOperator
+    {
+      public:
+        /**
+         * Constructor.
+         * @param mp_matrix Matrix approximating S to be used in the inner solve
+         * @param mp_preconditioner The preconditioner for @p mp_matrix
+         * @param solver_tolerance The relative solver tolerance for the inner solve
+         * @param inverse_lumped_mass_matrix Lumped mass matrix associated with the velocity block
+         * @param system_matrix Sparse block matrix storing the Stokes system of the form
+         * [A B^T
+         *  B 0].
+         */
+        WeightedBFBT(const TrilinosWrappers::SparseMatrix &mp_matrix,
+                     const PreconditionerMp &mp_preconditioner,
+                     const double solver_tolerance,
+                     const TrilinosWrappers::MPI::Vector &inverse_lumped_mass_matrix,
+                     const TrilinosWrappers::BlockSparseMatrix &system_matrix);
+
+        void vmult(TrilinosWrappers::MPI::Vector &dst,
+                   const TrilinosWrappers::MPI::Vector &src) const override;
+
+        unsigned int n_iterations() const override;
+
+      private:
+        mutable unsigned int n_iterations_;
+        const TrilinosWrappers::SparseMatrix &mp_matrix;
+        const PreconditionerMp &mp_preconditioner;
+        const double solver_tolerance;
+        const TrilinosWrappers::MPI::Vector  &inverse_lumped_mass_matrix;
+        const TrilinosWrappers::BlockSparseMatrix &system_matrix;
+    };
+
+    template <class PreconditionerMp>
+    WeightedBFBT<PreconditionerMp>::WeightedBFBT(
+      const TrilinosWrappers::SparseMatrix &mp_matrix,
+      const PreconditionerMp &mp_preconditioner,
+      const double solver_tolerance,
+      const TrilinosWrappers::MPI::Vector &inverse_lumped_mass_matrix,
+      const TrilinosWrappers::BlockSparseMatrix &system_matrix)
+      : n_iterations_ (0),
+        mp_matrix (mp_matrix),
+        mp_preconditioner (mp_preconditioner),
+        solver_tolerance (solver_tolerance),
+        inverse_lumped_mass_matrix(inverse_lumped_mass_matrix),
+        system_matrix (system_matrix)
+    {}
+
+
+    template <class PreconditionerMp>
+    void WeightedBFBT<PreconditionerMp>::vmult(TrilinosWrappers::MPI::Vector &dst,
+                                               const TrilinosWrappers::MPI::Vector &src) const
+    {
+      SolverControl solver_control(1000, src.l2_norm() * solver_tolerance);
+      PrimitiveVectorMemory<LinearAlgebra::Vector> mem;
+      SolverCG<LinearAlgebra::Vector> solver(solver_control, mem);
+
+      try
+        {
+          TrilinosWrappers::MPI::Vector utmp;
+          utmp.reinit(inverse_lumped_mass_matrix);
+          TrilinosWrappers::MPI::Vector ptmp;
+          ptmp.reinit(src);
+          TrilinosWrappers::MPI::Vector wtmp;
+          wtmp.reinit(inverse_lumped_mass_matrix);
+          {
+            SolverControl solver_control(5000, 1e-6 * src.l2_norm(), false, true);
+            SolverCG<TrilinosWrappers::MPI::Vector> solver(solver_control);
+            //Solve with Schur Complement approximation
+            solver.solve(mp_matrix,
+                         ptmp,
+                         src,
+                         mp_preconditioner);
+            n_iterations_ += solver_control.last_step();
+            system_matrix.block(0,1).vmult(utmp,ptmp);
+
+            utmp.scale(inverse_lumped_mass_matrix);
+            system_matrix.block(0,0).vmult(wtmp,utmp);
+            wtmp.scale(inverse_lumped_mass_matrix);
+            system_matrix.block(1,0).vmult(ptmp,wtmp);
+
+            dst=0;
+            solver.solve(mp_matrix,
+                         dst,
+                         ptmp,
+                         mp_preconditioner);
+            n_iterations_ += solver_control.last_step();
+          }
+        }
+      // if the solver fails, report the error from processor 0 with some additional
+      // information about its location, and throw a quiet exception on all other
+      // processors
+      catch (const std::exception &exc)
+        {
+          Utilities::throw_linear_solver_failure_exception("iterative (bottom right) solver",
+                                                           "BlockSchurPreconditioner::vmult",
+                                                           std::vector<SolverControl> {solver_control},
+                                                           exc,
+                                                           src.get_mpi_communicator());
+        }
+    }
+
+
+
+    template <class PreconditionerMp>
+    unsigned int WeightedBFBT<PreconditionerMp>::n_iterations() const
+    {
+      return n_iterations_;
+    }
+
+
+
+    /**
+      * This class is used in the implementation of the right preconditioner.
+      * Here, the Schur complement is approximated by
+      * the pressure mass matrix weighted by the inverse of viscosity and
+      * the inverse is computed with a CG solve preconditioned by
+      * PreconditionerMp passed to the constructor.
+      */
+    template <class PreconditionerMp>
+    class InverseWeightedMassMatrix: public SchurComplementOperator
+    {
+      public:
+        /**
+         * Constructor.
+         * @param mp_matrix Matrix approximating S to be used in the inner solve
+         * @param mp_preconditioner The preconditioner for @p mp_matrix
+         * @param solver_tolerance The relative solver tolerance for the inner solve
+         */
+        InverseWeightedMassMatrix(const TrilinosWrappers::SparseMatrix &mp_matrix,
+                                  const PreconditionerMp &mp_preconditioner,
+                                  const double solver_tolerance);
+
+        void vmult(TrilinosWrappers::MPI::Vector &dst,
+                   const TrilinosWrappers::MPI::Vector &src) const override;
+
+        unsigned int n_iterations() const override;
+
+      private:
+        mutable unsigned int n_iterations_;
+        const TrilinosWrappers::SparseMatrix &mp_matrix;
+        const PreconditionerMp &mp_preconditioner;
+        const double solver_tolerance;
+    };
+
+
+
+    template <class PreconditionerMp>
+    InverseWeightedMassMatrix<PreconditionerMp>::InverseWeightedMassMatrix(
+      const TrilinosWrappers::SparseMatrix &mp_matrix,
+      const PreconditionerMp &mp_preconditioner,
+      const double solver_tolerance)
+      : n_iterations_ (0),
+        mp_matrix (mp_matrix),
+        mp_preconditioner (mp_preconditioner),
+        solver_tolerance (solver_tolerance)
+    {}
+
+
+
+    template <class PreconditionerMp>
+    void InverseWeightedMassMatrix<PreconditionerMp>::vmult(TrilinosWrappers::MPI::Vector &dst,
+                                                            const TrilinosWrappers::MPI::Vector &src) const
+    {
+      // Trilinos reports a breakdown in case src=dst=0, even though it should return
+      // convergence without iterating. We simply skip solving in this case.
+      if (src.l2_norm() > 1e-50)
+        {
+          SolverControl solver_control(1000, src.l2_norm() * solver_tolerance);
+          PrimitiveVectorMemory<LinearAlgebra::Vector> mem;
+          SolverCG<LinearAlgebra::Vector> solver(solver_control, mem);
+          try
+            {
+              dst = 0.0;
+              solver.solve(mp_matrix,
+                           dst,
+                           src,
+                           mp_preconditioner);
+              n_iterations_ += solver_control.last_step();
             }
           // if the solver fails, report the error from processor 0 with some additional
           // information about its location, and throw a quiet exception on all other
           // processors
           catch (const std::exception &exc)
             {
-              if (Utilities::MPI::this_mpi_process(src.block(0).get_mpi_communicator()) == 0)
-                AssertThrow (false,
-                             ExcMessage (std::string("The iterative (top left) solver in BlockSchurPreconditioner::vmult "
-                                                     "did not converge to a tolerance of "
-                                                     + Utilities::to_string(solver_control.tolerance()) +
-                                                     ". It reported the following error:\n\n")
-                                         +
-                                         exc.what()))
-                else
-                  throw QuietException();
+              Utilities::throw_linear_solver_failure_exception("iterative (bottom right) solver",
+                                                               "BlockSchurPreconditioner::vmult",
+                                                               std::vector<SolverControl> {solver_control},
+                                                               exc,
+                                                               src.get_mpi_communicator());
             }
         }
-      else
-        {
-          a_preconditioner.vmult (dst.block(0), utmp);
-          n_iterations_A_ += 1;
-        }
     }
 
-  }
 
-  namespace
-  {
-    void linear_solver_failed(const std::string &solver_name,
-                              const std::string output_filename,
-                              const std::vector<SolverControl> &solver_controls,
-                              const std::exception &exc)
+
+    template <class PreconditionerMp>
+    unsigned int InverseWeightedMassMatrix<PreconditionerMp>::n_iterations() const
     {
-      // output solver history
-      std::ofstream f((output_filename).c_str());
-
-      for (unsigned int i=0; i<solver_controls.size(); ++i)
-        {
-          if (i>0)
-            f << "\n";
-
-          // Only request the solver history if a history has actually been created
-          for (unsigned int j=0; j<solver_controls[i].get_history_data().size(); ++j)
-            f << j << " " << solver_controls[i].get_history_data()[j] << "\n";
-        }
-
-      f.close();
-
-      AssertThrow (false,
-                   ExcMessage ("The " + solver_name
-                               + " did not converge. It reported the following error:\n\n"
-                               +
-                               exc.what()
-                               + "\n The required residual for convergence is: " + std::to_string(solver_controls.front().tolerance())
-                               + ".\n See " + output_filename
-                               + " for convergence history."));
+      return n_iterations_;
     }
+
   }
+
+
 
   template <int dim>
   double Simulator<dim>::solve_advection (const AdvectionField &advection_field)
   {
-    double advection_solver_tolerance = -1;
-    unsigned int block_idx = advection_field.block_index(introspection);
+    const unsigned int block_idx = advection_field.block_index(introspection);
 
     std::string field_name = (advection_field.is_temperature()
                               ?
@@ -420,10 +605,7 @@ namespace aspect
                               :
                               introspection.name_for_compositional_index(advection_field.compositional_variable) + " composition");
 
-    if (advection_field.is_temperature())
-      advection_solver_tolerance = parameters.temperature_solver_tolerance;
-    else
-      advection_solver_tolerance = parameters.composition_solver_tolerance;
+    const double advection_solver_tolerance = (advection_field.is_temperature()) ? (parameters.temperature_solver_tolerance) : (parameters.composition_solver_tolerance);
 
     const double tolerance = std::max(1e-50,
                                       advection_solver_tolerance*system_rhs.block(block_idx).l2_norm());
@@ -458,7 +640,8 @@ namespace aspect
                             "but the right-hand side is nonzero."));
 
     LinearAlgebra::PreconditionILU preconditioner;
-    build_advection_preconditioner(advection_field, preconditioner);
+    // first build without diagonal strengthening:
+    build_advection_preconditioner(advection_field, preconditioner, 0.);
 
     TimerOutput::Scope timer (computing_timer, (advection_field.is_temperature() ?
                                                 "Solve temperature system" :
@@ -476,7 +659,7 @@ namespace aspect
       }
 
     // Create distributed vector (we need all blocks here even though we only
-    // solve for the current block) because only have a ConstraintMatrix
+    // solve for the current block) because only have a AffineConstraints<double>
     // for the whole system, current_linearization_point contains our initial guess.
     LinearAlgebra::BlockVector distributed_solution (
       introspection.index_sets.system_partitioning,
@@ -500,10 +683,26 @@ namespace aspect
     // solve the linear system:
     try
       {
-        solver.solve (system_matrix.block(block_idx,block_idx),
-                      distributed_solution.block(block_idx),
-                      system_rhs.block(block_idx),
-                      preconditioner);
+        try
+          {
+            solver.solve (system_matrix.block(block_idx,block_idx),
+                          distributed_solution.block(block_idx),
+                          system_rhs.block(block_idx),
+                          preconditioner);
+          }
+        catch (const std::exception &exc)
+          {
+            // Try rebuilding the preconditioner with diagonal strengthening. In general,
+            // this increases the number of iterations needed, but helps in rare situations,
+            // especially when SUPG is used.
+            pcout << "retrying linear solve with different preconditioner..." << std::endl;
+            build_advection_preconditioner(advection_field, preconditioner, 1e-5);
+            solver.solve (system_matrix.block(block_idx,block_idx),
+                          distributed_solution.block(block_idx),
+                          system_rhs.block(block_idx),
+                          preconditioner);
+          }
+
       }
     // if the solver fails, report the error from processor 0 with some additional
     // information about its location, and throw a quiet exception on all other
@@ -516,15 +715,13 @@ namespace aspect
                                       advection_field.compositional_variable,
                                       solver_control);
 
-        if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
-          {
-            linear_solver_failed("iterative advection solver",
-                                 parameters.output_directory+"solver_history.txt",
-                                 std::vector<SolverControl> {solver_control},
-                                 exc);
-          }
-        else
-          throw QuietException();
+
+        Utilities::throw_linear_solver_failure_exception("iterative advection solver",
+                                                         "Simulator::solve_advection",
+                                                         std::vector<SolverControl> {solver_control},
+                                                         exc,
+                                                         mpi_communicator,
+                                                         parameters.output_directory+"solver_history.txt");
       }
 
     // signal successful solver
@@ -541,14 +738,21 @@ namespace aspect
     pcout << solver_control.last_step()
           << " iterations." << std::endl;
 
-    if ((advection_field.is_temperature()
-         && parameters.use_discontinuous_temperature_discretization
-         && parameters.use_limiter_for_discontinuous_temperature_solution)
-        ||
-        (!advection_field.is_temperature()
-         && parameters.use_discontinuous_composition_discretization
-         && parameters.use_limiter_for_discontinuous_composition_solution))
-      apply_limiter_to_dg_solutions(advection_field);
+    if ((advection_field.is_discontinuous(introspection)
+         &&
+         (
+           (advection_field.is_temperature() && parameters.use_limiter_for_discontinuous_temperature_solution)
+           ||
+           (!advection_field.is_temperature() && parameters.use_limiter_for_discontinuous_composition_solution[advection_field.compositional_variable])
+         )))
+      {
+        apply_limiter_to_dg_solutions(advection_field);
+        // by applying the limiter we have modified the solution to no longer
+        // satisfy the equation. Therefore the residual is meaningless and cannot
+        // converge to zero in nonlinear iterations. Disable residual computation
+        // for this field.
+        return 0.0;
+      }
 
     return initial_residual;
   }
@@ -557,18 +761,68 @@ namespace aspect
 
   template <int dim>
   std::pair<double,double>
-  Simulator<dim>::solve_stokes ()
+  Simulator<dim>::solve_stokes (LinearAlgebra::BlockVector &solution_vector)
   {
     TimerOutput::Scope timer (computing_timer, "Solve Stokes system");
-    pcout << "   Solving Stokes system... " << std::flush;
+
+    const std::string name = [&]() -> std::string
+    {
+      if (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg)
+        return "GMG";
+      if (parameters.use_direct_stokes_solver)
+        return "direct";
+      if (parameters.use_bfbt)
+        return "AMG-BFBT";
+      return "AMG";
+    }();
+
+    pcout << "   Solving Stokes system (" << name << ")... " << std::flush;
 
     if (parameters.stokes_solver_type == Parameters<dim>::StokesSolverType::block_gmg)
       {
-        return stokes_matrix_free->solve();
+        return stokes_matrix_free->solve(solution_vector);
       }
 
-    // extract Stokes parts of solution vector, without any ghost elements
-    LinearAlgebra::BlockVector distributed_stokes_solution (introspection.index_sets.stokes_partitioning, mpi_communicator);
+    // In the following, we will operate on a vector that contains only
+    // the velocity and pressure DoFs, rather than on the full
+    // system. Set such a reduced vector up, without any ghost elements.
+    // (Worth noting: for direct solvers, this vector has one block,
+    // whereas for the iterative solvers, the result has two blocks.)
+    LinearAlgebra::BlockVector distributed_stokes_solution (introspection.index_sets.stokes_partitioning,
+                                                            mpi_communicator);
+
+    // We will need the Stokes block indices a lot below, shorten their names
+    const unsigned int velocity_block_index = introspection.block_indices.velocities;
+    const unsigned int pressure_block_index = (parameters.include_melt_transport) ?
+                                              introspection.variable("fluid pressure").block_index
+                                              : introspection.block_indices.pressure;
+    (void) velocity_block_index;
+    (void) pressure_block_index;
+
+    // Create a view of all constraints that only pertains to the
+    // Stokes subset of degrees of freedom. We can then use this later
+    // to call constraints.distribute(), constraints.set_zero(), etc.,
+    // on those block vectors that only have the Stokes components in
+    // them.
+    //
+    // For the moment, assume that the Stokes degrees are first in the
+    // overall vector, so that they form a contiguous range starting
+    // at zero. The assertion checks this, but this could easily be
+    // generalized if the Stokes block were not starting at zero.
+#if DEAL_II_VERSION_GTE(9,6,0)
+    {
+      Assert (velocity_block_index == 0, ExcNotImplemented());
+      if (parameters.use_direct_stokes_solver == false)
+        Assert (pressure_block_index == 1, ExcNotImplemented());
+    }
+
+    IndexSet stokes_dofs (dof_handler.n_dofs());
+    stokes_dofs.add_range (0, distributed_stokes_solution.size());
+    const AffineConstraints<double> current_stokes_constraints
+      = current_constraints.get_view (stokes_dofs);
+#else
+    const AffineConstraints<double> &current_stokes_constraints = current_constraints;
+#endif
 
     double initial_nonlinear_residual = numbers::signaling_nan<double>();
     double final_linear_residual      = numbers::signaling_nan<double>();
@@ -577,34 +831,37 @@ namespace aspect
       {
         // We hard-code the blocks down below, so make sure block 0 is indeed
         // the block containing velocity and pressure:
-        Assert(introspection.block_indices.velocities == 0, ExcNotImplemented());
-        Assert(introspection.block_indices.pressure == 0
+        Assert(distributed_stokes_solution.n_blocks() == 1, ExcInternalError());
+        Assert(velocity_block_index == 0, ExcNotImplemented());
+        Assert(pressure_block_index == 0
                ||
                (parameters.include_melt_transport
                 && introspection.variable("fluid pressure").block_index == 0
                 && introspection.variable("compaction pressure").block_index == 0),
                ExcNotImplemented());
 
-        // start with a reasonable guess
-        solution.block(0) = current_linearization_point.block(0);
+        // Clarify that we only use one block for the direct solver
+        const unsigned int velocity_and_pressure_block = velocity_block_index;
 
+        // Start with a reasonable guess.
+        //
         // While we don't need to set up the initial guess for the direct solver
         // (it will be ignored by the solver anyway), we need this if we are
         // using a nonlinear scheme, because we use this to compute the current
         // nonlinear residual (see initial_residual below).
+        solution_vector.block(velocity_and_pressure_block) = current_linearization_point.block(velocity_and_pressure_block);
 
         // TODO: if there was an easy way to know if the caller needs the
         // initial residual we could skip all of this stuff.
-        distributed_stokes_solution.block(0) = solution.block(0);
+        distributed_stokes_solution.block(velocity_and_pressure_block) = solution_vector.block(velocity_and_pressure_block);
         denormalize_pressure (this->last_pressure_normalization_adjustment,
-                              distributed_stokes_solution,
-                              solution);
-        current_constraints.set_zero (distributed_stokes_solution);
+                              distributed_stokes_solution);
+        current_stokes_constraints.set_zero (distributed_stokes_solution);
 
         // Undo the pressure scaling:
-        IndexSet &pressure_idxset = parameters.include_melt_transport ?
-                                    introspection.index_sets.locally_owned_melt_pressure_dofs
-                                    : introspection.index_sets.locally_owned_pressure_dofs;
+        const IndexSet &pressure_idxset = parameters.include_melt_transport ?
+                                          introspection.index_sets.locally_owned_melt_pressure_dofs
+                                          : introspection.index_sets.locally_owned_pressure_dofs;
 
         for (unsigned int i=0; i< pressure_idxset.n_elements(); ++i)
           {
@@ -617,23 +874,19 @@ namespace aspect
         // we need a temporary vector for the residual (even if we don't care about it)
         LinearAlgebra::Vector residual (introspection.index_sets.stokes_partitioning[0], mpi_communicator);
 
-        initial_nonlinear_residual = system_matrix.block(0,0).residual(
+        initial_nonlinear_residual = system_matrix.block(velocity_and_pressure_block,velocity_and_pressure_block).residual(
                                        residual,
-                                       distributed_stokes_solution.block(0),
-                                       system_rhs.block(0));
+                                       distributed_stokes_solution.block(velocity_and_pressure_block),
+                                       system_rhs.block(velocity_and_pressure_block));
 
         SolverControl cn;
         // TODO: can we re-use the direct solver?
-#ifdef ASPECT_USE_PETSC
-        PETScWrappers::SparseDirectMUMPS solver(cn, mpi_communicator);
-#else
         TrilinosWrappers::SolverDirect solver(cn);
-#endif
         try
           {
-            solver.solve(system_matrix.block(0,0),
-                         distributed_stokes_solution.block(0),
-                         system_rhs.block(0));
+            solver.solve(system_matrix.block(velocity_and_pressure_block,velocity_and_pressure_block),
+                         distributed_stokes_solution.block(velocity_and_pressure_block),
+                         system_rhs.block(velocity_and_pressure_block));
 
             // if we got here, we have successfully solved the linear system
             // with a direct solver, and the final linear residual should
@@ -647,51 +900,59 @@ namespace aspect
         catch (const std::exception &exc)
           {
             if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
-              AssertThrow (false,
-                           ExcMessage (std::string("The direct Stokes solver "
-                                                   "did not succeed. It reported the following error:\n\n")
-                                       +
-                                       exc.what()))
-              else
-                throw QuietException();
+              {
+                AssertThrow (false,
+                             ExcMessage (std::string("The direct Stokes solver "
+                                                     "did not succeed. It reported the following error:\n\n")
+                                         +
+                                         exc.what()));
+              }
+            else
+              throw QuietException();
           }
 
 
-        current_constraints.distribute (distributed_stokes_solution);
+        current_stokes_constraints.distribute (distributed_stokes_solution);
 
-        // now rescale the pressure back to real physical units:
+        // Now rescale the pressure back to real physical units. Note that we are
+        // working on a vector in which all velocities and pressures are in one
+        // block (that's the design for block layout in case we're using a direct
+        // solver), and so unlike in the "common" case, we can't just scale a
+        // whole vector block -- we have to do it element by element.
         {
-          IndexSet &pressure_idxset = parameters.include_melt_transport ?
-                                      introspection.index_sets.locally_owned_melt_pressure_dofs
-                                      : introspection.index_sets.locally_owned_pressure_dofs;
+          const IndexSet &pressure_idxset
+            = (parameters.include_melt_transport ?
+               introspection.index_sets.locally_owned_melt_pressure_dofs
+               : introspection.index_sets.locally_owned_pressure_dofs);
+          for (const types::global_dof_index i : pressure_idxset)
+            distributed_stokes_solution(i) *= pressure_scaling;
 
-          for (unsigned int i=0; i< pressure_idxset.n_elements(); ++i)
-            {
-              types::global_dof_index idx = pressure_idxset.nth_index_in_set(i);
-              distributed_stokes_solution(idx) *= pressure_scaling;
-            }
-          distributed_stokes_solution.compress(VectorOperation::insert);
+          distributed_stokes_solution.block(velocity_and_pressure_block).compress(VectorOperation::insert);
         }
 
-        // then copy back the solution from the temporary (non-ghosted) vector
-        // into the ghosted one with all solution components
-        solution.block(0) = distributed_stokes_solution.block(0);
+        // Then copy back the solution from the temporary (non-ghosted) vector
+        // into the ghosted one with all solution components. Note that
+        // for a direct solver, we have only one block for velocity+pressure,
+        // and so only one block needs to be copied.
+        solution_vector.block(velocity_and_pressure_block) = distributed_stokes_solution.block(velocity_and_pressure_block);
 
         pcout << "done." << std::endl;
       }
-    else
+    else // use iterative solver
       {
+        Assert (distributed_stokes_solution.n_blocks() == 2, ExcInternalError());
+        Assert(!parameters.include_melt_transport
+               || introspection.variable("compaction pressure").block_index == 1,
+               ExcNotImplemented());
+
         // Many parts of the solver depend on the block layout (velocity = 0,
         // pressure = 1). For example the linearized_stokes_initial_guess vector or the StokesBlock matrix
-        // wrapper. Let us make sure that this holds (and shorten their names):
-        const unsigned int block_vel = introspection.block_indices.velocities;
-        const unsigned int block_p = (parameters.include_melt_transport) ?
-                                     introspection.variable("fluid pressure").block_index
-                                     : introspection.block_indices.pressure;
-        Assert(block_vel == 0, ExcNotImplemented());
-        Assert(block_p == 1, ExcNotImplemented());
+        // wrapper. Let us make sure that this holds:
+        Assert(velocity_block_index == 0, ExcNotImplemented());
+        Assert(pressure_block_index == 1, ExcNotImplemented());
         Assert(!parameters.include_melt_transport
-               || introspection.variable("compaction pressure").block_index == 1, ExcNotImplemented());
+               || introspection.variable("compaction pressure").block_index == 1,
+               ExcNotImplemented());
 
         const internal::StokesBlock stokes_block(system_matrix);
 
@@ -707,12 +968,11 @@ namespace aspect
         // other solution variables.
         if (assemble_newton_stokes_system == false)
           {
-            linearized_stokes_initial_guess.block (block_vel) = current_linearization_point.block (block_vel);
-            linearized_stokes_initial_guess.block (block_p) = current_linearization_point.block (block_p);
+            linearized_stokes_initial_guess.block (velocity_block_index) = current_linearization_point.block (velocity_block_index);
+            linearized_stokes_initial_guess.block (pressure_block_index) = current_linearization_point.block (pressure_block_index);
 
             denormalize_pressure (this->last_pressure_normalization_adjustment,
-                                  linearized_stokes_initial_guess,
-                                  current_linearization_point);
+                                  linearized_stokes_initial_guess);
           }
         else
           {
@@ -724,12 +984,12 @@ namespace aspect
             Assert(nonlinear_iteration != 0,
                    ExcMessage ("The Newton solver should not be active in the first nonlinear iteration."));
 
-            linearized_stokes_initial_guess.block (block_vel) = 0;
-            linearized_stokes_initial_guess.block (block_p) = 0;
+            linearized_stokes_initial_guess.block (velocity_block_index) = 0;
+            linearized_stokes_initial_guess.block (pressure_block_index) = 0;
           }
 
-        current_constraints.set_zero (linearized_stokes_initial_guess);
-        linearized_stokes_initial_guess.block (block_p) /= pressure_scaling;
+        current_stokes_constraints.set_zero (linearized_stokes_initial_guess);
+        linearized_stokes_initial_guess.block (pressure_block_index) /= pressure_scaling;
 
         double solver_tolerance = 0;
         if (assemble_newton_stokes_system == false)
@@ -755,28 +1015,29 @@ namespace aspect
             // are only interested in the part of the rhs not balanced by the static
             // pressure (the current pressure is a good approximation for the static
             // pressure).
-            const double residual_u = system_matrix.block(0,1).residual (distributed_stokes_solution.block(0),
-                                                                         linearized_stokes_initial_guess.block(1),
-                                                                         system_rhs.block(0));
-            const double residual_p = system_rhs.block(1).l2_norm();
+            const double velocity_residual = system_matrix.block(velocity_block_index,
+                                                                 pressure_block_index).residual (distributed_stokes_solution.block(velocity_block_index),
+                                                                     linearized_stokes_initial_guess.block(pressure_block_index),
+                                                                     system_rhs.block(velocity_block_index));
+            const double pressure_residual = system_rhs.block(pressure_block_index).l2_norm();
 
             solver_tolerance = parameters.linear_stokes_solver_tolerance *
-                               std::sqrt(residual_u*residual_u+residual_p*residual_p);
+                               std::sqrt(velocity_residual*velocity_residual+pressure_residual*pressure_residual);
           }
         else
           {
             // if we are solving for the Newton update, then the initial guess of the solution
             // vector is the zero vector, and the starting (nonlinear) residual is simply
             // the norm of the (Newton) right hand side vector
-            const double residual_u = system_rhs.block(0).l2_norm();
-            const double residual_p = system_rhs.block(1).l2_norm();
+            const double velocity_residual = system_rhs.block(velocity_block_index).l2_norm();
+            const double pressure_residual = system_rhs.block(pressure_block_index).l2_norm();
             solver_tolerance = parameters.linear_stokes_solver_tolerance *
-                               std::sqrt(residual_u*residual_u+residual_p*residual_p);
+                               std::sqrt(velocity_residual*velocity_residual+pressure_residual*pressure_residual);
 
             // as described in the documentation of the function, the initial
             // nonlinear residual for the Newton method is computed by just
             // taking the norm of the right hand side
-            initial_nonlinear_residual = std::sqrt(residual_u*residual_u+residual_p*residual_p);
+            initial_nonlinear_residual = std::sqrt(velocity_residual*velocity_residual+pressure_residual*pressure_residual);
           }
         // Now overwrite the solution vector again with the current best guess
         // to solve the linear system
@@ -785,10 +1046,10 @@ namespace aspect
         // extract Stokes parts of rhs vector
         LinearAlgebra::BlockVector distributed_stokes_rhs(introspection.index_sets.stokes_partitioning);
 
-        distributed_stokes_rhs.block(block_vel) = system_rhs.block(block_vel);
-        distributed_stokes_rhs.block(block_p) = system_rhs.block(block_p);
+        distributed_stokes_rhs.block(velocity_block_index) = system_rhs.block(velocity_block_index);
+        distributed_stokes_rhs.block(pressure_block_index) = system_rhs.block(pressure_block_index);
 
-        PrimitiveVectorMemory< LinearAlgebra::BlockVector > mem;
+        PrimitiveVectorMemory<LinearAlgebra::BlockVector> mem;
 
         // create Solver controls for the cheap and expensive solver phase
         SolverControl solver_control_cheap (parameters.n_cheap_stokes_solver_steps,
@@ -800,30 +1061,61 @@ namespace aspect
         solver_control_cheap.enable_history_data();
         solver_control_expensive.enable_history_data();
 
+        std::unique_ptr<internal::SchurComplementOperator> schur;
+        if (parameters.use_bfbt)
+          {
+            schur = std::make_unique<internal::WeightedBFBT<TrilinosWrappers::PreconditionBase>>(
+                      system_preconditioner_matrix.block(pressure_block_index,pressure_block_index),
+                      *Mp_preconditioner,
+                      parameters.linear_solver_S_block_tolerance,
+                      inverse_lumped_mass_matrix.block(velocity_block_index),
+                      system_matrix);
+          }
+        else
+          {
+            schur = std::make_unique<internal::InverseWeightedMassMatrix<TrilinosWrappers::PreconditionBase>>(
+                      system_preconditioner_matrix.block(pressure_block_index,pressure_block_index),
+                      *Mp_preconditioner,
+                      parameters.linear_solver_S_block_tolerance);
+
+          }
+
         // create a cheap preconditioner that consists of only a single V-cycle
-        const internal::BlockSchurPreconditioner<LinearAlgebra::PreconditionAMG,
-              LinearAlgebra::PreconditionBase>
-              preconditioner_cheap (system_matrix, system_preconditioner_matrix,
-                                    *Mp_preconditioner, *Amg_preconditioner,
-                                    false,
-                                    parameters.linear_solver_A_block_tolerance,
-                                    parameters.linear_solver_S_block_tolerance);
+        internal::InverseVelocityBlock<LinearAlgebra::PreconditionAMG> inverse_velocity_block_cheap(
+          system_matrix.block(velocity_block_index,velocity_block_index),
+          *Amg_preconditioner,
+          /* do_solve_A = */ false,
+          stokes_A_block_is_symmetric(),
+          parameters.linear_solver_A_block_tolerance);
+        const internal::BlockSchurPreconditioner<internal::InverseVelocityBlock<LinearAlgebra::PreconditionAMG>,
+              internal::SchurComplementOperator>
+              preconditioner_cheap (system_matrix,
+                                    system_preconditioner_matrix,
+                                    *schur,
+                                    inverse_velocity_block_cheap);
 
         // create an expensive preconditioner that solves for the A block with CG
-        const internal::BlockSchurPreconditioner<LinearAlgebra::PreconditionAMG,
-              LinearAlgebra::PreconditionBase>
-              preconditioner_expensive (system_matrix, system_preconditioner_matrix,
-                                        *Mp_preconditioner, *Amg_preconditioner,
-                                        true,
-                                        parameters.linear_solver_A_block_tolerance,
-                                        parameters.linear_solver_S_block_tolerance);
-
+        internal::InverseVelocityBlock<LinearAlgebra::PreconditionAMG> inverse_velocity_block_expensive(
+          system_matrix.block(velocity_block_index,velocity_block_index),
+          *Amg_preconditioner,
+          /* do_solve_A = */ true,
+          stokes_A_block_is_symmetric(),
+          parameters.linear_solver_A_block_tolerance);
+        const internal::BlockSchurPreconditioner<internal::InverseVelocityBlock<LinearAlgebra::PreconditionAMG>,
+              internal::SchurComplementOperator>
+              preconditioner_expensive (system_matrix,
+                                        system_preconditioner_matrix,
+                                        *schur,
+                                        inverse_velocity_block_expensive);
         // step 1a: try if the simple and fast solver
         // succeeds in n_cheap_stokes_solver_steps steps or less.
         try
           {
-            // if this cheaper solver is not desired, then simply short-cut
-            // the attempt at solving with the cheaper preconditioner
+            // if this cheaper solver is not desired, then simply
+            // short-cut the attempt at solving with the cheaper
+            // preconditioner by throwing an exception right away,
+            // which is equivalent to a 'goto' statement to the top of
+            // the 'catch' block below
             if (parameters.n_cheap_stokes_solver_steps == 0)
               throw SolverControl::NoConvergence(0,0);
 
@@ -837,14 +1129,28 @@ namespace aspect
                           distributed_stokes_rhs,
                           preconditioner_cheap);
 
+            // Success. Print all iterations to screen (0 expensive iterations).
+            pcout << (solver_control_cheap.last_step() != numbers::invalid_unsigned_int ?
+                      solver_control_cheap.last_step():
+                      0)
+                  << "+0"
+                  << " iterations." << std::endl;
+
             final_linear_residual = solver_control_cheap.last_value();
           }
 
         // step 1b: take the stronger solver in case
         // the simple solver failed and attempt solving
         // it in n_expensive_stokes_solver_steps steps or less.
-        catch (const SolverControl::NoConvergence &)
+        catch (const SolverControl::NoConvergence &exc)
           {
+            // The cheap solver failed or never ran.
+            // Print the number of cheap iterations to screen to indicate we
+            // try the expensive solver next.
+            pcout << (solver_control_cheap.last_step() != numbers::invalid_unsigned_int ?
+                      solver_control_cheap.last_step():
+                      0) << '+' << std::flush;
+
             // use the value defined by the user
             // OR
             // at least a restart length of 100 for melt models
@@ -852,21 +1158,27 @@ namespace aspect
                                                               parameters.stokes_gmres_restart_length :
                                                               std::max(parameters.stokes_gmres_restart_length, 100U));
 
-            SolverFGMRES<LinearAlgebra::BlockVector>
-            solver(solver_control_expensive, mem,
-                   SolverFGMRES<LinearAlgebra::BlockVector>::
-                   AdditionalData(number_of_temporary_vectors));
-
             try
               {
-                AssertThrow (parameters.n_expensive_stokes_solver_steps>0,
-                             ExcMessage ("The Stokes solver did not converge in the number of requested cheap iterations and "
-                                         "you requested 0 for ``Maximum number of expensive Stokes solver steps''. Aborting."));
+                // if no expensive steps allowed, we have failed, rethrow exception
+                if (parameters.n_expensive_stokes_solver_steps == 0)
+                  {
+                    pcout << "0 iterations." << std::endl;
+                    throw exc;
+                  }
 
-                solver.solve(stokes_block,
-                             distributed_stokes_solution,
-                             distributed_stokes_rhs,
-                             preconditioner_expensive);
+                SolverFGMRES<LinearAlgebra::BlockVector>
+                solver(solver_control_expensive, mem,
+                       SolverFGMRES<LinearAlgebra::BlockVector>::
+                       AdditionalData(number_of_temporary_vectors));
+
+                solver.solve (stokes_block,
+                              distributed_stokes_solution,
+                              distributed_stokes_rhs,
+                              preconditioner_expensive);
+                // Success. Print expensive iterations to screen.
+                pcout << solver_control_expensive.last_step()
+                      << " iterations." << std::endl;
 
                 final_linear_residual = solver_control_expensive.last_value();
               }
@@ -876,67 +1188,55 @@ namespace aspect
             catch (const std::exception &exc)
               {
                 signals.post_stokes_solver(*this,
-                                           preconditioner_cheap.n_iterations_S() + preconditioner_expensive.n_iterations_S(),
-                                           preconditioner_cheap.n_iterations_A() + preconditioner_expensive.n_iterations_A(),
+                                           schur->n_iterations(),
+                                           inverse_velocity_block_cheap.n_iterations()+inverse_velocity_block_expensive.n_iterations(),
                                            solver_control_cheap,
                                            solver_control_expensive);
 
-                if (Utilities::MPI::this_mpi_process(mpi_communicator) == 0)
-                  {
-                    linear_solver_failed("iterative Stokes solver",
-                                         parameters.output_directory+"solver_history.txt",
-                                         parameters.n_cheap_stokes_solver_steps > 0 ?
-                                         std::vector<SolverControl> {solver_control_cheap, solver_control_expensive} :
-                                         std::vector<SolverControl> {solver_control_expensive},
-                                         exc);
-                  }
-                else
-                  {
-                    throw QuietException();
-                  }
+                std::vector<SolverControl> solver_controls;
+                if (parameters.n_cheap_stokes_solver_steps > 0)
+                  solver_controls.push_back(solver_control_cheap);
+
+                if (parameters.n_expensive_stokes_solver_steps > 0)
+                  solver_controls.push_back(solver_control_expensive);
+
+                // Exit with an exception that describes the underlying cause:
+                Utilities::throw_linear_solver_failure_exception("iterative Stokes solver",
+                                                                 "Simulator::solve_stokes",
+                                                                 solver_controls,
+                                                                 exc,
+                                                                 mpi_communicator,
+                                                                 parameters.output_directory+"solver_history.txt");
               }
           }
 
-        // signal successful solver
-        signals.post_stokes_solver(*this,
-                                   preconditioner_cheap.n_iterations_S() + preconditioner_expensive.n_iterations_S(),
-                                   preconditioner_cheap.n_iterations_A() + preconditioner_expensive.n_iterations_A(),
-                                   solver_control_cheap,
-                                   solver_control_expensive);
-
-        // distribute hanging node and
-        // other constraints
-        current_constraints.distribute (distributed_stokes_solution);
+        // distribute hanging node and other constraints
+        current_stokes_constraints.distribute (distributed_stokes_solution);
 
         // now rescale the pressure back to real physical units
-        distributed_stokes_solution.block(block_p) *= pressure_scaling;
+        distributed_stokes_solution.block(pressure_block_index) *= pressure_scaling;
 
         // then copy back the solution from the temporary (non-ghosted) vector
         // into the ghosted one with all solution components
-        solution.block(block_vel) = distributed_stokes_solution.block(block_vel);
-        solution.block(block_p) = distributed_stokes_solution.block(block_p);
+        solution_vector.block(velocity_block_index) = distributed_stokes_solution.block(velocity_block_index);
+        solution_vector.block(pressure_block_index) = distributed_stokes_solution.block(pressure_block_index);
 
-        // print the number of iterations to screen
-        pcout << (solver_control_cheap.last_step() != numbers::invalid_unsigned_int ?
-                  solver_control_cheap.last_step():
-                  0)
-              << '+'
-              << (solver_control_expensive.last_step() != numbers::invalid_unsigned_int ?
-                  solver_control_expensive.last_step():
-                  0)
-              << " iterations.";
-        pcout << std::endl;
+        // signal successful solver
+        signals.post_stokes_solver(*this,
+                                   schur->n_iterations(),
+                                   inverse_velocity_block_cheap.n_iterations()+inverse_velocity_block_expensive.n_iterations(),
+                                   solver_control_cheap,
+                                   solver_control_expensive);
       }
 
-
     // do some cleanup now that we have the solution
-    remove_nullspace(solution, distributed_stokes_solution);
+    remove_nullspace(solution_vector, distributed_stokes_solution);
     if (assemble_newton_stokes_system == false)
-      this->last_pressure_normalization_adjustment = normalize_pressure(solution);
+      this->last_pressure_normalization_adjustment = normalize_pressure(solution_vector);
 
     // convert melt pressures:
     if (parameters.include_melt_transport)
-      melt_handler->compute_melt_variables(solution);
+      melt_handler->compute_melt_variables(system_matrix,solution_vector,system_rhs);
 
     return std::pair<double,double>(initial_nonlinear_residual,
                                     final_linear_residual);
@@ -946,14 +1246,14 @@ namespace aspect
 
 
 
-
-
 // explicit instantiation of the functions we implement in this file
 namespace aspect
 {
 #define INSTANTIATE(dim) \
   template double Simulator<dim>::solve_advection (const AdvectionField &); \
-  template std::pair<double,double> Simulator<dim>::solve_stokes ();
+  template std::pair<double,double> Simulator<dim>::solve_stokes (LinearAlgebra::BlockVector &solution_vector);
 
   ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
 }

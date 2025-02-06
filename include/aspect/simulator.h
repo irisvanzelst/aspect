@@ -1,5 +1,5 @@
 /*
-  Copyright (C) 2011 - 2019 by the authors of the ASPECT code.
+  Copyright (C) 2011 - 2024 by the authors of the ASPECT code.
 
   This file is part of ASPECT.
 
@@ -29,21 +29,18 @@
 
 DEAL_II_DISABLE_EXTRA_DIAGNOSTICS
 
+#include <deal.II/lac/affine_constraints.h>
+
 #include <deal.II/distributed/tria.h>
 
 #include <deal.II/dofs/dof_handler.h>
+#include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_system.h>
 #include <deal.II/fe/mapping.h>
 #include <deal.II/base/tensor_function.h>
 
 DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
-
-#if !DEAL_II_VERSION_GTE(9,1,0)
-#  include <deal.II/lac/constraint_matrix.h>
-#else
-#  include <deal.II/lac/affine_constraints.h>
-#endif
 
 #include <aspect/global.h>
 #include <aspect/simulator_access.h>
@@ -64,31 +61,20 @@ DEAL_II_ENABLE_EXTRA_DIAGNOSTICS
 #include <aspect/boundary_fluid_pressure/interface.h>
 #include <aspect/boundary_traction/interface.h>
 #include <aspect/mesh_refinement/interface.h>
-#include <aspect/termination_criteria/interface.h>
+#include <aspect/time_stepping/interface.h>
 #include <aspect/postprocess/interface.h>
 #include <aspect/adiabatic_conditions/interface.h>
-#include <aspect/particle/world.h>
+#include <aspect/particle/manager.h>
 
 #include <boost/iostreams/tee.hpp>
 #include <boost/iostreams/stream.hpp>
+
 #include <memory>
+#include <thread>
+
 
 namespace aspect
 {
-  using namespace dealii;
-
-#if DEAL_II_VERSION_GTE(9,1,0)
-  /**
-   * The ConstraintMatrix class was deprecated in deal.II 9.1 in favor
-   * of AffineConstraints. To make the name available for ASPECT
-   * nonetheless, use a `using` declaration. This injects the name
-   * into the `aspect` namespace, where it is visible before the
-   * deprecated name in the `dealii` namespace, thereby suppressing
-   * the deprecation message.
-   */
-  using ConstraintMatrix = class dealii::AffineConstraints<double>;
-#endif
-
   template <int dim>
   class MeltHandler;
 
@@ -147,6 +133,46 @@ namespace aspect
     double newton_residual_for_derivative_scaling_factor;
     std::pair<double,double> stokes_residuals;
   };
+
+  /**
+   * A data structure with all properties relevant to compute angular momentum and rotation.
+   */
+  template <int dim>
+  struct RotationProperties
+  {
+    RotationProperties()
+      :
+      scalar_moment_of_inertia(numbers::signaling_nan<double>()),
+      scalar_angular_momentum(numbers::signaling_nan<double>()),
+      scalar_rotation(numbers::signaling_nan<double>()),
+      tensor_moment_of_inertia(numbers::signaling_nan<SymmetricTensor<2,dim>>()),
+      tensor_angular_momentum(numbers::signaling_nan<Tensor<1,dim>>()),
+      tensor_rotation(numbers::signaling_nan<Tensor<1,dim>>())
+    {};
+
+    /**
+     * Scalar properties for the two-dimensional case
+     * with a fixed rotation axis (z).
+     */
+    double scalar_moment_of_inertia;
+    double scalar_angular_momentum;
+    double scalar_rotation;
+
+    /**
+     * Tensor properties for the three-dimensional case.
+     */
+    SymmetricTensor<2,dim> tensor_moment_of_inertia;
+    Tensor<1,dim> tensor_angular_momentum;
+    Tensor<1,dim> tensor_rotation;
+  };
+
+  /**
+   * Exception to be thrown when the nonlinear solver needs too many iterations to converge.
+   */
+  DeclExceptionMsg(ExcNonlinearSolverNoConvergence,
+                   "Nonlinear solver failed to converge in the prescribed number of steps. "
+                   "Consider changing `Max nonlinear iterations` or `Nonlinear solver failure "
+                   "strategy`.");
 
   /**
    * This is the main class of ASPECT. It implements the overall simulation
@@ -222,12 +248,12 @@ namespace aspect
       /**
        * Import Nonlinear Solver type.
        */
-      typedef typename Parameters<dim>::NonlinearSolver NonlinearSolver;
+      using NonlinearSolver = typename Parameters<dim>::NonlinearSolver;
 
       /**
        * Import nullspace removal type.
        */
-      typedef typename Parameters<dim>::NullspaceRemoval NullspaceRemoval;
+      using NullspaceRemoval = typename Parameters<dim>::NullspaceRemoval;
 
 
       /**
@@ -324,6 +350,15 @@ namespace aspect
         unsigned int block_index(const Introspection<dim> &introspection) const;
 
         /**
+         * Look up the block index where the sparsity pattern for this field
+         * is stored. This can be different than block_index() as several fields
+         * can use the same pattern (typically in the first compositional field
+         * if all fields are compatible). See Introspection::block_indices
+         * for more information.
+         */
+        unsigned int sparsity_pattern_block_index(const Introspection<dim> &introspection) const;
+
+        /**
          * Returns an index that runs from 0 (temperature field) to n (nth
          * compositional field), and uniquely identifies the current advection
          * field among the list of all advection fields. Can be used to index
@@ -351,6 +386,13 @@ namespace aspect
          * field. See Introspection::polynomial_degree for more information.
          */
         unsigned int polynomial_degree(const Introspection<dim> &introspection) const;
+
+        /**
+         * Return a string that describes the field type and the compositional
+         * variable number and name, if applicable.
+         */
+        std::string
+        name(const Introspection<dim> &introspection) const;
       };
 
     private:
@@ -457,14 +499,14 @@ namespace aspect
        * conditions that do not change over time. This function is used by
        * setup_dofs();
        */
-      void compute_initial_velocity_boundary_constraints (ConstraintMatrix &constraints);
+      void compute_initial_velocity_boundary_constraints (AffineConstraints<double> &constraints);
 
       /**
        * Fill the given @p constraints with constraints coming from the velocity boundary
        * conditions that do can change over time. This function is used by
        * compute_current_constraints().
        */
-      void compute_current_velocity_boundary_constraints (ConstraintMatrix &constraints);
+      void compute_current_velocity_boundary_constraints (AffineConstraints<double> &constraints);
 
       /**
        * Given the 'constraints' member that contains all constraints that are
@@ -483,16 +525,17 @@ namespace aspect
       /**
        * Compute the factor by which we scale the second of
        * the Stokes equations (the "pressure scaling factor").
-       * We do this for the current time step by taking some kind
-       * of average of the viscosities we find on the cells in this domain.
+       * We compute the factor by taking the logarithmic
+       * average of the viscosities we find on the cells in
+       * this domain and dividing this average by a reference
+       * length scale provided by the used geometry model.
        *
-       * This function then updates the pressure_scaling variable using
-       * this computed reference viscosity.
+       * This function returns the pressure scaling variable.
        *
        * This function is implemented in
        * <code>source/simulator/helper_functions.cc</code>.
        */
-      void compute_pressure_scaling_factor ();
+      double compute_pressure_scaling_factor () const;
 
       /**
        * Do some housekeeping at the beginning of each time step. This
@@ -600,6 +643,49 @@ namespace aspect
        * This function implements one scheme for the various
        * steps necessary to assemble and solve the nonlinear problem.
        *
+       * The `no Advection, iterated defect correction Stokes' scheme
+       * does not solve the temperature and composition equations
+       * but only iterates out the solution of the Stokes
+       * equation using Defect Correction (DC) Picard iterations.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_no_advection_iterated_defect_correction_stokes ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * The `single Advection, iterated defect correction Stokes' scheme
+       * solves the temperature and composition equations once at the beginning
+       * of each time step and then iterates out the solution of the Stokes
+       * equation using Defect Correction (DC) Picard iterations.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_single_advection_iterated_defect_correction_stokes ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
+       * The `iterated Advection and defect correction Stokes' scheme
+       * iterates over both the temperature and composition equations
+       * and the Stokes equations at the same time. The Stokes equation
+       * is iterated out using the Defect Correction (DC) form of the
+       * Picard iterations.
+       *
+       * This function is implemented in
+       * <code>source/simulator/solver_schemes.cc</code>.
+       */
+      void solve_iterated_advection_and_defect_correction_stokes ();
+
+      /**
+       * This function implements one scheme for the various
+       * steps necessary to assemble and solve the nonlinear problem.
+       *
        * The `iterated Advection and Newton Stokes' scheme iterates over solving the temperature,
        * composition, and Stokes equations just like `iterated Advection and Stokes', but
        * for the Stokes system it is able to switch from a defect correction form of
@@ -607,10 +693,14 @@ namespace aspect
        * number of iterations is reached. This can greatly improve the
        * convergence rate for particularly nonlinear viscosities.
        *
+       * @param use_newton_iterations Sets whether this function should only use defect
+       * correction iterations (use_newton_iterations = false) or also use Newton iterations
+       * (use_newton_iterations = true).
+       *
        * This function is implemented in
        * <code>source/simulator/solver_schemes.cc</code>.
        */
-      void solve_iterated_advection_and_newton_stokes ();
+      void solve_iterated_advection_and_newton_stokes (bool use_newton_iterations);
 
       /**
        * This function implements one scheme for the various
@@ -624,10 +714,14 @@ namespace aspect
        * number of iterations is reached. This can greatly improve the
        * convergence rate for particularly nonlinear viscosities.
        *
+       * @param use_newton_iterations Sets whether this function should only use defect
+       * correction iterations (use_newton_iterations = false) or also use Newton iterations
+       * (use_newton_iterations = true).
+       *
        * This function is implemented in
        * <code>source/simulator/solver_schemes.cc</code>.
        */
-      void solve_single_advection_iterated_newton_stokes ();
+      void solve_single_advection_and_iterated_newton_stokes (bool use_newton_iterations);
 
       /**
        * This function implements one scheme for the various
@@ -657,7 +751,7 @@ namespace aspect
 
       /**
        * Initiate the assembly of the Stokes preconditioner matrix via
-       * assemble_stokes_preconditoner(), then set up the data structures to
+       * assemble_stokes_preconditioner(), then set up the data structures to
        * actually build a preconditioner from this matrix.
        *
        * This function is implemented in
@@ -673,7 +767,8 @@ namespace aspect
        * <code>source/simulator/assembly.cc</code>.
        */
       void build_advection_preconditioner (const AdvectionField &advection_field,
-                                           aspect::LinearAlgebra::PreconditionILU &preconditioner);
+                                           aspect::LinearAlgebra::PreconditionILU &preconditioner,
+                                           const double diagonal_strengthening);
 
       /**
        * Initiate the assembly of the Stokes matrix and right hand side.
@@ -685,53 +780,59 @@ namespace aspect
 
       /**
        * Assemble and solve the temperature equation.
-       * This function returns the residual after solving
-       * and can optionally compute and store an initial
-       * residual before solving the equation.
+       * This function returns the residual after solving.
+       *
+       * If the `residual` argument is not a `nullptr`, the function computes
+       * the residual and puts it into this variable. The function returns
+       * the current residual divided by the initial residual given as the
+       * first argument. The two arguments may point to the same variable,
+       * in which case the function first computes the residual and at
+       * the end scales that residual by itself, thus returning 1.0.
        *
        * This function is implemented in
        * <code>source/simulator/solver_schemes.cc</code>.
        */
-      double assemble_and_solve_temperature (const bool compute_initial_residual = false,
-                                             double *initial_residual = nullptr);
+      double assemble_and_solve_temperature (const double &initial_residual = 0,
+                                             double *residual = nullptr);
 
       /**
        * Solve the composition equations with whatever method is selected
        * (fields or particles). This function returns the residuals for
-       * all fields after solving
-       * and can optionally compute and store the initial
-       * residuals before solving the equation. For lack of a definition
-       * the residuals of all compositional fields that are advected
-       * using particles are considered zero.
+       * all fields after solving.
+       *
+       * If the `residual` argument is not a `nullptr`, the function computes
+       * the residual and puts it into this variable. The function returns
+       * the current residual divided by the initial residual given as the
+       * first argument. The two arguments may point to the same variable,
+       * in which case the function first computes the residual and at
+       * the end scales that residual by itself, thus returning 1.0.
        *
        * This function is implemented in
        * <code>source/simulator/solver_schemes.cc</code>.
        */
-      std::vector<double> assemble_and_solve_composition (const bool compute_initial_residual = false,
-                                                          std::vector<double> *initial_residual = nullptr);
+      std::vector<double> assemble_and_solve_composition (const std::vector<double> &initial_residual = {},
+                                                          std::vector<double> *residual = nullptr);
 
       /**
        * Assemble and solve the Stokes equation.
-       * This function returns the nonlinear residual after solving
-       * and can optionally compute and store an initial
-       * residual before solving the equation in the second argument
-       * if the first argument is set to @p true.
+       * This function returns the nonlinear residual after solving.
        *
-       * The returned nonlinear residual is normalized by the initial
-       * residual, i.e., it is the nonlinear residual computed by
-       * solve_stokes() divided by the initial residual as either
-       * already stored in the second argument, or as computed
-       * at the top of the function.
-       *
+       * If the `residual` argument is not a `nullptr`, the function computes
+       * the residual and puts it into this variable. The function returns
+       * the current residual divided by the initial residual given as the
+       * first argument. The two arguments may point to the same variable,
+       * in which case the function first computes the residual and at
+       * the end scales that residual by itself, thus returning 1.0.
        *
        * This function is implemented in
        * <code>source/simulator/solver_schemes.cc</code>.
        */
-      double assemble_and_solve_stokes (const bool compute_initial_residual = false,
-                                        double *initial_nonlinear_residual = nullptr);
+      double assemble_and_solve_stokes (const double &initial_nonlinear_residual = 0,
+                                        double *nonlinear_residual = nullptr);
 
       /**
-       * Assemble and solve the defect correction form of the Stokes equation.
+       * Do one step of the defect correction form of the Stokes equation;
+       * i.e., assemble and solve the defect correction equations.
        * This function takes a structure of DefectCorrectionResiduals which
        * contains information about different residuals. The information in
        * this structure is updated by this function. The parameter use_picard
@@ -741,8 +842,8 @@ namespace aspect
        * This function is implemented in
        * <code>source/simulator/solver_schemes.cc</code>.
        */
-      void assemble_and_solve_defect_correction_Stokes(DefectCorrectionResiduals &dcr,
-                                                       bool use_picard);
+      void do_one_defect_correction_Stokes_step(DefectCorrectionResiduals &dcr,
+                                                const bool use_picard);
 
       /**
        * Initiate the assembly of one advection matrix and right hand side and
@@ -766,9 +867,10 @@ namespace aspect
       double solve_advection (const AdvectionField &advection_field);
 
       /**
-       * Interpolate a particular particle property to the solution field.
+       * Interpolate the corresponding particle properties into the given
+       * @p advection_fields solution fields.
        */
-      void interpolate_particle_properties (const AdvectionField &advection_field);
+      void interpolate_particle_properties (const std::vector<AdvectionField> &advection_fields);
 
       /**
        * Solve the Stokes linear system.
@@ -837,17 +939,17 @@ namespace aspect
        * first element of the pair, where $F_k=F(x_k)$ is the residual
        * vector for the previous solution $x_k$.
        *
+       * @param solution_vector The solution vector that is computed by this
+       * function. This vector is a block vector that has the same block
+       * structure as the full solution vector and its pressure and velocity
+       * blocks will be overwritten by the solution of the Stokes system.
+       *
+       *
        * This function is implemented in
        * <code>source/simulator/solver.cc</code>.
        */
       std::pair<double,double>
-      solve_stokes ();
-
-      /**
-       * Solve the Stokes system using a block preconditioner and GMG.
-       */
-      std::pair<double,double>
-      solve_stokes_block_gmg ();
+      solve_stokes (LinearAlgebra::BlockVector &solution_vector);
 
       /**
        * This function is called at the end of every time step. It runs all
@@ -934,6 +1036,17 @@ namespace aspect
        * @{
        */
       /**
+       * Determine which of the components of our finite-element
+       * system couple to each other. Depending on which equations
+       * are solved and which solver is used this varies widely.
+       *
+       * This function is implemented in
+       * <code>source/simulator/core.cc</code>.
+       */
+      Table<2,DoFTools::Coupling>
+      setup_system_matrix_coupling () const;
+
+      /**
        * Set up the size and structure of the matrix used to store the
        * elements of the linear system.
        *
@@ -976,7 +1089,7 @@ namespace aspect
        * Consequently, we just store a pointer to such an object, and create
        * the object pointed to at the top of set_assemblers().
        */
-      std::unique_ptr<Assemblers::Manager<dim> > assemblers;
+      std::unique_ptr<Assemblers::Manager<dim>> assemblers;
 
       /**
        * Determine, based on the run-time parameters of the current simulation,
@@ -991,14 +1104,25 @@ namespace aspect
       /**
        * Determine, based on the run-time parameters of the current simulation,
        * which functions need to be called in order to assemble linear systems,
-       * matrices, and right hand side vectors. This function handles the
-       * default operation mode of ASPECT, i.e. without considering two-phase
-       * flow, or Newton solvers.
+       * matrices, and right hand side vectors for the advection. This function
+       * is used by both the default full Stokes solver and the Newton solvers,
+       * but not by the two-phase flow solver.
        *
        * This function is implemented in
        * <code>source/simulator/assembly.cc</code>.
        */
-      void set_default_assemblers ();
+      void set_advection_assemblers ();
+
+      /**
+       * Determine, based on the run-time parameters of the current simulation,
+       * which functions need to be called in order to assemble linear systems,
+       * matrices, and right hand side vectors for the default full Stokes solver
+       * i.e. without considering two-phase flow, or Newton solvers.
+       *
+       * This function is implemented in
+       * <code>source/simulator/assembly.cc</code>.
+       */
+      void set_stokes_assemblers ();
 
       /**
        * Initiate the assembly of the preconditioner for the Stokes system.
@@ -1108,7 +1232,7 @@ namespace aspect
        * $h_i \int g / |\Omega|$.
        *
        * The purpose of this function is described in the second paper on the
-       * numerical methods in Aspect.
+       * numerical methods in ASPECT.
        *
        * This function is implemented in
        * <code>source/simulator/helper_functions.cc</code>.
@@ -1174,14 +1298,6 @@ namespace aspect
        * "physical" pressure so that all following postprocessing
        * steps can use the latter.
        *
-       * In the case of the surface average, whether a face is part of
-       * the surface is determined by asking whether its depth of its
-       * midpoint (as determined by the geometry model) is less than
-       * 1/3*1/sqrt(dim-1)*diameter of the face. For reasonably curved
-       * boundaries, this rules out side faces that are perpendicular
-       * to the surface boundary but includes those faces that are
-       * along the boundary even if the real boundary is curved.
-       *
        * Whether the pressure should be normalized based on the
        * surface or volume average is decided by a parameter in the
        * input file.
@@ -1226,12 +1342,7 @@ namespace aspect
        * come out of GMRES, namely the one on which we later called
        * normalize_pressure().
        *
-       * This function modifies @p vector in-place. In some cases, we need
-       * locally_relevant values of the pressure. To avoid creating a new vector
-       * and transferring data, this function uses a second vector with relevant
-       * dofs (@p relevant_vector) for accessing these pressure values. Both
-       * @p vector and @p relevant_vector are expected to already contain
-       * the correct pressure values.
+       * This function modifies @p vector in-place.
        *
        * @note The adjustment made in this function is done using the
        * negative of the @p pressure_adjustment function argument that
@@ -1245,8 +1356,7 @@ namespace aspect
        * <code>source/simulator/helper_functions.cc</code>.
        */
       void denormalize_pressure(const double                      pressure_adjustment,
-                                LinearAlgebra::BlockVector       &vector,
-                                const LinearAlgebra::BlockVector &relevant_vector) const;
+                                LinearAlgebra::BlockVector       &vector) const;
 
       /**
        * Apply the bound preserving limiter to the discontinuous Galerkin solutions:
@@ -1284,6 +1394,19 @@ namespace aspect
       void compute_reactions ();
 
       /**
+       * Update the indicated block of the solution vector with the
+       * corresponding block of the handed over @p distributed_vector. Also
+       * update reaction_vector with the corresponding block of @p
+       * distributed_reaction_vector.
+       *
+       * This function is implemented in
+       * <code>source/simulator/helper_functions.cc</code>.
+       */
+      void update_solution_vectors_with_reaction_results (const unsigned int block_index,
+                                                          const LinearAlgebra::BlockVector &distributed_vector,
+                                                          const LinearAlgebra::BlockVector &distributed_reaction_vector);
+
+      /**
        * Initialize the current linearization point vector from the old
        * solution vector(s). Depending on the time of the call this
        * can be simply a copy of the solution of the last timestep,
@@ -1294,7 +1417,6 @@ namespace aspect
        * <code>source/simulator/helper_functions.cc</code>.
        */
       void initialize_current_linearization_point ();
-
 
       /**
        * Interpolate material model outputs onto an advection field (temperature
@@ -1326,7 +1448,7 @@ namespace aspect
        * <code>source/simulator/helper_functions.cc</code>.
        */
       void interpolate_onto_velocity_system(const TensorFunction<1,dim> &func,
-                                            LinearAlgebra::Vector &vec);
+                                            LinearAlgebra::Vector &vec) const;
 
 
       /**
@@ -1343,7 +1465,7 @@ namespace aspect
        * @note: Rotational modes are currently not handled and don't appear to
        * require constraints so far.
        */
-      void setup_nullspace_constraints(ConstraintMatrix &constraints);
+      void setup_nullspace_constraints(AffineConstraints<double> &constraints);
 
 
       /**
@@ -1358,7 +1480,26 @@ namespace aspect
        * <code>source/simulator/nullspace.cc</code>.
        */
       void remove_nullspace(LinearAlgebra::BlockVector &relevant_dst,
-                            LinearAlgebra::BlockVector &tmp_distributed_stokes);
+                            LinearAlgebra::BlockVector &tmp_distributed_stokes) const;
+
+      /**
+       * Compute the angular momentum and other rotation properties
+       * of the velocities in the given solution vector.
+       *
+       * @param use_constant_density determines whether to use a constant
+       * density (which corresponds to computing a net rotation instead of net
+       * angular momentum).
+       * @param solution Solution vector to compute the properties for.
+       * @param limit_to_top_faces allows to only compute the net angular momentum
+       * (or net rotation) of the top surface.
+       *
+       * This function is implemented in
+       * <code>source/simulator/nullspace.cc</code>.
+       */
+      RotationProperties<dim>
+      compute_net_angular_momentum(const bool use_constant_density,
+                                   const LinearAlgebra::BlockVector &solution,
+                                   const bool limit_to_top_faces = false) const;
 
       /**
        * Remove the angular momentum of the given vector
@@ -1369,13 +1510,17 @@ namespace aspect
        * @param relevant_dst locally relevant vector for the whole FE, will be
        * filled at the end.
        * @param tmp_distributed_stokes only contains velocity and pressure.
+       * @param limit_to_top_faces allows to only remove the net angular momentum
+       * (or net rotation) of the top surface. This can be useful to compare surface
+       * motions against plate reconstructions in no net rotation reference frames.
        *
        * This function is implemented in
        * <code>source/simulator/nullspace.cc</code>.
        */
-      void remove_net_angular_momentum( const bool use_constant_density,
-                                        LinearAlgebra::BlockVector &relevant_dst,
-                                        LinearAlgebra::BlockVector &tmp_distributed_stokes);
+      void remove_net_angular_momentum(const bool use_constant_density,
+                                       LinearAlgebra::BlockVector &relevant_dst,
+                                       LinearAlgebra::BlockVector &tmp_distributed_stokes,
+                                       const bool limit_to_top_faces = false) const;
 
       /**
        * Offset the boundary id of all faces located on an outflow boundary
@@ -1408,9 +1553,9 @@ namespace aspect
        * This function is implemented in
        * <code>source/simulator/nullspace.cc</code>.
        */
-      void remove_net_linear_momentum( const bool use_constant_density,
-                                       LinearAlgebra::BlockVector &relevant_dst,
-                                       LinearAlgebra::BlockVector &tmp_distributed_stokes);
+      void remove_net_linear_momentum(const bool use_constant_density,
+                                      LinearAlgebra::BlockVector &relevant_dst,
+                                      LinearAlgebra::BlockVector &tmp_distributed_stokes) const;
 
       /**
        * Compute the maximal velocity throughout the domain. This is needed to
@@ -1448,6 +1593,17 @@ namespace aspect
       get_extrapolated_advection_field_range (const AdvectionField &advection_field) const;
 
       /**
+       * Exchange coarsen/refinement flags set between processors so that
+       * we have the correct settings on all ghost cells.
+       *
+       * This function is implemented in
+       * <code>source/simulator/helper_functions.cc</code>.
+       *
+       */
+      void exchange_refinement_flags();
+
+
+      /**
        * Check if timing output should be written in this timestep, and if so
        * write it.
        *
@@ -1458,14 +1614,14 @@ namespace aspect
       void maybe_write_timing_output () const;
 
       /**
-       * Check if a checkpoint should be written in this timestep. Is so create
+       * Check if a checkpoint should be written in this timestep. If so create
        * one. Returns whether a checkpoint was written.
        *
        * This function is implemented in
        * <code>source/simulator/helper_functions.cc</code>.
        */
       bool maybe_write_checkpoint (const time_t last_checkpoint_time,
-                                   const std::pair<bool,bool> termination_output);
+                                   const bool force_writing_checkpoint);
 
       /**
        * Check if we should do an initial refinement cycle in this timestep.
@@ -1495,18 +1651,6 @@ namespace aspect
        */
       void maybe_refine_mesh (const double new_time_step,
                               unsigned int &max_refinement_level);
-
-      /**
-       * Compute the size of the next time step from the mesh size and the
-       * velocity on each cell. The computed time step has to satisfy the CFL
-       * number chosen in the input parameter file on each cell of the mesh.
-       * If specified in the parameter file, the time step will be the minimum
-       * of the convection *and* conduction time steps.
-       *
-       * This function is implemented in
-       * <code>source/simulator/helper_functions.cc</code>.
-       */
-      double compute_time_step () const;
 
       /**
        * Advance the current time by the given @p step_size and update the
@@ -1552,41 +1696,6 @@ namespace aspect
                                         double                             &conductivity) const;
 
       /**
-       * Extract the values of temperature, pressure, composition and optional
-       * strain rate for the current linearization point. These values are
-       * stored as input arguments for the material model. The compositional
-       * fields are extracted with the individual compositional fields as
-       * outer vectors and the values at each quadrature point as inner
-       * vectors, but the material model needs it the other way round. Hence,
-       * this vector of vectors is transposed.
-       *
-       * @param[in] input_solution A solution vector (or linear combination of
-       * such vectors) with as many entries as there are degrees of freedom in
-       * the mesh. It will be evaluated on the cell with which the FEValues
-       * object was last re-initialized.
-       * @param[in] input_finite_element_values The FEValues object that
-       * describes the finite element space in use and that is used to
-       * evaluate the solution values at the quadrature points of the current
-       * cell.
-       * @param[in] cell The cell on which we are currently evaluating
-       * the material model.
-       * @param[in] compute_strainrate A flag determining whether the strain
-       * rate should be computed or not in the output structure.
-       * @param[out] material_model_inputs The output structure that contains
-       * the solution values evaluated at the quadrature points.
-       *
-       * This function is implemented in
-       * <code>source/simulator/assembly.cc</code>.
-       */
-      void
-      compute_material_model_input_values (const LinearAlgebra::BlockVector                            &input_solution,
-                                           const FEValuesBase<dim,dim>                                 &input_finite_element_values,
-                                           const typename DoFHandler<dim>::active_cell_iterator        &cell,
-                                           const bool                                                   compute_strainrate,
-                                           MaterialModel::MaterialModelInputs<dim> &material_model_inputs) const;
-
-
-      /**
        * Return whether the Stokes matrix depends on the values of the
        * solution at the previous time step. This is the case is the
        * coefficients that appear in the matrix (i.e., the viscosity and, in
@@ -1604,6 +1713,18 @@ namespace aspect
       stokes_matrix_depends_on_solution () const;
 
       /**
+       * Return whether to the best of our knowledge the A block of the
+       * Stokes system is symmetric. This is the case for most models, except
+       * if additional non-symmetric terms are added by special assemblers
+       * (e.g., the free surface stabilization term).
+       *
+       * This function is implemented in
+       * <code>source/simulator/helper_functions.cc</code>.
+       */
+      bool
+      stokes_A_block_is_symmetric () const;
+
+      /**
        * This function checks that the user-selected formulations of the
        * equations are consistent with the other inputs. If an incorrect
        * selection is detected it throws an exception. It for example assures that
@@ -1617,6 +1738,14 @@ namespace aspect
        */
       void
       check_consistency_of_formulation ();
+
+      /**
+       * This function checks if the default solver and/or material
+       * averaging were selected and if so, determines the appropriate
+       * solver and/or averaging option.
+       */
+      void
+      select_default_solver_and_averaging ();
 
       /**
        * This function checks that the user-selected boundary conditions do not
@@ -1635,7 +1764,7 @@ namespace aspect
        * Computes the initial Newton residual.
        */
       double
-      compute_initial_newton_residual (const LinearAlgebra::BlockVector &linearized_stokes_initial_guess);
+      compute_initial_newton_residual ();
 
       /**
        * This function computes the Eisenstat Walker linear tolerance used for the Newton iterations
@@ -1694,14 +1823,14 @@ namespace aspect
        * if we do not need the machinery for doing melt stuff, we do
        * not even allocate it.
        */
-      std::unique_ptr<MeltHandler<dim> > melt_handler;
+      std::unique_ptr<MeltHandler<dim>> melt_handler;
 
       /**
        * Unique pointer for an instance of the NewtonHandler. This way,
        * if we do not need the machinery for doing Newton stuff, we do
        * not even allocate it.
        */
-      std::unique_ptr<NewtonHandler<dim> > newton_handler;
+      std::unique_ptr<NewtonHandler<dim>> newton_handler;
 
       SimulatorSignals<dim>               signals;
 
@@ -1714,7 +1843,7 @@ namespace aspect
        *
        * Located here due to needing signals access
        */
-      std::unique_ptr<VolumeOfFluidHandler<dim> > volume_of_fluid_handler;
+      std::unique_ptr<VolumeOfFluidHandler<dim>> volume_of_fluid_handler;
 
       Introspection<dim>                  introspection;
 
@@ -1727,8 +1856,8 @@ namespace aspect
        */
       std::ofstream log_file_stream;
 
-      typedef boost::iostreams::tee_device<std::ostream, std::ofstream> TeeDevice;
-      typedef boost::iostreams::stream< TeeDevice > TeeStream;
+      using TeeDevice = boost::iostreams::tee_device<std::ostream, std::ofstream>;
+      using TeeStream = boost::iostreams::stream<TeeDevice>;
 
       TeeDevice iostream_tee_device;
       TeeStream iostream_tee_stream;
@@ -1770,13 +1899,26 @@ namespace aspect
       mutable TimerOutput                 computing_timer;
 
       /**
+       * A timer used to track the current wall time since the
+       * last snapshot (or since the program started).
+       */
+      Timer wall_timer;
+
+      /**
+       * The total wall time that has elapsed up to the last snapshot
+       * that was created.
+       */
+      double total_walltime_until_last_snapshot;
+
+      /**
        * In output_statistics(), where we output the statistics object above,
        * we do the actual writing on a separate thread. This variable is the
        * handle we get for this thread so that we can wait for it to finish,
        * either if we want to write the statistics object for the next thread,
        * or if we want to terminate altogether.
        */
-      Threads::Thread<>                   output_statistics_thread;
+      std::thread                         output_statistics_thread;
+
       /**
        * @}
        */
@@ -1785,28 +1927,51 @@ namespace aspect
        * @name Variables that describe the physical setup of the problem
        * @{
        */
-      const std::unique_ptr<InitialTopographyModel::Interface<dim> >          initial_topography_model;
-      const std::unique_ptr<GeometryModel::Interface<dim> >                   geometry_model;
-      const IntermediaryConstructorAction                                     post_geometry_model_creation_action;
-      const std::unique_ptr<MaterialModel::Interface<dim> >                   material_model;
-      const std::unique_ptr<GravityModel::Interface<dim> >                    gravity_model;
-      BoundaryTemperature::Manager<dim>                                       boundary_temperature_manager;
-      BoundaryComposition::Manager<dim>                                       boundary_composition_manager;
-      const std::unique_ptr<PrescribedStokesSolution::Interface<dim> >        prescribed_stokes_solution;
-      InitialComposition::Manager<dim>                                        initial_composition_manager;
-      InitialTemperature::Manager<dim>                                        initial_temperature_manager;
-      const std::unique_ptr<AdiabaticConditions::Interface<dim> >             adiabatic_conditions;
-#ifdef ASPECT_WITH_WORLD_BUILDER
-      const std::unique_ptr<WorldBuilder::World>                              world_builder;
-#endif
-      BoundaryVelocity::Manager<dim>                                          boundary_velocity_manager;
-      std::map<types::boundary_id,std::unique_ptr<BoundaryTraction::Interface<dim> > > boundary_traction;
-      const std::unique_ptr<BoundaryHeatFlux::Interface<dim> >                boundary_heat_flux;
+      const std::unique_ptr<InitialTopographyModel::Interface<dim>>          initial_topography_model;
+      const std::unique_ptr<GeometryModel::Interface<dim>>                   geometry_model;
+      const IntermediaryConstructorAction                                    post_geometry_model_creation_action;
+      const std::unique_ptr<MaterialModel::Interface<dim>>                   material_model;
+      const std::unique_ptr<GravityModel::Interface<dim>>                    gravity_model;
+      BoundaryTemperature::Manager<dim>                                      boundary_temperature_manager;
+      BoundaryComposition::Manager<dim>                                      boundary_composition_manager;
+      const std::unique_ptr<PrescribedStokesSolution::Interface<dim>>        prescribed_stokes_solution;
 
       /**
-       * The world holding the particles
+       * The following two variables are pointers to objects that describe
+       * the initial temperature and composition values. The Simulator
+       * class itself releases these pointers once they are no longer
+       * needed, somewhere during the first time step once it is known
+       * that they are no longer needed. However, plugins can have their
+       * own shared pointers to these objects, and the lifetime of the
+       * objects pointed to is then until the last of these plugins
+       * gets deleted.
        */
-      std::unique_ptr<Particle::World<dim> > particle_world;
+      std::shared_ptr<InitialTemperature::Manager<dim>>                      initial_temperature_manager;
+      std::shared_ptr<InitialComposition::Manager<dim>>                      initial_composition_manager;
+
+      const std::unique_ptr<AdiabaticConditions::Interface<dim>>             adiabatic_conditions;
+#ifdef ASPECT_WITH_WORLD_BUILDER
+      /**
+       * A pointer to the WorldBuilder object. Like the
+       * `initial_temperature_manager` and
+       * `initial_composition_manager` objects above, the Simulator
+       * object itself releases this pointer at the end of the
+       * initialization process (right after releasing the
+       * two mentioned initial condition objects). If a part of
+       * the plugin system still needs the world builder object
+       * after this point, it needs to keep its own shared pointer
+       * to it.
+       */
+      std::shared_ptr<WorldBuilder::World>                                   world_builder;
+#endif
+      BoundaryVelocity::Manager<dim>                                         boundary_velocity_manager;
+      BoundaryTraction::Manager<dim>                                         boundary_traction_manager;
+      const std::unique_ptr<BoundaryHeatFlux::Interface<dim>>                boundary_heat_flux;
+
+      /**
+       * The managers holding different sets of particles
+       */
+      std::vector<Particle::Manager<dim>> particle_managers;
 
       /**
        * @}
@@ -1821,15 +1986,16 @@ namespace aspect
       unsigned int                                              timestep_number;
       unsigned int                                              pre_refinement_step;
       unsigned int                                              nonlinear_iteration;
+      unsigned int                                              nonlinear_solver_failures;
       /**
        * @}
        */
 
       /**
-       * @name Variables related to simulation termination
+       * @name Variables related to simulation time stepping
        * @{
        */
-      TerminationCriteria::Manager<dim>                         termination_manager;
+      TimeStepping::Manager<dim>                                time_stepping_manager;
       /**
        * @}
        */
@@ -1862,7 +2028,7 @@ namespace aspect
        * a MappingQ1Eulerian object to describe the mesh deformation,
        * swapping it in for the original MappingQ or MappingCartesian object.
        */
-      std::unique_ptr<Mapping<dim> >                            mapping;
+      std::unique_ptr<Mapping<dim>>                            mapping;
 
       const FESystem<dim>                                       finite_element;
 
@@ -1881,8 +2047,8 @@ namespace aspect
        * 'constraints' is computed in setup_dofs(), 'current_constraints' is
        * done in compute_current_constraints().
        */
-      ConstraintMatrix                                          constraints;
-      ConstraintMatrix                                          current_constraints;
+      AffineConstraints<double>                                          constraints;
+      AffineConstraints<double>                                          current_constraints;
 
       /**
        * A place to store the latest correction computed by normalize_pressure().
@@ -1924,6 +2090,12 @@ namespace aspect
        * solving.
        */
       LinearAlgebra::BlockSparseMatrix                          system_matrix;
+
+      /**
+       * This vector is used for the weighted BFBT preconditioner. It
+       * stores the inverted lumped velocity mass matrix.
+       */
+      LinearAlgebra::BlockVector                                inverse_lumped_mass_matrix;
 
       /**
        * An object that contains the entries of preconditioner
@@ -1974,12 +2146,12 @@ namespace aspect
        * if we do not need the machinery for doing mesh deformation stuff, we do
        * not even allocate it.
        */
-      std::unique_ptr<MeshDeformation::MeshDeformationHandler<dim> > mesh_deformation;
+      std::unique_ptr<MeshDeformation::MeshDeformationHandler<dim>> mesh_deformation;
 
       /**
        * Unique pointer for the matrix-free Stokes solver
        */
-      std::unique_ptr<StokesMatrixFreeHandler<dim> > stokes_matrix_free;
+      std::unique_ptr<StokesMatrixFreeHandler<dim>> stokes_matrix_free;
 
       friend class boost::serialization::access;
       friend class SimulatorAccess<dim>;

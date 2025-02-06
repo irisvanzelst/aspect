@@ -1,13 +1,13 @@
 # This is a copy of the shear_heating_compressible
-# test, except that it uses melt transport. 
+# test, except that it uses melt transport.
 
-# The test is for the correct behaviour of 
+# The test is for the correct behavior of
 # the shear heating in the compressible case.
-# The velocity is prescribed using the prescribed 
-# Stokes solution plugin so that the strain rate is 
+# The velocity is prescribed using the prescribed
+# Stokes solution plugin so that the strain rate is
 # [0 0.5 0.5 2./3.], which means that we can calculate
 # the solution for the shear heating (2 eta eps:eps),
-# which should be 2.111111.   
+# which should be 2.111111.
 
 set CFL number                             = 1
 set End time                               = 0
@@ -20,6 +20,7 @@ set Use operator splitting                 = true
 
 subsection Melt settings
   set Use discontinuous compaction pressure = false
+  set Include melt transport                  = true
 end
 
 subsection Compositional fields
@@ -58,6 +59,8 @@ end
 
 subsection Boundary temperature model
   set List of model names = box
+  set Fixed temperature boundary indicators   = 2,3
+
   subsection Box
     set Top temperature = 0
     set Bottom temperature = 1
@@ -81,9 +84,9 @@ subsection Gravity model
   end
 end
 
-
 subsection Initial temperature model
   set Model name = harmonic perturbation
+
   subsection Harmonic perturbation
     set Magnitude = 0.01
     set Reference temperature = 0.5
@@ -105,34 +108,15 @@ subsection Material model
     set Solid compressibility = 1e-6
     set Use full compressibility = true
   end
-
 end
-
 
 subsection Mesh refinement
   set Initial adaptive refinement        = 0
-
   set Initial global refinement          = 3
-
   set Refinement fraction                = 0.0
   set Coarsening fraction                = 0.0
-
   set Strategy                           = velocity
-
   set Time steps between mesh refinement = 0
-end
-
-
-# The parameters below this comment were created by the update script
-# as replacement for the old 'Model settings' subsection. They can be
-# safely merged with any existing subsections with the same name.
-
-subsection Boundary temperature model
-  set Fixed temperature boundary indicators   = 2,3
-end
-
-subsection Melt settings
-  set Include melt transport                  = true
 end
 
 subsection Heating model
@@ -146,17 +130,18 @@ subsection Boundary velocity model
   end
 end
 
-
 subsection Postprocess
   set List of postprocessors = velocity statistics, temperature statistics,  heating statistics
 
   subsection Visualization
     set Interpolate output = false
-    set List of output variables = heating, viscosity, strain rate, density
+    set List of output variables = heating, material properties, strain rate
     set Time between graphical output = 0
+
+    subsection Material properties
+      set List of material properties = viscosity, density
+    end
   end
-
-
 end
 
 subsection Solver parameters
