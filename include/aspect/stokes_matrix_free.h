@@ -23,6 +23,7 @@
 #define _aspect_stokes_matrix_free_h
 
 #include <aspect/global.h>
+#include <aspect/simulator/solver/interface.h>
 
 #include <aspect/simulator.h>
 
@@ -400,25 +401,9 @@ namespace aspect
    * actual implementation is found inside StokesMatrixFreeHandlerImplementation below.
    */
   template <int dim>
-  class StokesMatrixFreeHandler
+  class StokesMatrixFreeHandler: public Solver::Interface<dim>
   {
     public:
-      /**
-       * virtual Destructor.
-       */
-      virtual ~StokesMatrixFreeHandler() = default;
-
-      /**
-       * Solves the Stokes linear system using the matrix-free
-       * solver.
-       *
-       * @param solution_vector The existing solution vector that will be
-       * updated with the new solution. This vector is expected to have the
-       * block structure of the full solution vector, and its velocity and
-       * pressure blocks will be updated with the new solution.
-       */
-      virtual std::pair<double,double> solve(LinearAlgebra::BlockVector &solution_vector) = 0;
-
       /**
        * Allocates and sets up the members of the StokesMatrixFreeHandler. This
        * is called by Simulator<dim>::setup_dofs()
@@ -442,7 +427,7 @@ namespace aspect
       virtual void build_preconditioner()=0;
 
       /**
-       * Declare parameters.
+       * Declare parameters necessary for this solver.
        */
       static
       void declare_parameters (ParameterHandler &prm);
@@ -518,12 +503,12 @@ namespace aspect
   {
     public:
       /**
-       * Initialize this class, allowing it to read in
-       * relevant parameters as well as giving it a reference to the
+       * Constructor. Give it a reference to the
        * Simulator that owns it, since it needs to make fairly extensive
        * changes to the internals of the simulator.
        */
-      StokesMatrixFreeHandlerImplementation(Simulator<dim> &, ParameterHandler &prm);
+      StokesMatrixFreeHandlerImplementation(Simulator<dim> &simulator,
+                                            const Parameters<dim> &parameters);
 
       /**
        * Destructor.
@@ -531,15 +516,30 @@ namespace aspect
       ~StokesMatrixFreeHandlerImplementation() override = default;
 
       /**
+       * Initialize the matrix-free solver.
+       */
+      void initialize() override;
+
+      /**
+       * Return the name of the solver for screen output.
+       */
+      std::string name() const override;
+
+      /**
        * Solves the Stokes linear system using the matrix-free
        * solver.
        *
-       * @param solution_vector The existing solution vector that will be
+       * @param system_matrix The system matrix. Note that we do not actually
+       * use this matrix for this matrix free solver.
+       * @param system_rhs The right hand side vector of the system.
+       * @param solution_vector The solution vector that will be
        * updated with the new solution. This vector is expected to have the
        * block structure of the full solution vector, and its velocity and
        * pressure blocks will be updated with the new solution.
        */
-      std::pair<double,double> solve(LinearAlgebra::BlockVector &solution_vector) override;
+      std::pair<double,double> solve(const LinearAlgebra::BlockSparseMatrix &system_matrix,
+                                     const LinearAlgebra::BlockVector &system_rhs,
+                                     LinearAlgebra::BlockVector &solution_vector) override;
 
       /**
        * Allocates and sets up the members of the StokesMatrixFreeHandler. This
@@ -563,10 +563,15 @@ namespace aspect
       void build_preconditioner() override;
 
       /**
-       * Declare parameters. (No actual parameters at the moment).
+       * Declare parameters.
        */
       static
       void declare_parameters (ParameterHandler &prm);
+
+      /**
+       * Parse parameters.
+       */
+      void parse_parameters (ParameterHandler &prm) override;
 
       /**
        * Return a reference to the DoFHandler that is used for velocity in
@@ -625,11 +630,6 @@ namespace aspect
       std::size_t get_cell_data_memory_consumption() const override;
 
     private:
-      /**
-       * Parse parameters.
-       */
-      void parse_parameters (ParameterHandler &prm);
-
       /**
        * Evaluate the MaterialModel to query information like the viscosity and
        * project this viscosity to the multigrid hierarchy. Also queries
